@@ -1,10 +1,10 @@
-# PromptFlow
+# drawstack
 
-PromptFlow (formerly FlowStudio) is an AI-powered diagram studio for turning plain-language prompts into polished diagrams, charts, architecture maps, process models, and shareable exports.
+drawstack is an AI-powered architecture and diagram studio for turning plain-language prompts into polished diagrams, charts, architecture maps, process models, and shareable exports.
 
-[Live app](https://web-govw.vercel.app) · [Repository](https://github.com/gwaghmar/promptflow)
+[Live app](https://drawxyz.vercel.app) · [Repository](https://github.com/gwaghmar/drawstack)
 
-![PromptFlow architecture](docs/assets/flowstudio-architecture.svg)
+![drawstack architecture](docs/assets/flowstudio-architecture.svg)
 
 ## What It Does
 
@@ -85,6 +85,6 @@ pnpm mcp:dev      # run the MCP server
 
 ## Project Status
 
-PromptFlow has shipped the core editor, AI generation, save/share/embed workflows, brand kit support, templates, real OG previews, streaming Mermaid preview, and cloud architecture diagrams.
+drawstack has shipped the core editor, AI generation, save/share/embed workflows, brand kit support, templates, real OG previews, streaming Mermaid preview, and cloud architecture diagrams.
 
 Current polish focus: source editor ergonomics, more layout helpers, template recommendations, and public profile pages.
