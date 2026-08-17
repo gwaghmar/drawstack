@@ -133,6 +133,7 @@ type ShapeKind =
 type ArrowDraft = {
   startPoint: { x: number; y: number };
   startBinding: string | null;
+  startAnchor?: "top" | "right" | "bottom" | "left";
   currentPoint: { x: number; y: number };
   hoverShapeId: string | null;
 };
@@ -227,6 +228,16 @@ function polylineLength(points: number[]): number {
     total += Math.hypot(points[i + 2] - points[i], points[i + 3] - points[i + 1]);
   }
   return total;
+}
+
+function edgeAnchorPoints(bounds: { x: number; y: number; width: number; height: number }) {
+  const { x, y, width, height } = bounds;
+  return [
+    { anchor: "top" as const, x: x + width / 2, y },
+    { anchor: "right" as const, x: x + width, y: y + height / 2 },
+    { anchor: "bottom" as const, x: x + width / 2, y: y + height },
+    { anchor: "left" as const, x, y: y + height / 2 },
+  ];
 }
 
 function getShapeIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): string | null {
@@ -1303,6 +1314,10 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   const [placeKind, setPlaceKind] = useState<ShapeKind | null>(null);
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
   const [shapePickerQuery, setShapePickerQuery] = useState("");
+  // Shape currently under the pointer in select mode, for draw.io-style hover
+  // connection dots — lets a user start an arrow straight from a shape's edge
+  // without switching to the Arrow tool first.
+  const [hoveredShapeId, setHoveredShapeId] = useState<string | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
 
@@ -1337,6 +1352,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   } | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   const arrowDraftRef = useRef<ArrowDraft | null>(null);
+  const dotDragActiveRef = useRef(false);
   const drawDraftRef = useRef<DrawDraft | null>(null);
   const clipboardRef = useRef<CanvasShape[]>([]);
 
@@ -1353,6 +1369,24 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     placeKindRef.current = kind;
     setPlaceKind(kind);
     setModeSynced("place");
+  };
+
+  // Starts an arrow drag from a hover-dot press — same draft state the Arrow
+  // tool itself produces, so the rest of the drag (live preview, snapping to
+  // a target shape, finalizing on mouse-up) is the exact same code path with
+  // no duplication.
+  const startConnectionDrag = (shapeId: string, anchor: "top" | "right" | "bottom" | "left", point: { x: number; y: number }) => {
+    dotDragActiveRef.current = true;
+    setModeSynced("arrow");
+    const draft: ArrowDraft = {
+      startPoint: point,
+      startBinding: shapeId,
+      startAnchor: anchor,
+      currentPoint: point,
+      hoverShapeId: null,
+    };
+    arrowDraftRef.current = draft;
+    setArrowDraft(draft);
   };
 
   // Setup Yjs multiplayer collaboration if roomId is provided
@@ -1915,6 +1949,16 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
       };
       marqueeRef.current = next;
       setMarquee(next);
+      return;
+    }
+
+    // Hover connection dots: only worth computing when nothing else is
+    // already in progress (a shape drag, a marquee, panning) — checked via
+    // the same refs those flows already write to, per this file's rule that
+    // gesture bookkeeping lives in refs, not state.
+    if (modeRef.current === "select" && !dragStateRef.current && !readOnly) {
+      const id = getShapeIdAtPointer(docRef.current, stageRef.current);
+      setHoveredShapeId((prev) => (prev === id ? prev : id));
     }
   };
 
@@ -1961,7 +2005,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
           type: "arrow",
           x: 0,
           y: 0,
-          start: draft.startBinding ? { shapeId: draft.startBinding, anchor: "auto" } : draft.startPoint,
+          start: draft.startBinding ? { shapeId: draft.startBinding, anchor: draft.startAnchor ?? "auto" } : draft.startPoint,
           end: draft.hoverShapeId ? { shapeId: draft.hoverShapeId, anchor: "auto" } : draft.currentPoint,
           stroke: "#475569",
           strokeWidth: 2,
@@ -1972,7 +2016,15 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
         commitChanges(newDoc);
         setSelectedIds(new Set([id]));
         setModeSynced("select");
+      } else if (dotDragActiveRef.current) {
+        // A drag that started from a hover dot always drops back into select
+        // mode, even on a too-short/cancelled drag — the Arrow tool itself
+        // stays active after a failed drag so the user can retry, but a
+        // dot-started drag is a one-shot gesture, not a mode switch the user
+        // explicitly asked for.
+        setModeSynced("select");
       }
+      dotDragActiveRef.current = false;
       return;
     }
 
@@ -2372,6 +2424,15 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   const stageContainerRect = stageRef.current?.container().getBoundingClientRect();
   const hoverShape = arrowDraft?.hoverShapeId ? doc.shapes.find((s) => s.id === arrowDraft.hoverShapeId) : null;
   const hoverBounds = hoverShape ? getShapeBounds(doc, hoverShape) : null;
+
+  // Connection dots only make sense when idle in select mode — hidden the
+  // instant a connection drag starts (arrowDraft takes over) or the shape is
+  // locked, mid-edit, or already the drag target of something else.
+  const connectDotsShape =
+    !readOnly && mode === "select" && !arrowDraft && hoveredShapeId && hoveredShapeId !== editingShapeId
+      ? doc.shapes.find((s) => s.id === hoveredShapeId && !s.locked)
+      : null;
+  const connectDotsBounds = connectDotsShape ? getShapeBounds(doc, connectDotsShape) : null;
 
   // Selected bounding box for floating toolbar
   let selBounds: { x: number; y: number; width: number; height: number } | null = null;
@@ -2887,6 +2948,37 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
               />
             ))}
         </Layer>
+
+        {/* Hover Connection Dots — draw.io-style: hover a shape in select mode
+            and drag from one of its four edge dots to draw a bound arrow,
+            with no need to switch to the Arrow tool first. */}
+        {connectDotsBounds && (
+          <Layer>
+            {edgeAnchorPoints(connectDotsBounds).map((p) => (
+              <KonvaCircle
+                key={p.anchor}
+                x={p.x}
+                y={p.y}
+                radius={5}
+                fill="#ffffff"
+                stroke="#6366f1"
+                strokeWidth={1.5}
+                onMouseDown={(e) => {
+                  e.cancelBubble = true;
+                  startConnectionDrag(connectDotsShape!.id, p.anchor, { x: p.x, y: p.y });
+                }}
+                onMouseEnter={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = "crosshair";
+                }}
+                onMouseLeave={(e) => {
+                  const container = e.target.getStage()?.container();
+                  if (container) container.style.cursor = "";
+                }}
+              />
+            ))}
+          </Layer>
+        )}
       </Stage>
 
       {/* ─── Inline Text Editing Overlay ─────────────────────────────────── */}
