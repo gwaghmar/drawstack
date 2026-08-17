@@ -173,6 +173,14 @@ type ArrowDraft = {
 // Dragging one endpoint of an EXISTING arrow to rebind it — distinct from
 // ArrowDraft, which draws a brand new arrow. Arrows were previously
 // delete-and-redraw only; there was no way to grab an end and move it.
+type PlaceDraft = {
+  kind: ShapeKind;
+  startX: number;
+  startY: number;
+  x: number;
+  y: number;
+};
+
 type ArrowEditDraft = {
   arrowId: string;
   end: "start" | "end";
@@ -1763,6 +1771,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mode, setMode] = useState<ToolMode>("select");
   const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
+  const [placeDraft, setPlaceDraft] = useState<PlaceDraft | null>(null);
   const [drawDraft, setDrawDraft] = useState<DrawDraft | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null });
   const [placeKind, setPlaceKind] = useState<ShapeKind | null>(null);
@@ -1848,6 +1857,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   } | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   const arrowDraftRef = useRef<ArrowDraft | null>(null);
+  const placeDraftRef = useRef<PlaceDraft | null>(null);
   const arrowEditDraftRef = useRef<ArrowEditDraft | null>(null);
   const dotDragActiveRef = useRef(false);
   const drawDraftRef = useRef<DrawDraft | null>(null);
@@ -2028,8 +2038,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     setEditingValue(readTableCellValue(shape as TableShape, cell));
   };
 
-  const insertShapeAt = (kind: ShapeKind, cx: number, cy: number) => {
-    const { width, height } = defaultSizeFor(kind);
+  const insertShapeAt = (kind: ShapeKind, cx: number, cy: number, size?: { width: number; height: number }) => {
+    const { width, height } = size ?? defaultSizeFor(kind);
     const x = Math.round(cx - width / 2);
     const y = Math.round(cy - height / 2);
     const baseDoc = docRef.current;
@@ -2805,6 +2815,13 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     const pos = stagePointFromEvent(stageRef.current);
     if (!pos) return;
 
+    if (modeRef.current === "place" && placeKindRef.current) {
+      const draft: PlaceDraft = { kind: placeKindRef.current, startX: pos.x, startY: pos.y, x: pos.x, y: pos.y };
+      placeDraftRef.current = draft;
+      setPlaceDraft(draft);
+      return;
+    }
+
     // Freehand Pen drawing
     if (modeRef.current === "draw") {
       const draft: DrawDraft = {
@@ -2870,6 +2887,13 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       const nextDraft: ArrowEditDraft = { ...arrowEditDraftRef.current, point: pos, hoverShapeId: targetShapeId };
       arrowEditDraftRef.current = nextDraft;
       setArrowEditDraft(nextDraft);
+      return;
+    }
+
+    if (placeDraftRef.current) {
+      const next: PlaceDraft = { ...placeDraftRef.current, x: pos.x, y: pos.y };
+      placeDraftRef.current = next;
+      setPlaceDraft(next);
       return;
     }
 
@@ -2953,6 +2977,22 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       setDoc(newDoc);
       commitChanges(newDoc);
       setSelectedIds(new Set([draft.arrowId]));
+      return;
+    }
+
+    if (placeDraftRef.current) {
+      const draft = placeDraftRef.current;
+      placeDraftRef.current = null;
+      setPlaceDraft(null);
+      suppressNextClickRef.current = true;
+
+      const width = Math.abs(draft.x - draft.startX);
+      const height = Math.abs(draft.y - draft.startY);
+      if (width >= 8 && height >= 8) {
+        insertShapeAt(draft.kind, (draft.startX + draft.x) / 2, (draft.startY + draft.y) / 2, { width, height });
+      } else {
+        insertShapeAt(draft.kind, draft.startX, draft.startY);
+      }
       return;
     }
 
@@ -4219,6 +4259,31 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
               listening={false}
             />
           )}
+
+          {/* Live shape-sizing preview — same renderer as the real shape, so the
+              drag shows the actual square/circle/diamond, not a generic box. */}
+          {placeDraft && (() => {
+            const width = Math.abs(placeDraft.x - placeDraft.startX);
+            const height = Math.abs(placeDraft.y - placeDraft.startY);
+            if (width < 8 || height < 8) return null;
+            const previewShape = {
+              id: "__place_draft__",
+              type: placeDraft.kind === "frame" ? "frame" : placeDraft.kind,
+              x: Math.min(placeDraft.startX, placeDraft.x),
+              y: Math.min(placeDraft.startY, placeDraft.y),
+              width,
+              height,
+              fill: placeDraft.kind === "sticky" ? "#fef08a" : activeColor,
+              stroke: "#6366f1",
+              strokeWidth: 2,
+              opacity: 0.55,
+            } as unknown as CanvasShape;
+            return (
+              <Group listening={false}>
+                {renderShape(previewShape, doc, false, undefined, undefined, undefined, undefined, true)}
+              </Group>
+            );
+          })()}
 
           {/* Marquee Box */}
           {marqueeRect && (
