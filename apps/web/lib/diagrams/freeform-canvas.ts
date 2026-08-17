@@ -151,20 +151,39 @@ export function resolveArrowEndpoint(doc: CanvasDocument, endpoint: ArrowEndpoin
   const bounds = getShapeBounds(doc, shape);
   const anchor = endpoint.anchor ?? "center";
 
+  let rawPoint: { x: number; y: number };
   switch (anchor) {
     case "top":
-      return { x: bounds.x + bounds.width / 2, y: bounds.y };
+      rawPoint = { x: bounds.x + bounds.width / 2, y: bounds.y };
+      break;
     case "bottom":
-      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height };
+      rawPoint = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height };
+      break;
     case "left":
-      return { x: bounds.x, y: bounds.y + bounds.height / 2 };
+      rawPoint = { x: bounds.x, y: bounds.y + bounds.height / 2 };
+      break;
     case "right":
-      return { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 };
+      rawPoint = { x: bounds.x + bounds.width, y: bounds.y + bounds.height / 2 };
+      break;
     case "center":
     case "auto":
     default:
-      return { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      rawPoint = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height / 2 };
+      break;
   }
+
+  if (shape.rotation && shape.rotation !== 0) {
+    const cx = bounds.x + bounds.width / 2;
+    const cy = bounds.y + bounds.height / 2;
+    const rad = (shape.rotation * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    const rx = cx + (rawPoint.x - cx) * cos - (rawPoint.y - cy) * sin;
+    const ry = cy + (rawPoint.x - cx) * sin + (rawPoint.y - cy) * cos;
+    return { x: Math.round(rx), y: Math.round(ry) };
+  }
+
+  return rawPoint;
 }
 
 export type EdgeAnchor = "top" | "right" | "bottom" | "left";

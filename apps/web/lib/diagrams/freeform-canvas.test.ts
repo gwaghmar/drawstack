@@ -510,7 +510,7 @@ describe("Universal Shapes and Path bounds", () => {
       shapes: [
         { id: "s1", type: "rectangle", x: 50, y: 50, width: 160, height: 80, text: { content: "Box 1" } },
         { id: "s2", type: "cylinder", x: 300, y: 50, width: 140, height: 100, text: { content: "DB" } },
-        { id: "a1", type: "arrow", start: { shapeId: "s1" }, end: { shapeId: "s2" }, label: "calls" },
+        { id: "a1", type: "arrow", x: 0, y: 0, start: { shapeId: "s1" }, end: { shapeId: "s2" }, label: "calls" },
       ],
     };
     const svg = freeformToSvg(doc);
@@ -519,5 +519,19 @@ describe("Universal Shapes and Path bounds", () => {
     assert.ok(svg.includes("DB"));
     assert.ok(svg.includes("calls"));
     assert.ok(svg.endsWith("</svg>"));
+  });
+
+  it("calculates rotated anchor coordinates accurately for rotated shapes", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        { id: "r1", type: "rectangle", x: 100, y: 100, width: 100, height: 100, rotation: 90 },
+      ],
+    };
+    // Center is (150, 150). Unrotated "right" is (200, 150).
+    // Rotated 90 deg clockwise around (150, 150) gives (150, 200).
+    const p = resolveArrowEndpoint(doc, { shapeId: "r1", anchor: "right" });
+    assert.equal(p.x, 150);
+    assert.equal(p.y, 200);
   });
 });

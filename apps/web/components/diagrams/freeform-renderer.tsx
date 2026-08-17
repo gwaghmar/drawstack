@@ -1720,7 +1720,14 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   ];
 
   return (
-    <div className="w-full h-full relative overflow-hidden select-none bg-slate-50 dark:bg-slate-950">
+    <div
+      className="w-full h-full relative overflow-hidden select-none bg-slate-50 dark:bg-slate-950"
+      style={{
+        backgroundPosition: `${viewport.x}px ${viewport.y}px`,
+        backgroundSize: `${20 * viewport.scale}px ${20 * viewport.scale}px`,
+        backgroundImage: "radial-gradient(#cbd5e1 1.2px, transparent 1.2px)",
+      }}
+    >
       {/* ─── Top Main Toolbar ────────────────────────────────────────────── */}
       {!readOnly && (
         <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 shadow-md backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 max-w-[calc(100%-24px)]">
@@ -2100,6 +2107,8 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
             padding: 4,
             margin: 0,
             boxSizing: "border-box",
+            transform: editingShape.rotation ? `rotate(${editingShape.rotation}deg)` : undefined,
+            transformOrigin: "center center",
             zIndex: 50,
           }}
         />
