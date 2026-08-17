@@ -65,3 +65,16 @@ test("freeform: missing shapes array is not ok", async () => {
 test("parsePossiblyBrokenJson returns null on empty input", () => {
   assert.equal(parsePossiblyBrokenJson(""), null);
 });
+
+test("freeform: macro shape omitting width/height for auto-sizing is ok", async () => {
+  // getShapeBounds() falls through to computeDynamicShapeDimensions() for any
+  // shape missing width/height -- rejecting that here was a real production bug:
+  // the AI commonly omits these on mindmap/dashboard/chart to let content drive
+  // size, and every generation surface (demo, main generate, agent) shares this
+  // validator, so this silently broke real generations, not just edge cases.
+  const r = await validateAndRepairOutput(
+    "freeform",
+    '```json\n{"version":1,"shapes":[{"id":"m1","type":"mindmap","x":100,"y":100,"steps":[{"number":"01","title":"Sign Up","isTerminal":true}]}]}\n```'
+  );
+  assert.equal(r.ok, true);
+});

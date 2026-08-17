@@ -153,8 +153,11 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
   ]),
   x: z.number(),
   y: z.number(),
-  width: z.number(),
-  height: z.number(),
+  // getShapeBounds() falls through to computeDynamicShapeDimensions() for any
+  // shape missing width/height -- content-aware auto-sizing is a real,
+  // load-bearing render-path capability, not a malformed-output case.
+  width: z.number().optional(),
+  height: z.number().optional(),
   cornerRadius: z.number().optional(),
 });
 
