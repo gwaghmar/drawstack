@@ -163,6 +163,16 @@ export type SCurveTimelineShape = BaseShape & {
   cornerRadius?: number;
 };
 
+export type StepTimelineShape = BaseShape & {
+  type: "step_timeline";
+  width: number;
+  height: number;
+  title?: string;
+  accentColor?: string;
+  background?: string;
+  steps: { label?: string; title: string; description?: string }[];
+};
+
 export type IsometricBlockShape = BaseShape & {
   type: "isometric_block";
   width: number;
@@ -297,6 +307,7 @@ export type CanvasShape =
   | FeedTableShape
   | MindmapShape
   | SCurveTimelineShape
+  | StepTimelineShape
   | IsometricBlockShape
   | MockupShape
   | VennTimelineShape

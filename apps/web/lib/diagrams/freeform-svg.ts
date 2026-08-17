@@ -13,6 +13,7 @@ import {
   type FeedTableShape,
   type MindmapShape,
   type SCurveTimelineShape,
+  type StepTimelineShape,
   type IsometricBlockShape,
   type MockupShape,
   type VennTimelineShape,
@@ -47,6 +48,17 @@ function escapeXml(str: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&apos;");
+}
+
+// Only handles #rgb/#rrggbb — non-hex accent colors (named colors, palette tokens) pass through unchanged.
+function darkenHex(hex: string, amount = 0.25): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return hex;
+  const full = m[1].length === 3 ? m[1].split("").map((c) => c + c).join("") : m[1];
+  const r = Math.round(parseInt(full.slice(0, 2), 16) * (1 - amount));
+  const g = Math.round(parseInt(full.slice(2, 4), 16) * (1 - amount));
+  const b = Math.round(parseInt(full.slice(4, 6), 16) * (1 - amount));
+  return `#${[r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("")}`;
 }
 
 // ─── Real Multi-Color Cloud & Tech Brand Icons ──────────────────────────────
@@ -410,8 +422,30 @@ export function freeformToSvg(
       if (arrow.label) {
         const bestPos = findBestLabelPosition(waypoints, obstacleBounds);
         const labelWidth = Math.max(52, arrow.label.length * 7.5 + 18);
+
+        // Offset perpendicular-above the segment direction at the label point so the
+        // pill doesn't sit directly on the line and collide with shape/frame labels.
+        let segA = waypoints[0];
+        let segB = waypoints[waypoints.length - 1];
+        for (let i = 0; i < waypoints.length - 1; i++) {
+          const midX = Math.round((waypoints[i].x + waypoints[i + 1].x) / 2);
+          const midY = Math.round((waypoints[i].y + waypoints[i + 1].y) / 2);
+          if (midX === bestPos.x && midY === bestPos.y) {
+            segA = waypoints[i];
+            segB = waypoints[i + 1];
+            break;
+          }
+        }
+        const segDx = segB.x - segA.x;
+        const segDy = segB.y - segA.y;
+        const segLen = Math.hypot(segDx, segDy) || 1;
+        const normX = -segDy / segLen;
+        const normY = segDx / segLen;
+        const labelX = bestPos.x + normX * 14;
+        const labelY = bestPos.y + normY * 14;
+
         elements.push(
-          `<g transform="translate(${bestPos.x}, ${bestPos.y})">
+          `<g transform="translate(${labelX}, ${labelY})">
             <rect x="-${labelWidth / 2}" y="-11" width="${labelWidth}" height="22" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1.2" filter="url(#pill-shadow)" />
             <text x="0" y="4" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(arrow.label)}</text>
           </g>`
@@ -942,24 +976,48 @@ export function freeformToSvg(
       const trackStartY = y + 170;
       const stepGapY = (h - 250) / Math.max(numSteps - 1, 1);
 
-      let scurvePath = `M ${leftX} ${trackStartY}`;
-      sc.steps.forEach((_, idx) => {
-        if (idx === 0) return;
-        const prevX = idx % 2 === 1 ? leftX : rightX;
-        const currX = idx % 2 === 1 ? rightX : leftX;
-        const prevY = trackStartY + (idx - 1) * stepGapY;
-        const currY = trackStartY + idx * stepGapY;
-        const midY = (prevY + currY) / 2;
+      // Fewer than 4 steps: the serpentine switchback tangles at this scale (hubs
+      // overlap, lines cross). Lay hubs on a single gentle arc left-to-right instead.
+      const isSmallN = numSteps <= 3;
+      const hubPositions: { x: number; y: number }[] = isSmallN
+        ? sc.steps.map((_, idx) => ({
+            x: x + w * (0.12 + (0.76 * idx) / Math.max(1, numSteps - 1)),
+            y: y + h * 0.55 + (idx % 2 ? -h * 0.06 : h * 0.06),
+          }))
+        : sc.steps.map((_, idx) => ({
+            x: idx % 2 === 0 ? leftX : rightX,
+            y: trackStartY + idx * stepGapY,
+          }));
 
-        scurvePath += ` C ${prevX} ${midY}, ${currX} ${midY}, ${currX} ${currY}`;
-      });
+      let scurvePath = `M ${hubPositions[0].x} ${hubPositions[0].y}`;
+      if (isSmallN) {
+        for (let idx = 1; idx < hubPositions.length; idx++) {
+          const prev = hubPositions[idx - 1];
+          const curr = hubPositions[idx];
+          const midX = (prev.x + curr.x) / 2;
+          scurvePath += ` C ${midX} ${prev.y}, ${midX} ${curr.y}, ${curr.x} ${curr.y}`;
+        }
+      } else {
+        sc.steps.forEach((_, idx) => {
+          if (idx === 0) return;
+          const prev = hubPositions[idx - 1];
+          const curr = hubPositions[idx];
+          const midY = (prev.y + curr.y) / 2;
+          scurvePath += ` C ${prev.x} ${midY}, ${curr.x} ${midY}, ${curr.x} ${curr.y}`;
+        });
+      }
 
       const hubsSvg = sc.steps.map((st, idx) => {
         const isLeft = idx % 2 === 0;
-        const hx = isLeft ? leftX : rightX;
-        const hy = trackStartY + idx * stepGapY;
-        const textX = isLeft ? hx + 55 : hx - 55;
-        const align = isLeft ? "start" : "end";
+        const hx = hubPositions[idx].x;
+        const hy = hubPositions[idx].y;
+        // Arc mode: the path runs through hub centers, so side text gets struck through.
+        // Stack text above raised hubs / below lowered ones instead — always clear.
+        const isRaised = idx % 2 === 1;
+        const textX = isSmallN ? hx : isLeft ? hx + 55 : hx - 55;
+        const align = isSmallN ? "middle" : isLeft ? "start" : "end";
+        const titleY = isSmallN ? (isRaised ? hy - 64 : hy + 62) : hy - 12;
+        const descY = isSmallN ? (isRaised ? hy - 46 : hy + 80) : hy + 10;
 
         const descLines = st.description.split("\n");
         const descTspans = descLines
@@ -973,8 +1031,8 @@ export function freeformToSvg(
             <!-- Step Number INSIDE Hub -->
             <text x="${hx}" y="${hy + 8}" text-anchor="middle" font-family="'JetBrains Mono', Inter, monospace" font-size="22" font-weight="900" fill="#ffffff">${escapeXml(st.stepNumber)}</text>
             <!-- Step Title & Description Alongside Hub -->
-            <text x="${textX}" y="${hy - 12}" text-anchor="${align}" font-family="Inter, sans-serif" font-size="15" font-weight="800" fill="${textColorPrimary}">${escapeXml(st.title)}</text>
-            <text x="${textX}" y="${hy + 10}" text-anchor="${align}" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${textColorMuted}">${descTspans}</text>
+            <text x="${textX}" y="${titleY}" text-anchor="${align}" font-family="Inter, sans-serif" font-size="15" font-weight="800" fill="${textColorPrimary}">${escapeXml(st.title)}</text>
+            <text x="${textX}" y="${descY}" text-anchor="${align}" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${textColorMuted}">${descTspans}</text>
           </g>`;
       }).join("");
 
@@ -1246,6 +1304,81 @@ export function freeformToSvg(
           ${pmSvg}
         </g>`
       );
+      continue;
+    }
+
+    // ─── Step Timeline (`type: "step_timeline"`) — vertical alternating timeline poster ───
+    if (shape.type === "step_timeline") {
+      const st = shape as StepTimelineShape;
+      const accent = st.accentColor ?? "#1e3a8a";
+      const titleColor = darkenHex(accent, 0.3);
+      const top = st.title ? 70 : 16;
+      const n = Math.max(1, st.steps.length);
+      const stepH = (h - top) / n;
+      const cx = x + w / 2;
+
+      const badgeR = 28;
+      const edgeInset = 36;
+      const textInset = 90;
+      const blockW = Math.max(40, w / 2 - 150);
+      const descFontSize = 13;
+
+      let stSvg = "";
+      if (st.background && st.background !== "transparent") {
+        stSvg += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${st.background}" />`;
+      }
+      if (st.title) {
+        stSvg += `<text x="${cx}" y="${y + 44}" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="30" font-weight="800" fill="${textColorPrimary}">${escapeXml(st.title)}</text>`;
+      }
+      stSvg += `<line x1="${cx}" y1="${y + top}" x2="${cx}" y2="${y + h}" stroke="${accent}" stroke-width="2" />`;
+
+      st.steps.forEach((step, idx) => {
+        const isLeft = idx % 2 === 0;
+        const ay = y + top + idx * stepH + 24;
+        const badgeCx = isLeft ? x + edgeInset : x + w - edgeInset;
+        const leaderEndX = isLeft ? badgeCx + badgeR : badgeCx - badgeR;
+        const textAnchor = isLeft ? "start" : "end";
+        const textX = isLeft ? cx + textInset : cx - textInset;
+
+        stSvg += `<circle cx="${cx}" cy="${ay}" r="3" fill="${accent}" />`;
+        stSvg += `<line x1="${cx}" y1="${ay}" x2="${leaderEndX}" y2="${ay}" stroke="${accent}" stroke-width="1.5" stroke-dasharray="4,4" />`;
+        stSvg += `<circle cx="${badgeCx}" cy="${ay}" r="${badgeR}" fill="${accent}" />`;
+        stSvg += `<text x="${badgeCx}" y="${ay + 7}" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="20" font-weight="800" fill="#ffffff">${idx + 1}</text>`;
+
+        const eyebrow = (step.label ?? `STEP ${idx + 1}`).toUpperCase();
+        stSvg += `<text x="${textX}" y="${ay - 22}" text-anchor="${textAnchor}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="${accent}">${escapeXml(eyebrow)}</text>`;
+        stSvg += `<text x="${textX}" y="${ay - 2}" text-anchor="${textAnchor}" font-family="Inter, -apple-system, sans-serif" font-size="22" font-weight="800" fill="${titleColor}">${escapeXml(step.title)}</text>`;
+
+        if (step.description) {
+          const approxCharW = descFontSize * 0.55;
+          const maxChars = Math.max(4, Math.floor(blockW / approxCharW));
+          const words = step.description.split(" ");
+          const lines: string[] = [];
+          let cur = "";
+          for (const word of words) {
+            const candidate = cur ? `${cur} ${word}` : word;
+            if (candidate.length > maxChars && cur) {
+              lines.push(cur);
+              cur = word;
+            } else {
+              cur = candidate;
+            }
+          }
+          if (cur) lines.push(cur);
+          // Each step owns stepH of vertical room; clamp to what actually fits, not a constant.
+          const maxLines = Math.max(2, Math.floor((stepH - 90) / 16));
+          const clipped = lines.slice(0, maxLines);
+          if (clipped.length < lines.length) {
+            clipped[clipped.length - 1] = clipped[clipped.length - 1].replace(/,?\s*$/, "") + "…";
+          }
+          const descTspans = clipped
+            .map((line, lIdx) => `<tspan x="${textX}" dy="${lIdx === 0 ? 0 : 16}">${escapeXml(line)}</tspan>`)
+            .join("");
+          stSvg += `<text x="${textX}" y="${ay + 18}" text-anchor="${textAnchor}" font-family="Inter, sans-serif" font-size="${descFontSize}" font-weight="500" fill="#475569">${descTspans}</text>`;
+        }
+      });
+
+      elements.push(`<g ${opacity}>${stSvg}</g>`);
       continue;
     }
 

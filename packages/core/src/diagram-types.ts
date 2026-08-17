@@ -63,6 +63,7 @@ SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, 
 2. Swiss Editorial Mindmaps, Venn Timelines & S-Curves:
    - "mindmap": { "type": "mindmap", "steps": [{"number":"01","title":"Graphic design","subtitle":"concept","isTerminal":true}, {"number":"02","title":"Branches","branches":[{"side":"left","text":"font"},{"side":"right","text":"color"}]}, {"number":"03","title":"Venn","vennNodes":[{"label":"function","callout":"Target"},{"label":"mood","callout":"Emotion"}]}, {"number":"05","title":"Pills","pills":["idea sketch","idea meeting"]}] }
    - "scurve_timeline": { "type": "scurve_timeline", "title": "Project Steps", "subtitle": "INFOGRAPHICS TEMPLATE", "strokeColor": "#365f60", "steps": [{"stepNumber":"01","title":"Research","description":"...","hubColor":"#cf3c2e"}], "hasSilhouette": true }
+   - "step_timeline": vertical alternating timeline poster. { "type": "step_timeline", "title": "Startup Timeline", "accentColor": "#1e3a8a", "steps": [{"label":"STEP 1","title":"Market Research","description":"..."}] } — steps alternate left/right of a center spine with numbered circle badges and dashed leaders. Use for roadmap/step infographics.
    - "venn_timeline": { "type": "venn_timeline", "title": "Concept Derivation", "nodes": [{"primaryText":"Brand Identity","subText":"Core Values","vennLabels":["Function","Form"],"branches":[{"text":"Typography","side":"left"},{"text":"Palette","side":"right"}],"color":"dark"}] }
    - "isometric_block": { "type": "isometric_block", "title": "Business Growth", "callouts": [{"number":"01","title":"Setup","description":"...","side":"left"}], "hasSilhouette": true }
 3. System Architecture, Process Maps & HUDs:
@@ -79,7 +80,12 @@ SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, 
 RULES:
 - Every shape needs a unique "id" (short, kebab-case, e.g. "rev_chart", "step1").
 - Connectors between shapes MUST bind via endpoints: {"shapeId": "node1", "anchor": "auto"}.
-- Use exact, rich domain values instead of generic placeholders.`,
+- Use exact, rich domain values instead of generic placeholders.
+
+DESIGN STANDARDS (fonts & color — follow these unless the user asks otherwise):
+- Type pairing: editorial posters = serif display titles ("Georgia, 'Times New Roman', serif") + sans body; dashboards/UI = Inter throughout; terminal/technical = "'JetBrains Mono', monospace" with text.wrap false. Set fontSize deliberately: display 28-64, section titles 20-30, body 13-15, eyebrow/labels 10-12 uppercase.
+- Palettes: pick ONE system per canvas — Editorial cream (#f5f2eb bg, #1a1a1a ink, one accent), Swiss primaries (white/#f0ede4 bg, cobalt #193497, red #e03a2f, black), Neon-on-dark (#0b0f19 bg, #f8fafc text, one neon accent), or Muted consulting (slate/indigo). Never mix systems; never default to random bright colors.
+- Whitespace is structure: generous margins, aligned edges, consistent gaps. Repetition of one glyph family beats variety.`,
 };
 
 export const ANTI_GENERIC_DIRECTIVE = `

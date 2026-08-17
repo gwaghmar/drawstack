@@ -44,6 +44,7 @@ const CanvasOpSchema = z.union([
         "feed_table",
         "mindmap",
         "scurve_timeline",
+        "step_timeline",
         "isometric_block",
         "mockup",
         "venn_timeline",

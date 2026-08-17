@@ -1,10 +1,36 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage } from "react-konva";
 import Konva from "konva";
 import rough from "roughjs";
 import { getStroke } from "perfect-freehand";
+import {
+  MousePointer2,
+  Pencil,
+  MoveUpRight,
+  Square,
+  Diamond,
+  Circle,
+  Triangle,
+  Database,
+  Cloud,
+  Hexagon,
+  Star,
+  StickyNote,
+  Type,
+  Frame as FrameIcon,
+  ImagePlus,
+  Sparkles,
+  Feather,
+  PenLine,
+  Play,
+  SquareIcon,
+  Download,
+  ZoomIn,
+  ZoomOut,
+  Maximize,
+} from "lucide-react";
 import {
   parseFreeformSource,
   serializeFreeformDocument,
@@ -87,6 +113,7 @@ const SNAP_THRESHOLD = 6;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
 const ZOOM_FACTOR = 1.05;
+const ZOOM_STEP = 1.2;
 
 function stagePointFromEvent(stage: Konva.Stage | null): { x: number; y: number } | null {
   if (!stage) return null;
@@ -255,6 +282,7 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "chart",
   "mindmap",
   "scurve_timeline",
+  "step_timeline",
   "metric",
   "mockup",
   "isometric_block",
@@ -1058,6 +1086,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   const isApplyingRef = useRef(false);
   const lastSourceRef = useRef(source);
   const stageRef = useRef<Konva.Stage>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const docRef = useRef(doc);
@@ -1201,6 +1230,55 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
       setEditingValue("");
     }
   };
+
+  const insertImageAt = (src: string, naturalWidth: number, naturalHeight: number, cx: number, cy: number) => {
+    const MAX_DIM = 420;
+    const scale = Math.min(1, MAX_DIM / Math.max(naturalWidth, naturalHeight));
+    const width = Math.round(naturalWidth * scale);
+    const height = Math.round(naturalHeight * scale);
+    const x = Math.round(cx - width / 2);
+    const y = Math.round(cy - height / 2);
+    const baseDoc = docRef.current;
+    const id = generateShapeId("img");
+
+    const newShape: ImageShape = { id, type: "image", x, y, width, height, src, objectFit: "cover" };
+    const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, newShape] };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    setSelectedIds(new Set([id]));
+    setModeSynced("select");
+  };
+
+  const handleImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const src = reader.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
+        const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+        insertImageAt(src, img.naturalWidth || 300, img.naturalHeight || 200, cx, cy);
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const zoomBy = (factor: number) => {
+    setViewport((prev) => {
+      const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev.scale * factor));
+      const cx = STAGE_WIDTH / 2;
+      const cy = STAGE_HEIGHT / 2;
+      const docX = (cx - prev.x) / prev.scale;
+      const docY = (cy - prev.y) / prev.scale;
+      return { scale: newScale, x: cx - docX * newScale, y: cy - docY * newScale };
+    });
+  };
+
+  const resetZoom = () => setViewport({ scale: 1, x: 0, y: 0 });
 
   const commitEditing = (cancel: boolean) => {
     const shapeId = editingShapeId;
@@ -2063,21 +2141,29 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     selBounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
 
-  const toolbarButton = (label: string, active: boolean, onClick: () => void, title?: string) => (
+  const toolbarButton = (
+    icon: ReactNode,
+    active: boolean,
+    onClick: () => void,
+    title: string,
+  ) => (
     <button
-      key={label}
+      key={title}
       type="button"
       title={title}
+      aria-label={title}
       onClick={onClick}
-      className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
+      className={`flex h-8 w-8 items-center justify-center rounded-md transition-all ${
         active
           ? "bg-indigo-600 text-white shadow-sm"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       }`}
     >
-      {label}
+      {icon}
     </button>
   );
+
+  const toolbarDivider = <div className="h-6 w-[1px] shrink-0 bg-slate-200 dark:bg-slate-700 mx-1" />;
 
   const orderedShapes = [
     ...doc.shapes.filter((s) => s.type === "frame"),
@@ -2093,49 +2179,60 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
         backgroundImage: "radial-gradient(#cbd5e1 1.2px, transparent 1.2px)",
       }}
     >
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleImageFileChange}
+      />
+
       {/* ─── Top Main Toolbar ────────────────────────────────────────────── */}
       {!readOnly && (
-        <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 shadow-md backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 max-w-[calc(100%-24px)]">
-          {toolbarButton("Select (V)", mode === "select", () => setModeSynced("select"))}
-          {toolbarButton("Pen (P)", mode === "draw", () => setModeSynced("draw"))}
-          {toolbarButton("Arrow (A)", mode === "arrow", () => setModeSynced("arrow"))}
+        <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 max-w-[calc(100%-24px)]">
+          {toolbarButton(<MousePointer2 className="h-4 w-4" />, mode === "select", () => setModeSynced("select"), "Select (V)")}
+          {toolbarButton(<Pencil className="h-4 w-4" />, mode === "draw", () => setModeSynced("draw"), "Pen (P)")}
+          {toolbarButton(<MoveUpRight className="h-4 w-4" />, mode === "arrow", () => setModeSynced("arrow"), "Arrow (A)")}
 
-          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+          {toolbarDivider}
 
-          {toolbarButton("Rect", mode === "place" && placeKind === "rectangle", () => enterPlaceMode("rectangle"))}
-          {toolbarButton("Diamond", mode === "place" && placeKind === "diamond", () => enterPlaceMode("diamond"))}
-          {toolbarButton("Ellipse", mode === "place" && placeKind === "ellipse", () => enterPlaceMode("ellipse"))}
-          {toolbarButton("Triangle", mode === "place" && placeKind === "triangle", () => enterPlaceMode("triangle"))}
-          {toolbarButton("Database", mode === "place" && placeKind === "cylinder", () => enterPlaceMode("cylinder"))}
-          {toolbarButton("Cloud", mode === "place" && placeKind === "cloud", () => enterPlaceMode("cloud"))}
-          {toolbarButton("Hexagon", mode === "place" && placeKind === "hexagon", () => enterPlaceMode("hexagon"))}
-          {toolbarButton("Star", mode === "place" && placeKind === "star", () => enterPlaceMode("star"))}
-          {toolbarButton("Sticky", mode === "place" && placeKind === "sticky", () => enterPlaceMode("sticky"))}
-          {toolbarButton("Text", mode === "place" && placeKind === "text", () => enterPlaceMode("text"))}
-          {toolbarButton("Frame", mode === "place" && placeKind === "frame", () => enterPlaceMode("frame"))}
+          {toolbarButton(<Square className="h-4 w-4" />, mode === "place" && placeKind === "rectangle", () => enterPlaceMode("rectangle"), "Rectangle")}
+          {toolbarButton(<Diamond className="h-4 w-4" />, mode === "place" && placeKind === "diamond", () => enterPlaceMode("diamond"), "Diamond")}
+          {toolbarButton(<Circle className="h-4 w-4" />, mode === "place" && placeKind === "ellipse", () => enterPlaceMode("ellipse"), "Ellipse")}
+          {toolbarButton(<Triangle className="h-4 w-4" />, mode === "place" && placeKind === "triangle", () => enterPlaceMode("triangle"), "Triangle")}
+          {toolbarButton(<Database className="h-4 w-4" />, mode === "place" && placeKind === "cylinder", () => enterPlaceMode("cylinder"), "Database")}
+          {toolbarButton(<Cloud className="h-4 w-4" />, mode === "place" && placeKind === "cloud", () => enterPlaceMode("cloud"), "Cloud")}
+          {toolbarButton(<Hexagon className="h-4 w-4" />, mode === "place" && placeKind === "hexagon", () => enterPlaceMode("hexagon"), "Hexagon")}
+          {toolbarButton(<Star className="h-4 w-4" />, mode === "place" && placeKind === "star", () => enterPlaceMode("star"), "Star")}
+          {toolbarButton(<StickyNote className="h-4 w-4" />, mode === "place" && placeKind === "sticky", () => enterPlaceMode("sticky"), "Sticky note")}
+          {toolbarButton(<Type className="h-4 w-4" />, mode === "place" && placeKind === "text", () => enterPlaceMode("text"), "Text")}
+          {toolbarButton(<FrameIcon className="h-4 w-4" />, mode === "place" && placeKind === "frame", () => enterPlaceMode("frame"), "Frame")}
+          {toolbarButton(<ImagePlus className="h-4 w-4" />, false, () => fileInputRef.current?.click(), "Add image")}
 
-          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+          {toolbarDivider}
 
           <button
             type="button"
             onClick={() => handleAutoLayout("LR")}
-            className="rounded px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 dark:text-slate-300"
-            title="Auto-organize diagram hierarchy in 2ms"
+            className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="Auto-organize diagram hierarchy"
           >
-            ✨ Tidy Up
+            <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+            Tidy Up
           </button>
 
           <button
             type="button"
             onClick={toggleRenderMode}
-            className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
+            className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all ${
               doc.renderMode === "sketchy"
                 ? "bg-amber-500 text-white shadow-sm"
-                : "border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+                : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             }`}
             title="Toggle between Clean Vector and Hand-Drawn Sketchy rendering"
           >
-            {doc.renderMode === "sketchy" ? "Sketchy Style" : "Clean Style"}
+            {doc.renderMode === "sketchy" ? <Feather className="h-3.5 w-3.5" /> : <PenLine className="h-3.5 w-3.5" />}
+            {doc.renderMode === "sketchy" ? "Sketchy" : "Clean"}
           </button>
 
           <button
@@ -2145,26 +2242,68 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
               setDoc(newDoc);
               commitChanges(newDoc);
             }}
-            className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
+            className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all ${
               doc.presentationMode
                 ? "bg-indigo-500 text-white shadow-sm"
-                : "border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+                : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             }`}
             title="Toggle Interactive Prototype Presentation Mode"
           >
-            {doc.presentationMode ? "⏹ Stop Presenting" : "▶ Present"}
+            {doc.presentationMode ? <SquareIcon className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
+            {doc.presentationMode ? "Stop" : "Present"}
           </button>
 
           <button
             type="button"
             onClick={handleExportSvg}
-            className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             title="Download pure vector SVG"
           >
-            Export SVG
+            <Download className="h-3.5 w-3.5" />
+            Export
           </button>
         </div>
       )}
+
+      {/* ─── Zoom Controls ───────────────────────────────────────────────── */}
+      <div className="absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+        <button
+          type="button"
+          onClick={() => zoomBy(1 / ZOOM_STEP)}
+          title="Zoom out"
+          aria-label="Zoom out"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <ZoomOut className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={resetZoom}
+          title="Reset zoom to 100% (⌘0)"
+          className="min-w-[3.25rem] rounded-md px-1.5 py-1 text-center text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          {Math.round(viewport.scale * 100)}%
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomBy(ZOOM_STEP)}
+          title="Zoom in"
+          aria-label="Zoom in"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <ZoomIn className="h-4 w-4" />
+        </button>
+        <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+        <button
+          type="button"
+          onClick={resetZoom}
+          title="Reset view (⌘0)"
+          aria-label="Reset view"
+          className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          <Maximize className="h-4 w-4" />
+        </button>
+      </div>
 
       {/* ─── Floating Quick-Style & Format Bar ────────────────────────────── */}
       {!readOnly && selBounds && selectedShapes.length > 0 && !editingShapeId && (

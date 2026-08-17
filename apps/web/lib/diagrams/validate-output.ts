@@ -140,6 +140,7 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
     "mindmap",
     "fishbone",
     "scurve_timeline",
+    "step_timeline",
     "isometric_block",
     "mockup",
     "venn_timeline",
