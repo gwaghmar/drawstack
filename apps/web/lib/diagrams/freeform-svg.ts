@@ -626,7 +626,15 @@ export function freeformToSvg(
 
     const rawFill = shape.fill ? resolveColor(shape.fill) ?? shape.fill : shape.type === "sticky" ? "#fef08a" : cardBg;
     const fill = rawFill === "transparent" ? "none" : rawFill;
-    const stroke = shape.stroke ? resolveColor(shape.stroke) ?? shape.stroke : shape.type === "frame" ? (isDark ? "#334155" : "#cbd5e1") : cardBorder;
+    // Konva falls back to #1e293b for a stroke-less shape; the exporter used a
+    // pale card border, so unstroked shapes and connectors came out washed out.
+    const stroke = shape.stroke
+      ? resolveColor(shape.stroke) ?? shape.stroke
+      : shape.type === "frame"
+        ? (isDark ? "#334155" : "#cbd5e1")
+        : isDark
+          ? cardBorder
+          : "#1e293b";
     const strokeWidth = shape.strokeWidth ?? 1.5;
     const opacity = shape.opacity !== undefined ? `opacity="${shape.opacity}"` : "";
     const strokeDash =

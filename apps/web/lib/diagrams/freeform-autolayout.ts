@@ -39,23 +39,27 @@ export function autoLayoutFreeformDocument(
     shapeMap.set(s.id, s);
   }
 
-  // Build graph adjacency and in-degrees from arrow connections
-  const arrows = doc.shapes.filter((s) => s.type === "arrow") as ArrowShape[];
+  // Connections come from arrows AND lines — UML/ERD notation edges are lines,
+  // and a layout that ignores them lays those diagrams out as disconnected islands.
+  const connectors = doc.shapes.filter((s) => s.type === "arrow" || s.type === "line") as ArrowShape[];
   const adjacency = new Map<string, Set<string>>();
+  const incoming = new Map<string, Set<string>>();
   const inDegree = new Map<string, number>();
 
   for (const s of layoutableShapes) {
     adjacency.set(s.id, new Set());
+    incoming.set(s.id, new Set());
     inDegree.set(s.id, 0);
   }
 
-  for (const arrow of arrows) {
-    if (isBoundEndpoint(arrow.start) && isBoundEndpoint(arrow.end)) {
-      const fromId = arrow.start.shapeId;
-      const toId = arrow.end.shapeId;
+  for (const connector of connectors) {
+    if (isBoundEndpoint(connector.start) && isBoundEndpoint(connector.end)) {
+      const fromId = connector.start.shapeId;
+      const toId = connector.end.shapeId;
       if (shapeMap.has(fromId) && shapeMap.has(toId) && fromId !== toId) {
         if (!adjacency.get(fromId)!.has(toId)) {
           adjacency.get(fromId)!.add(toId);
+          incoming.get(toId)!.add(fromId);
           inDegree.set(toId, (inDegree.get(toId) ?? 0) + 1);
         }
       }
@@ -108,38 +112,58 @@ export function autoLayoutFreeformDocument(
     unvisited = layoutableShapes.filter((s) => !assigned.has(s.id));
   }
 
+  // Order each layer by the average position of its neighbours in the adjacent
+  // layer (barycenter), swept both ways. Without this, layer membership is
+  // whatever order the traversal happened to visit in, and edges cross wildly.
+  const neighborsOf = (id: string) => [...(adjacency.get(id) ?? []), ...(incoming.get(id) ?? [])];
+
+  const sweep = (referenceLayer: string[], target: string[]) => {
+    const index = new Map(referenceLayer.map((id, i) => [id, i]));
+    const barycenter = new Map<string, number>();
+    target.forEach((id, fallback) => {
+      const positions = neighborsOf(id)
+        .map((n) => index.get(n))
+        .filter((v): v is number => v !== undefined);
+      barycenter.set(id, positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : fallback);
+    });
+    target.sort((a, b) => barycenter.get(a)! - barycenter.get(b)!);
+  };
+
+  for (let pass = 0; pass < 4; pass++) {
+    for (let i = 1; i < layers.length; i++) sweep(layers[i - 1], layers[i]);
+    for (let i = layers.length - 2; i >= 0; i--) sweep(layers[i + 1], layers[i]);
+  }
+
   // Compute positions
   const newPositions = new Map<string, { x: number; y: number }>();
   let layerOffset = direction === "LR" ? startX : startY;
 
+  const breadthOf = (layer: string[]) =>
+    layer.reduce((sum, id) => {
+      const shape = shapeMap.get(id)!;
+      return sum + (direction === "LR" ? shape.height : shape.width);
+    }, 0) + Math.max(0, (layer.length - 1) * nodeGap);
+
+  // Center every layer on one axis so a wide layer doesn't drag narrow ones
+  // to one side; the old code started each layer flush at the same edge.
+  const widestBreadth = Math.max(...layers.map(breadthOf));
+
   for (const layer of layers) {
     let maxLayerThickness = 0;
-    let totalBreadth = 0;
-
     for (const id of layer) {
       const shape = shapeMap.get(id)!;
-      const breadth = direction === "LR" ? shape.height : shape.width;
-      const thickness = direction === "LR" ? shape.width : shape.height;
-      totalBreadth += breadth;
-      maxLayerThickness = Math.max(maxLayerThickness, thickness);
+      maxLayerThickness = Math.max(maxLayerThickness, direction === "LR" ? shape.width : shape.height);
     }
-    totalBreadth += Math.max(0, (layer.length - 1) * nodeGap);
 
-    let breadthCursor = (direction === "LR" ? startY : startX);
+    let breadthCursor = (direction === "LR" ? startY : startX) + (widestBreadth - breadthOf(layer)) / 2;
 
     for (const id of layer) {
       const shape = shapeMap.get(id)!;
       if (direction === "LR") {
-        newPositions.set(id, {
-          x: layerOffset,
-          y: Math.round(breadthCursor),
-        });
+        newPositions.set(id, { x: layerOffset, y: Math.round(breadthCursor) });
         breadthCursor += shape.height + nodeGap;
       } else {
-        newPositions.set(id, {
-          x: Math.round(breadthCursor),
-          y: layerOffset,
-        });
+        newPositions.set(id, { x: Math.round(breadthCursor), y: layerOffset });
         breadthCursor += shape.width + nodeGap;
       }
     }

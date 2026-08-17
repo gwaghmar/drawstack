@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { autoLayoutFreeformDocument } from "./freeform-autolayout.ts";
 import {
   type CanvasDocument,
   type CanvasShape,
@@ -89,10 +90,11 @@ export const CanvasOpSchema = z.union([
   }),
   z.object({
     op: z.literal("layout"),
-    targets: z.array(z.string()),
-    arrange: z.enum(["row", "column", "grid"]),
+    targets: z.array(z.string()).describe("Ignored for arrange \"graph\", which lays out the whole document"),
+    arrange: z.enum(["row", "column", "grid", "graph"]),
     gap: z.number().optional(),
     origin: z.object({ x: z.number(), y: z.number() }).optional(),
+    direction: z.enum(["LR", "TB"]).optional().describe("Flow direction for arrange \"graph\"")
   }),
   z.object({
     op: z.literal("reorder"),
@@ -131,7 +133,14 @@ export type CanvasOp =
       gap?: number;
       align?: "start" | "center" | "end";
     }
-  | { op: "layout"; targets: string[]; arrange: "row" | "column" | "grid"; gap?: number; origin?: { x: number; y: number } }
+  | {
+      op: "layout";
+      targets: string[];
+      arrange: "row" | "column" | "grid" | "graph";
+      gap?: number;
+      origin?: { x: number; y: number };
+      direction?: "LR" | "TB";
+    }
   | { op: "reorder"; target: string; to: "front" | "back" | "forward" | "backward" };
 
 export type ApplyResult = {
@@ -530,6 +539,20 @@ export function applyCanvasOps(doc: CanvasDocument, ops: CanvasOp[]): ApplyResul
           break;
         }
         case "layout": {
+          // Graph mode places every connected shape from the connections alone —
+          // the "describe it, don't position it" path for the whole document.
+          if (op.arrange === "graph") {
+            const laidDoc = autoLayoutFreeformDocument(currentDoc(), {
+              direction: op.direction ?? "LR",
+              nodeGap: op.gap,
+              startX: op.origin?.x,
+              startY: op.origin?.y,
+            });
+            shapes = laidDoc.shapes;
+            applied++;
+            break;
+          }
+
           const targets = op.targets.map((t) => resolveTarget(currentDoc(), t));
           const localErrors: string[] = [];
           const laid = applyLayout(currentDoc(), targets, op.arrange, op.gap ?? 40, op.origin, localErrors);
