@@ -253,11 +253,11 @@ const TEST_2_DOC: CanvasDocument = {
       height: 140,
     },
     // Connectors
-    { id: "e1", type: "arrow", start: { shapeId: "cf_edge", anchor: "bottom" }, end: { shapeId: "k8s_gateway", anchor: "top" }, routing: "orthogonal", label: "Encrypted Ingress" },
-    { id: "e2", type: "arrow", start: { shapeId: "k8s_gateway", anchor: "right" }, end: { shapeId: "auth_service", anchor: "left" }, routing: "orthogonal", label: "Route Task" },
-    { id: "e3", type: "arrow", start: { shapeId: "k8s_gateway", anchor: "right" }, end: { shapeId: "billing_service", anchor: "left" }, routing: "orthogonal", label: "Verify Token" },
-    { id: "e4", type: "arrow", start: { shapeId: "auth_service", anchor: "right" }, end: { shapeId: "kafka_stream", anchor: "left" }, routing: "orthogonal", label: "Emit Telemetry" },
-    { id: "e5", type: "arrow", start: { shapeId: "billing_service", anchor: "right" }, end: { shapeId: "pg_cluster", anchor: "left" }, routing: "orthogonal", label: "Debit Ledger" },
+    { id: "e1", type: "arrow", x: 0, y: 0, start: { shapeId: "cf_edge", anchor: "bottom" }, end: { shapeId: "k8s_gateway", anchor: "top" }, routing: "orthogonal", label: "Encrypted Ingress" },
+    { id: "e2", type: "arrow", x: 0, y: 0, start: { shapeId: "k8s_gateway", anchor: "right" }, end: { shapeId: "auth_service", anchor: "left" }, routing: "orthogonal", label: "Route Task" },
+    { id: "e3", type: "arrow", x: 0, y: 0, start: { shapeId: "k8s_gateway", anchor: "right" }, end: { shapeId: "billing_service", anchor: "left" }, routing: "orthogonal", label: "Verify Token" },
+    { id: "e4", type: "arrow", x: 0, y: 0, start: { shapeId: "auth_service", anchor: "right" }, end: { shapeId: "kafka_stream", anchor: "left" }, routing: "orthogonal", label: "Emit Telemetry" },
+    { id: "e5", type: "arrow", x: 0, y: 0, start: { shapeId: "billing_service", anchor: "right" }, end: { shapeId: "pg_cluster", anchor: "left" }, routing: "orthogonal", label: "Debit Ledger" },
   ],
 };
 
@@ -357,10 +357,10 @@ const TEST_3_DOC: CanvasDocument = {
       height: 180,
     },
     // Foreign Key Relationships
-    { id: "fk1", type: "arrow", start: { shapeId: "users_table", anchor: "right" }, end: { shapeId: "workspaces_table", anchor: "left" }, routing: "orthogonal", label: "1:N Owner" },
-    { id: "fk2", type: "arrow", start: { shapeId: "workspaces_table", anchor: "right" }, end: { shapeId: "projects_table", anchor: "left" }, routing: "orthogonal", label: "1:N Documents" },
-    { id: "fk3", type: "arrow", start: { shapeId: "users_table", anchor: "bottom" }, end: { shapeId: "invoices_table", anchor: "top" }, routing: "orthogonal", label: "1:N Invoicing" },
-    { id: "fk4", type: "arrow", start: { shapeId: "projects_table", anchor: "bottom" }, end: { shapeId: "agent_runs_table", anchor: "top" }, routing: "orthogonal", label: "1:N Agent Runs" },
+    { id: "fk1", type: "arrow", x: 0, y: 0, start: { shapeId: "users_table", anchor: "right" }, end: { shapeId: "workspaces_table", anchor: "left" }, routing: "orthogonal", label: "1:N Owner" },
+    { id: "fk2", type: "arrow", x: 0, y: 0, start: { shapeId: "workspaces_table", anchor: "right" }, end: { shapeId: "projects_table", anchor: "left" }, routing: "orthogonal", label: "1:N Documents" },
+    { id: "fk3", type: "arrow", x: 0, y: 0, start: { shapeId: "users_table", anchor: "bottom" }, end: { shapeId: "invoices_table", anchor: "top" }, routing: "orthogonal", label: "1:N Invoicing" },
+    { id: "fk4", type: "arrow", x: 0, y: 0, start: { shapeId: "projects_table", anchor: "bottom" }, end: { shapeId: "agent_runs_table", anchor: "top" }, routing: "orthogonal", label: "1:N Agent Runs" },
   ],
 };
 
@@ -659,11 +659,11 @@ const TEST_9_DOC: CanvasDocument = {
       height: 120,
     },
     // Links
-    { id: "l1", type: "arrow", start: { shapeId: "inc_start", anchor: "bottom" }, end: { shapeId: "dec_db_check", anchor: "top" }, routing: "orthogonal", label: "Evaluate" },
-    { id: "l2", type: "arrow", start: { shapeId: "dec_db_check", anchor: "left" }, end: { shapeId: "act_autoscale_db", anchor: "top" }, routing: "orthogonal", label: "Yes (Pool Full)" },
-    { id: "l3", type: "arrow", start: { shapeId: "dec_db_check", anchor: "right" }, end: { shapeId: "act_reroute_traffic", anchor: "top" }, routing: "orthogonal", label: "No (Regional Outage)" },
-    { id: "l4", type: "arrow", start: { shapeId: "act_autoscale_db", anchor: "bottom" }, end: { shapeId: "inc_resolved", anchor: "left" }, routing: "orthogonal", label: "Pool Verified" },
-    { id: "l5", type: "arrow", start: { shapeId: "act_reroute_traffic", anchor: "bottom" }, end: { shapeId: "inc_resolved", anchor: "right" }, routing: "orthogonal", label: "Traffic Stabilized" },
+    { id: "l1", type: "arrow", x: 0, y: 0, start: { shapeId: "inc_start", anchor: "bottom" }, end: { shapeId: "dec_db_check", anchor: "top" }, routing: "orthogonal", label: "Evaluate" },
+    { id: "l2", type: "arrow", x: 0, y: 0, start: { shapeId: "dec_db_check", anchor: "left" }, end: { shapeId: "act_autoscale_db", anchor: "top" }, routing: "orthogonal", label: "Yes (Pool Full)" },
+    { id: "l3", type: "arrow", x: 0, y: 0, start: { shapeId: "dec_db_check", anchor: "right" }, end: { shapeId: "act_reroute_traffic", anchor: "top" }, routing: "orthogonal", label: "No (Regional Outage)" },
+    { id: "l4", type: "arrow", x: 0, y: 0, start: { shapeId: "act_autoscale_db", anchor: "bottom" }, end: { shapeId: "inc_resolved", anchor: "left" }, routing: "orthogonal", label: "Pool Verified" },
+    { id: "l5", type: "arrow", x: 0, y: 0, start: { shapeId: "act_reroute_traffic", anchor: "bottom" }, end: { shapeId: "inc_resolved", anchor: "right" }, routing: "orthogonal", label: "Traffic Stabilized" },
   ],
 };
 
@@ -750,10 +750,10 @@ const TEST_10_DOC: CanvasDocument = {
       height: 120,
     },
     // Orthogonal links
-    { id: "pl1", type: "arrow", start: { shapeId: "card_merchant", anchor: "right" }, end: { shapeId: "card_gateway", anchor: "left" }, routing: "orthogonal", label: "Submit Charge" },
-    { id: "pl2", type: "arrow", start: { shapeId: "card_gateway", anchor: "right" }, end: { shapeId: "card_banking", anchor: "left" }, routing: "orthogonal", label: "FedNow ACH" },
-    { id: "pl3", type: "arrow", start: { shapeId: "card_gateway", anchor: "bottom" }, end: { shapeId: "table_settlement_ledger", anchor: "top" }, routing: "orthogonal", label: "Record Ledger" },
-    { id: "pl4", type: "arrow", start: { shapeId: "table_settlement_ledger", anchor: "right" }, end: { shapeId: "metric_daily_vol", anchor: "left" }, routing: "orthogonal", label: "Aggregate" },
+    { id: "pl1", type: "arrow", x: 0, y: 0, start: { shapeId: "card_merchant", anchor: "right" }, end: { shapeId: "card_gateway", anchor: "left" }, routing: "orthogonal", label: "Submit Charge" },
+    { id: "pl2", type: "arrow", x: 0, y: 0, start: { shapeId: "card_gateway", anchor: "right" }, end: { shapeId: "card_banking", anchor: "left" }, routing: "orthogonal", label: "FedNow ACH" },
+    { id: "pl3", type: "arrow", x: 0, y: 0, start: { shapeId: "card_gateway", anchor: "bottom" }, end: { shapeId: "table_settlement_ledger", anchor: "top" }, routing: "orthogonal", label: "Record Ledger" },
+    { id: "pl4", type: "arrow", x: 0, y: 0, start: { shapeId: "table_settlement_ledger", anchor: "right" }, end: { shapeId: "metric_daily_vol", anchor: "left" }, routing: "orthogonal", label: "Aggregate" },
   ],
 };
 

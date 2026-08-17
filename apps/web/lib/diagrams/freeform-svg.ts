@@ -46,7 +46,7 @@ function escapeXml(str: string): string {
 }
 
 // ─── Real Multi-Color Cloud & Tech Brand Icons ──────────────────────────────
-export function getSvgIcon(iconName: string, size = 16, color = "#6366f1"): string {
+export function getSvgIcon(iconName: string, size = 16, color = "#2563eb"): string {
   const norm = iconName.toLowerCase().replace(/[^a-z0-9-]/g, "");
   switch (norm) {
     case "aws":
@@ -287,40 +287,55 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
   const vw = Math.max(100, Math.round(maxX - minX + padding * 2));
   const vh = Math.max(100, Math.round(maxY - minY + padding * 2));
 
-  const canvasBg = isDark ? "#090d16" : isEditorial ? "#f5f2eb" : "#f8fafc";
+  // McKinsey & Executive Consulting Palette System
+  const canvasBg = isDark ? "#0b0f19" : isEditorial ? "#f5f2eb" : "#f8fafc";
   const dotColor = isDark ? "#1e293b" : isEditorial ? "#e2ded4" : "#cbd5e1";
   const textColorPrimary = isDark ? "#f8fafc" : "#0f172a";
-  const textColorMuted = isDark ? "#94a3b8" : "#64748b";
-  const cardBg = isDark ? "#0f172a" : "#ffffff";
-  const cardBorder = isDark ? "rgba(255,255,255,0.12)" : "#e2e8f0";
+  const textColorMuted = isDark ? "#94a3b8" : "#475569";
+  const cardBg = isDark ? "#111827" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255,255,255,0.1)" : "#e2e8f0";
+  const gridLineColor = isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0";
 
   const defs = `
   <defs>
     <filter id="soft-card-shadow" x="-10%" y="-10%" width="125%" height="125%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="${isDark ? "0.45" : "0.08"}" />
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="${isDark ? "0.2" : "0.04"}" />
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="${isDark ? "0.45" : "0.06"}" />
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="${isDark ? "0.2" : "0.03"}" />
     </filter>
     <filter id="pill-shadow" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="${isDark ? "0.3" : "0.06"}" />
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="${isDark ? "0.3" : "0.05"}" />
     </filter>
     <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#6366f1" stop-opacity="${isDark ? "0.55" : "0.35"}"/>
-      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.0"/>
+      <stop offset="0%" stop-color="#2563eb" stop-opacity="${isDark ? "0.45" : "0.25"}"/>
+      <stop offset="100%" stop-color="#2563eb" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="sparkline-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="${isDark ? "0.35" : "0.2"}"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
     </linearGradient>
     <pattern id="estimate-stripes" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
-      <line x1="0" y1="0" x2="0" y2="8" stroke="#f59e0b" stroke-width="2.5" />
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#d97706" stroke-width="2.5" />
     </pattern>
     <marker id="arrowhead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="${isDark ? "#94a3b8" : "#64748b"}" />
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="${isDark ? "#94a3b8" : "#475569"}" />
     </marker>
     <marker id="arrowhead-start" viewBox="0 0 10 10" refX="1.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-      <path d="M 8.5 1.5 L 0 5 L 8.5 8.5 z" fill="${isDark ? "#94a3b8" : "#64748b"}" />
+      <path d="M 8.5 1.5 L 0 5 L 8.5 8.5 z" fill="${isDark ? "#94a3b8" : "#475569"}" />
     </marker>
   </defs>`;
 
   const elements: string[] = [];
 
-  for (const shape of doc.shapes) {
+  // Sort containers (frame, mockup, dashboard) to render first in array order
+  const sortedShapes = [...doc.shapes].sort((a, b) => {
+    const isContA = a.type === "dashboard" || a.type === "frame" || a.type === "mockup";
+    const isContB = b.type === "dashboard" || b.type === "frame" || b.type === "mockup";
+    if (isContA && !isContB) return -1;
+    if (!isContA && isContB) return 1;
+    return 0;
+  });
+
+  for (const shape of sortedShapes) {
     const bounds = getShapeBounds(doc, shape);
     const w = bounds.width;
     const h = bounds.height;
@@ -421,15 +436,15 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       elements.push(
         `<g ${opacity}>
           <!-- Dashboard Top Navigation Bar -->
-          <rect x="${x}" y="${y}" width="${w}" height="44" fill="${isDark ? "#0f172a" : "#ffffff"}" stroke="${cardBorder}" stroke-width="1" rx="8" />
+          <rect x="${x}" y="${y}" width="${w}" height="44" fill="${isDark ? "#111827" : "#ffffff"}" stroke="${cardBorder}" stroke-width="1" rx="8" />
           <text x="${x + 16}" y="${y + 27}" font-family="Inter, -apple-system, sans-serif" font-size="14" font-weight="800" fill="${textColorPrimary}">${escapeXml(d.title)}</text>
           <!-- Navigation Tabs -->
-          <g transform="translate(${x + 150}, ${y + 8})">
+          <g transform="translate(${x + 160}, ${y + 8})">
             ${tabs.map((t, idx) => {
-              const tabX = idx * 95;
+              const tabX = idx * 96;
               return t.active
-                ? `<rect x="${tabX}" y="0" width="90" height="28" rx="14" fill="${isDark ? "#334155" : "#0f172a"}"/><text x="${tabX + 45}" y="18" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" font-weight="700" fill="#ffffff">${escapeXml(t.label)}</text>`
-                : `<text x="${tabX + 45}" y="18" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" font-weight="500" fill="${textColorMuted}">${escapeXml(t.label)}</text>`;
+                ? `<rect x="${tabX}" y="0" width="92" height="28" rx="14" fill="${isDark ? "#334155" : "#0f172a"}"/><text x="${tabX + 46}" y="18" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" font-weight="700" fill="#ffffff">${escapeXml(t.label)}</text>`
+                : `<text x="${tabX + 46}" y="18" text-anchor="middle" font-family="Inter, sans-serif" font-size="11.5" font-weight="500" fill="${textColorMuted}">${escapeXml(t.label)}</text>`;
             }).join("")}
           </g>
           <!-- Top Right Action Buttons -->
@@ -462,11 +477,8 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       if (m.mockupType === "mobile") {
         elements.push(
           `<g ${shadowFilter} ${opacity}>
-            <!-- Phone Chassis -->
             <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${cardBg}" stroke="${stroke}" stroke-width="3" />
-            <!-- Dynamic Island Notch -->
             <rect x="${x + w / 2 - 45}" y="${y + 12}" width="90" height="22" rx="11" fill="#000000" />
-            <!-- Bottom Home Bar -->
             <rect x="${x + w / 2 - 50}" y="${y + h - 14}" width="100" height="4" rx="2" fill="${isDark ? "#475569" : "#cbd5e1"}" />
           </g>`
         );
@@ -492,30 +504,37 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
     // ─── 3. Metric / KPI Stat Card (`type: "metric"`) ────────────────────────
     if (shape.type === "metric") {
       const m = shape as MetricShape;
-      const deltaColor = m.deltaDirection === "down" ? "#ef4444" : "#10b981";
-      const deltaBg = isDark ? (m.deltaDirection === "down" ? "rgba(239,68,68,0.2)" : "rgba(16,185,129,0.2)") : m.deltaDirection === "down" ? "#fee2e2" : "#d1fae5";
+      const deltaColor = m.deltaDirection === "down" ? "#dc2626" : "#059669";
+      const deltaBg = isDark ? (m.deltaDirection === "down" ? "rgba(220,38,38,0.2)" : "rgba(5,150,105,0.2)") : m.deltaDirection === "down" ? "#fee2e2" : "#d1fae5";
       const iconName = m.icon ?? "activity";
 
+      // Grounded Spline Sparkline (McKinsey Standard)
       const pts = m.sparkline ?? [10, 25, 18, 30, 24, 42, 38, 55];
-      const sparkW = 80;
-      const sparkH = 30;
+      const sparkW = 86;
+      const sparkH = 34;
       const minV = Math.min(...pts);
       const maxV = Math.max(...pts);
       const range = maxV - minV || 1;
-      const sparkX0 = x + w - sparkW - 16;
-      const sparkY0 = y + h - sparkH - 16;
+      const sparkX0 = x + w - sparkW - 14;
+      const sparkY0 = y + h - sparkH - 14;
 
-      const sparkPoints = pts.map((val, idx) => {
-        const px = sparkX0 + (idx / (pts.length - 1)) * sparkW;
-        const py = sparkY0 + sparkH - ((val - minV) / range) * sparkH;
-        return `${Math.round(px)},${Math.round(py)}`;
-      });
+      const coords = pts.map((val, idx) => ({
+        x: sparkX0 + (idx / (pts.length - 1)) * sparkW,
+        y: sparkY0 + sparkH - ((val - minV) / range) * sparkH,
+      }));
+
+      let sparkPath = `M ${coords[0].x} ${coords[0].y}`;
+      for (let i = 1; i < coords.length; i++) {
+        const cx = (coords[i - 1].x + coords[i].x) / 2;
+        sparkPath += ` C ${cx} ${coords[i - 1].y}, ${cx} ${coords[i].y}, ${coords[i].x} ${coords[i].y}`;
+      }
+      const sparkArea = `${sparkPath} L ${coords[coords.length - 1].x} ${sparkY0 + sparkH} L ${coords[0].x} ${sparkY0 + sparkH} Z`;
 
       elements.push(
         `<g ${shadowFilter} ${opacity}>
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 10}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <g transform="translate(${x + 14}, ${y + 14}) scale(0.66)">
-            ${getSvgIcon(iconName, 16, isDark ? "#818cf8" : "#6366f1")}
+            ${getSvgIcon(iconName, 16, isDark ? "#60a5fa" : "#2563eb")}
           </g>
           <text x="${x + 36}" y="${y + 24}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" fill="${textColorMuted}">${escapeXml(m.label.toUpperCase())}</text>
           <text x="${x + 14}" y="${y + 62}" font-family="Inter, -apple-system, sans-serif" font-size="24" font-weight="800" fill="${textColorPrimary}">${escapeXml(m.value)}</text>
@@ -524,101 +543,141 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             <rect x="0" y="0" width="${m.delta.length * 6.5 + 14}" height="18" rx="4" fill="${deltaBg}" />
             <text x="${(m.delta.length * 6.5 + 14) / 2}" y="12.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="10" font-weight="700" fill="${deltaColor}">${escapeXml(m.delta)}</text>
           </g>` : ""}
-          <polyline points="${sparkPoints.join(" ")}" fill="none" stroke="${deltaColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          <!-- Grounded Sparkline with Baseline & Gradient -->
+          <line x1="${sparkX0}" y1="${sparkY0 + sparkH}" x2="${sparkX0 + sparkW}" y2="${sparkY0 + sparkH}" stroke="${gridLineColor}" stroke-width="1" />
+          <path d="${sparkArea}" fill="url(#sparkline-grad)" />
+          <path d="${sparkPath}" fill="none" stroke="${deltaColor}" stroke-width="2" stroke-linecap="round" />
         </g>`
       );
       continue;
     }
 
-    // ─── 3. Multi-Modal Visual Chart (`type: "chart"`) ───────────────────────
+    // ─── 4. Multi-Modal Visual Chart (`type: "chart"`) ───────────────────────
     if (shape.type === "chart") {
       const c = shape as ChartShape;
       const chartType = c.chartType ?? "area";
-      const padX = 24;
+      const padLeft = 48;
+      const padRight = 24;
       const padTop = 64;
-      const padBottom = 34;
-      const innerW = w - padX * 2;
+      const padBottom = 38;
+      const innerW = w - padLeft - padRight;
       const innerH = h - padTop - padBottom;
 
       let chartBody = "";
 
-      // A. Grouped Bar Chart (e.g. Apple Revenue by Category vs Prior Year)
+      // A. Grouped Bar Chart (McKinsey Gridlines & Legend Standard)
       if (chartType === "grouped_bar" && c.groupedData) {
-        const numCats = c.groupedData.length;
-        const catWidth = innerW / numCats;
         let maxVal = 1;
+        const seriesNames = new Set<string>();
+        const seriesColors: Record<string, string> = {};
+
         for (const cat of c.groupedData) {
           for (const s of cat.series) {
             if (s.value > maxVal) maxVal = s.value;
+            seriesNames.add(s.name);
+            if (s.color) seriesColors[s.name] = s.color;
           }
         }
 
-        chartBody = c.groupedData.map((cat, catIdx) => {
-          const groupX = x + padX + catIdx * catWidth;
+        // Compute 4 grid intervals
+        const niceCeil = Math.ceil(maxVal * 1.15);
+        const gridLinesSvg = [0, 0.25, 0.5, 0.75, 1.0].map((pct) => {
+          const gy = y + padTop + innerH * (1 - pct);
+          const tickVal = (niceCeil * pct).toFixed(pct === 0 ? 0 : 1);
+          return `
+            <g>
+              <line x1="${x + padLeft}" y1="${gy}" x2="${x + w - padRight}" y2="${gy}" stroke="${pct === 0 ? (isDark ? "#475569" : "#94a3b8") : gridLineColor}" stroke-width="${pct === 0 ? 1.5 : 1}" stroke-dasharray="${pct === 0 ? "none" : "3,3"}" />
+              <text x="${x + padLeft - 8}" y="${gy + 3.5}" text-anchor="end" font-family="'JetBrains Mono', Inter, monospace" font-size="9" font-weight="500" fill="${textColorMuted}">$${tickVal}M</text>
+            </g>`;
+        }).join("");
+
+        // Top Series Legend
+        const seriesArray = Array.from(seriesNames);
+        const legendSvg = seriesArray.map((name, idx) => {
+          const lx = x + w - padRight - (seriesArray.length - idx) * 85;
+          const sColor = seriesColors[name] ?? (idx === 0 ? "#2563eb" : "#94a3b8");
+          return `
+            <g transform="translate(${lx}, ${y + 22})">
+              <rect x="0" y="0" width="8" height="8" rx="2" fill="${sColor}" />
+              <text x="12" y="8" font-family="Inter, sans-serif" font-size="10" font-weight="600" fill="${textColorMuted}">${escapeXml(name)}</text>
+            </g>`;
+        }).join("");
+
+        const numCats = c.groupedData.length;
+        const catWidth = innerW / numCats;
+
+        const barsSvg = c.groupedData.map((cat, catIdx) => {
+          const groupX = x + padLeft + catIdx * catWidth;
           const numSeries = cat.series.length;
-          const barW = Math.min(32, (catWidth * 0.7) / numSeries);
+          const barW = Math.min(28, (catWidth * 0.65) / numSeries);
           const groupOffset = (catWidth - numSeries * barW - (numSeries - 1) * 4) / 2;
 
           const bars = cat.series.map((s, sIdx) => {
-            const barH = (s.value / maxVal) * innerH;
+            const barH = (s.value / niceCeil) * innerH;
             const bx = groupX + groupOffset + sIdx * (barW + 4);
             const by = y + padTop + innerH - barH;
-            const barColor = s.color ?? (sIdx === 0 ? "#3b82f6" : "#cbd5e1");
-            const fillStyle = s.isEstimate ? `fill="url(#estimate-stripes)" stroke="#f59e0b" stroke-dasharray="4,3"` : `fill="${barColor}"`;
+            const barColor = s.color ?? (sIdx === 0 ? "#2563eb" : "#94a3b8");
+            const fillStyle = s.isEstimate ? `fill="url(#estimate-stripes)" stroke="#d97706" stroke-dasharray="4,3"` : `fill="${barColor}"`;
 
             return `
               <g>
                 <rect x="${bx}" y="${by}" width="${barW}" height="${barH}" rx="3" ${fillStyle} stroke-width="1.2" />
-                <text x="${bx + barW / 2}" y="${by - 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="${textColorPrimary}">${s.formatted ?? "$" + s.value + "B"}</text>
+                <text x="${bx + barW / 2}" y="${by - 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="${textColorPrimary}">${s.formatted ?? "$" + s.value + "M"}</text>
               </g>`;
           }).join("");
 
           return `
             <g>
               ${bars}
-              <text x="${groupX + catWidth / 2}" y="${y + padTop + innerH + 20}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="600" fill="${textColorMuted}">${escapeXml(cat.category)}</text>
+              <text x="${groupX + catWidth / 2}" y="${y + padTop + innerH + 20}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" font-weight="600" fill="${textColorMuted}">${escapeXml(cat.category)}</text>
             </g>`;
         }).join("");
+
+        chartBody = `${gridLinesSvg}${legendSvg}${barsSvg}`;
       }
 
-      // B. Donut Mix Chart (e.g. Apple Revenue Mix %)
+      // B. Donut Mix Chart (2.5px Slice Gap & Centered Legend)
       else if (chartType === "donut" && c.donutData) {
         const cx = x + 110;
         const cy = y + padTop + innerH / 2;
-        const radius = Math.min(innerH * 0.46, 70);
+        const radius = Math.min(innerH * 0.46, 68);
         const strokeW = 28;
         const circumference = 2 * Math.PI * radius;
 
         let accumulatedPercent = 0;
         const donutArcs = c.donutData.map((slice) => {
-          const strokeDash = (slice.percent / 100) * circumference;
+          const strokeDash = (slice.percent / 100) * circumference - 2;
           const strokeOffset = -(accumulatedPercent / 100) * circumference;
           accumulatedPercent += slice.percent;
 
-          return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${slice.color}" stroke-width="${strokeW}" stroke-dasharray="${strokeDash} ${circumference}" stroke-dashoffset="${strokeOffset}" transform="rotate(-90 ${cx} ${cy})" />`;
+          return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${slice.color}" stroke-width="${strokeW}" stroke-dasharray="${Math.max(0, strokeDash)} ${circumference}" stroke-dashoffset="${strokeOffset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt" />`;
         }).join("");
 
+        // Auto-center legend rows relative to donut height
+        const totalLegendH = c.donutData.length * 28;
+        const startLegendY = cy - totalLegendH / 2 + 6;
+
         const legendItems = c.donutData.map((slice, idx) => {
-          const ly = y + padTop + 10 + idx * 24;
+          const ly = startLegendY + idx * 28;
           const lx = x + 230;
           return `
             <g transform="translate(${lx}, ${ly})">
               <rect x="0" y="0" width="10" height="10" rx="2" fill="${slice.color}" />
               <text x="16" y="9" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorPrimary}">${escapeXml(slice.label)}</text>
-              <text x="130" y="9" text-anchor="end" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${textColorMuted}">${escapeXml(slice.value)} · ${slice.percent}%</text>
+              <rect x="110" y="-1" width="70" height="18" rx="4" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
+              <text x="145" y="11.5" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="700" fill="${textColorMuted}">${escapeXml(slice.value)} · ${slice.percent}%</text>
             </g>`;
         }).join("");
 
         chartBody = `
           ${donutArcs}
-          <!-- Center Label -->
           <text x="${cx}" y="${cy - 2}" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="${textColorPrimary}">${escapeXml(c.centerLabel?.primary ?? "")}</text>
-          <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="${textColorMuted}">${escapeXml(c.centerLabel?.secondary ?? "")}</text>
+          <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(c.centerLabel?.secondary ?? "")}</text>
           ${legendItems}
         `;
       }
 
-      // C. Horizontal Ranking Bar Chart (e.g. YoY Growth by Category)
+      // C. Horizontal Ranking Bar Chart
       else if (chartType === "horizontal_bar" && c.data) {
         const rowH = innerH / c.data.length;
         const maxVal = Math.max(...c.data.map(d => d.value), 1);
@@ -626,23 +685,23 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         chartBody = c.data.map((d, idx) => {
           const ry = y + padTop + idx * rowH;
           const barWidth = Math.max(20, (d.value / maxVal) * (innerW - 140));
-          const barColor = d.color ?? "#3b82f6";
+          const barColor = d.color ?? "#2563eb";
 
           return `
-            <g transform="translate(${x + padX}, ${ry})">
+            <g transform="translate(${x + padLeft}, ${ry})">
               <text x="0" y="14" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(d.label)}</text>
-              <rect x="100" y="2" width="${barWidth}" height="16" rx="4" fill="${barColor}" />
-              <text x="${110 + barWidth}" y="14" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="${textColorPrimary}">+${d.value}%</text>
+              <rect x="180" y="2" width="${barWidth}" height="16" rx="4" fill="${barColor}" />
+              <text x="${190 + barWidth}" y="14" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="${textColorPrimary}">${d.value}%</text>
             </g>`;
         }).join("");
       }
 
-      // D. Multi-Segment Progress Gauge (e.g. Operating cash flow & Buybacks)
+      // D. Multi-Segment Progress Gauge
       else if (chartType === "progress_gauge" && c.progressSegments) {
         chartBody = c.progressSegments.map((seg, idx) => {
-          const sy = y + padTop + 10 + idx * 40;
+          const sy = y + padTop + 10 + idx * 42;
           return `
-            <g transform="translate(${x + padX}, ${sy})">
+            <g transform="translate(${x + padLeft}, ${sy})">
               <text x="0" y="0" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(seg.label)}</text>
               <text x="${innerW}" y="0" text-anchor="end" font-family="Inter, sans-serif" font-size="11.5" font-weight="800" fill="${textColorPrimary}">${escapeXml(seg.value)}</text>
               <rect x="0" y="8" width="${innerW}" height="7" rx="3.5" fill="${isDark ? "#1e293b" : "#e2e8f0"}" />
@@ -651,13 +710,25 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         }).join("");
       }
 
-      // E. Spline Area Chart (Volume & Streams)
+      // E. Spline Area Chart with Y-Axis Gridlines
       else if (c.data && c.data.length > 0) {
         const chartData = c.data;
         const maxVal = Math.max(...chartData.map(v => v.value), 1);
+        const niceCeil = Math.ceil(maxVal * 1.15);
+
+        const gridLinesSvg = [0, 0.33, 0.66, 1.0].map((pct) => {
+          const gy = y + padTop + innerH * (1 - pct);
+          const tickVal = Math.round(niceCeil * pct);
+          return `
+            <g>
+              <line x1="${x + padLeft}" y1="${gy}" x2="${x + w - padRight}" y2="${gy}" stroke="${pct === 0 ? (isDark ? "#475569" : "#94a3b8") : gridLineColor}" stroke-width="${pct === 0 ? 1.5 : 1}" stroke-dasharray="${pct === 0 ? "none" : "3,3"}" />
+              <text x="${x + padLeft - 8}" y="${gy + 3.5}" text-anchor="end" font-family="'JetBrains Mono', Inter, monospace" font-size="9" font-weight="500" fill="${textColorMuted}">${tickVal}</text>
+            </g>`;
+        }).join("");
+
         const coords = chartData.map((d, i) => ({
-          x: x + padX + (i / (chartData.length - 1 || 1)) * innerW,
-          y: y + padTop + innerH - (d.value / maxVal) * innerH,
+          x: x + padLeft + (i / (chartData.length - 1 || 1)) * innerW,
+          y: y + padTop + innerH - (d.value / niceCeil) * innerH,
         }));
 
         let linePath = `M ${coords[0].x} ${coords[0].y}`;
@@ -669,11 +740,12 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${y + padTop + innerH} L ${coords[0].x} ${y + padTop + innerH} Z`;
 
         chartBody = `
+          ${gridLinesSvg}
           <path d="${areaPath}" fill="url(#chart-area-grad)" />
-          <path d="${linePath}" fill="none" stroke="${isDark ? "#818cf8" : "#6366f1"}" stroke-width="2.5" stroke-linecap="round" />
+          <path d="${linePath}" fill="none" stroke="${isDark ? "#60a5fa" : "#2563eb"}" stroke-width="2.5" stroke-linecap="round" />
           ${coords.map((p, idx) => `
-            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${isDark ? "#818cf8" : "#6366f1"}" stroke-width="2" />
-            <text x="${p.x}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(chartData[idx].label)}</text>
+            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${isDark ? "#60a5fa" : "#2563eb"}" stroke-width="2" />
+            <text x="${p.x}" y="${y + padTop + innerH + 18}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(chartData[idx].label)}</text>
           `).join("")}
         `;
       }
@@ -683,21 +755,20 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${c.cornerRadius ?? 10}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <text x="${x + 16}" y="${y + 26}" font-family="Inter, -apple-system, sans-serif" font-size="12.5" font-weight="800" fill="${textColorPrimary}">${escapeXml(c.title)}</text>
           ${c.subtitle ? `<text x="${x + 16}" y="${y + 44}" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="${textColorMuted}">${escapeXml(c.subtitle)}</text>` : ""}
-          <line x1="${x + padX}" y1="${y + padTop + innerH}" x2="${x + w - padX}" y2="${y + padTop + innerH}" stroke="${isDark ? "#334155" : "#e2e8f0"}" stroke-width="1" />
           ${chartBody}
         </g>`
       );
       continue;
     }
 
-    // ─── 4. Chronological Event Feed Table (`type: "feed_table"`) ───────────
+    // ─── 5. Chronological Event Feed Table (`type: "feed_table"`) ───────────
     if (shape.type === "feed_table") {
       const ft = shape as FeedTableShape;
       const rowH = 34;
 
       const rowsSvg = ft.rows.map((row, idx) => {
         const ry = y + 54 + idx * rowH;
-        const amtColor = row.amountColor ?? (row.amount?.startsWith("-") || row.amount?.includes("FX") ? "#ef4444" : "#10b981");
+        const amtColor = row.amountColor ?? (row.amount?.startsWith("-") || row.amount?.includes("FX") ? "#dc2626" : "#059669");
         return `
           <g transform="translate(${x + 14}, ${ry})">
             <text x="0" y="14" font-family="'JetBrains Mono', Inter, monospace" font-size="10" font-weight="500" fill="${textColorMuted}">${escapeXml(row.date)}</text>
@@ -719,7 +790,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 5. Swiss Editorial Concept Mindmap & Fishbone (`type: "mindmap"`) ───
+    // ─── 6. Swiss Editorial Concept Mindmap & Fishbone (`type: "mindmap"`) ───
     if (shape.type === "mindmap" || shape.type === "fishbone") {
       const mm = shape as MindmapShape;
       const stepLaneH = h / mm.steps.length;
@@ -743,7 +814,6 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             <text x="${spineX}" y="${centerY - 4}" text-anchor="middle" font-family="Inter, sans-serif" font-size="12" font-weight="700" fill="${isDark ? "#000000" : "#ffffff"}">${escapeXml(step.title)}</text>
             ${step.subtitle ? `<text x="${spineX}" y="${centerY + 12}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="500" fill="${isDark ? "#333333" : "#cccccc"}">${escapeXml(step.subtitle)}</text>` : ""}`;
         } else if (step.vennNodes) {
-          // Intersecting Venn Circles
           const r = 40;
           const v1x = spineX;
           const v1y = centerY - 18;
@@ -755,13 +825,11 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             <text x="${v1x}" y="${v1y - 4}" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorPrimary}">${escapeXml(step.vennNodes[0]?.label ?? "")}</text>
             <circle cx="${v2x}" cy="${v2y}" r="${r}" fill="none" stroke="${textColorPrimary}" stroke-width="1.2" />
             <text x="${v2x}" y="${v2y + 8}" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorPrimary}">${escapeXml(step.vennNodes[1]?.label ?? "")}</text>
-            <!-- Callout Brackets -->
             <path d="M ${v1x + r} ${v1y} L ${v1x + r + 24} ${v1y}" stroke="${textColorPrimary}" stroke-width="1" />
             <text x="${v1x + r + 30}" y="${v1y + 4}" font-family="Inter, sans-serif" font-size="10" font-weight="500" fill="${textColorMuted}">${escapeXml(step.vennNodes[0]?.callout ?? "")}</text>
             <path d="M ${v2x + r} ${v2y} L ${v2x + r + 24} ${v2y}" stroke="${textColorPrimary}" stroke-width="1" />
             <text x="${v2x + r + 30}" y="${v2y + 4}" font-family="Inter, sans-serif" font-size="10" font-weight="500" fill="${textColorMuted}">${escapeXml(step.vennNodes[1]?.callout ?? "")}</text>`;
         } else if (step.branches) {
-          // Fishbone Twigs
           mindmapSvg += `<line x1="${spineX}" y1="${laneY + 10}" x2="${spineX}" y2="${laneY + stepLaneH - 10}" stroke="${textColorPrimary}" stroke-width="1.5" />`;
           step.branches.forEach((br, bIdx) => {
             const by = laneY + 24 + bIdx * 26;
@@ -776,7 +844,6 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             }
           });
         } else if (step.pills) {
-          // Slash-wrapped Step Pills
           step.pills.forEach((pill, pIdx) => {
             const py = laneY + 24 + pIdx * 32;
             mindmapSvg += `
@@ -795,24 +862,25 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 6. Editorial Serpentine S-Curve Timeline (`type: "scurve_timeline"`) ─
+    // ─── 7. Editorial Serpentine S-Curve Timeline (`type: "scurve_timeline"`) ─
     if (shape.type === "scurve_timeline") {
       const sc = shape as SCurveTimelineShape;
       const numSteps = sc.steps.length;
-      const trackColor = sc.strokeColor ?? "#4a7c7d";
-      const hubColor = "#cf3c2e";
+      const trackColor = sc.strokeColor ?? "#034641";
+      const hubColor = "#c2410c";
 
       const leftX = x + 160;
       const rightX = x + w - 160;
-      const stepGapY = (h - 140) / (numSteps - 1);
+      const trackStartY = y + 130;
+      const stepGapY = (h - 190) / (numSteps - 1);
 
-      let scurvePath = `M ${leftX} ${y + 60}`;
+      let scurvePath = `M ${leftX} ${trackStartY}`;
       sc.steps.forEach((_, idx) => {
         if (idx === 0) return;
         const prevX = idx % 2 === 1 ? leftX : rightX;
         const currX = idx % 2 === 1 ? rightX : leftX;
-        const prevY = y + 60 + (idx - 1) * stepGapY;
-        const currY = y + 60 + idx * stepGapY;
+        const prevY = trackStartY + (idx - 1) * stepGapY;
+        const currY = trackStartY + idx * stepGapY;
         const midY = (prevY + currY) / 2;
 
         scurvePath += ` C ${prevX} ${midY}, ${currX} ${midY}, ${currX} ${currY}`;
@@ -820,7 +888,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
 
       const hubsSvg = sc.steps.map((st, idx) => {
         const hx = idx % 2 === 0 ? leftX : rightX;
-        const hy = y + 60 + idx * stepGapY;
+        const hy = trackStartY + idx * stepGapY;
         const textX = idx % 2 === 0 ? hx + 70 : hx - 70;
         const align = idx % 2 === 0 ? "start" : "end";
 
@@ -835,15 +903,15 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       }).join("");
 
       // Add Walking Silhouette Figure on the central step
-      const walkerSvg = sc.hasSilhouette !== false ? getSilhouetteFigure(x + w / 2 - 10, y + 60 + stepGapY * 1.5 - 38, 38) : "";
+      const walkerSvg = sc.hasSilhouette !== false ? getSilhouetteFigure(x + w / 2 - 10, trackStartY + stepGapY * 1.5 - 38, 38) : "";
 
       elements.push(
         `<g ${opacity}>
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${sc.cornerRadius ?? 14}" fill="${isEditorial ? "#f5f2eb" : cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Header Title -->
-          <text x="${x + w / 2}" y="${y + 36}" text-anchor="middle" font-family="Inter, sans-serif" font-size="16" font-weight="800" fill="${textColorPrimary}">${escapeXml(sc.title)}</text>
-          ${sc.subtitle ? `<text x="${x + w / 2}" y="${y + 52}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10.5" font-weight="600" fill="${textColorMuted}">${escapeXml(sc.subtitle)}</text>` : ""}
-          <!-- Continuous Serpentine S-Curve -->
+          <!-- Clean Spaced Header Area -->
+          <text x="${x + w / 2}" y="${y + 40}" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="${textColorPrimary}">${escapeXml(sc.title)}</text>
+          ${sc.subtitle ? `<text x="${x + w / 2}" y="${y + 66}" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="600" letter-spacing="0.08em" fill="${textColorMuted}">${escapeXml(sc.subtitle.toUpperCase())}</text>` : ""}
+          <!-- Continuous Serpentine S-Curve Track -->
           <path d="${scurvePath}" fill="none" stroke="${trackColor}" stroke-width="5" stroke-linecap="round" />
           ${hubsSvg}
           ${walkerSvg}
@@ -852,31 +920,25 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 7. 3D Isometric Architectural Geometry (`type: "isometric_block"`) ──
+    // ─── 8. 3D Isometric Architectural Geometry (`type: "isometric_block"`) ──
     if (shape.type === "isometric_block") {
       const iso = shape as IsometricBlockShape;
       const cx = x + w / 2;
       const cy = y + h / 2 + 30;
 
-      // 3D Isometric Projection Geometry (3-Tone Lighting)
       const isoSvg = `
         <g transform="translate(${cx}, ${cy})">
-          <!-- Perspective Ground Cast Shadow -->
           <polygon points="-80,80 120,120 180,60 -20,20" fill="rgba(0,0,0,0.18)" />
-          <!-- Level 1 (Bottom Left Extrusion) -->
-          <polygon points="-120,0 0,60 0,100 -120,40" fill="#d1382b" />
-          <polygon points="0,60 100,10 100,-30 0,20" fill="#8c1b12" />
-          <polygon points="-120,0 0,-60 100,-10 -20,50" fill="#ff4d3d" />
-          <!-- Level 2 (Vertical Tower) -->
-          <polygon points="-40,-120 40,-80 40,20 -40,-20" fill="#d1382b" />
-          <polygon points="40,-80 100,-110 100,-10 40,20" fill="#8c1b12" />
-          <polygon points="-40,-120 20,-150 100,-110 40,-80" fill="#ff4d3d" />
-          <!-- Silhouette Figure Walking on Step -->
+          <polygon points="-120,0 0,60 0,100 -120,40" fill="#c2410c" />
+          <polygon points="0,60 100,10 100,-30 0,20" fill="#7c2d12" />
+          <polygon points="-120,0 0,-60 100,-10 -20,50" fill="#ea580c" />
+          <polygon points="-40,-120 40,-80 40,20 -40,-20" fill="#c2410c" />
+          <polygon points="40,-80 100,-110 100,-10 40,20" fill="#7c2d12" />
+          <polygon points="-40,-120 20,-150 100,-110 40,-80" fill="#ea580c" />
           ${iso.hasSilhouette !== false ? getSilhouetteFigure(-70, -25, 34) : ""}
         </g>
       `;
 
-      // Callout Leader Lines
       const calloutsSvg = iso.callouts.map((co, idx) => {
         const isLeft = co.side === "left" || idx === 0;
         const callX = isLeft ? x + 30 : x + w - 240;
@@ -902,7 +964,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 8. Image Shape ───────────────────────────────────────────────────────
+    // ─── 9. Image Shape ───────────────────────────────────────────────────────
     if (shape.type === "image") {
       const img = shape as ImageShape;
       const rx = img.cornerRadius ?? 10;
@@ -920,14 +982,14 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 9. Architecture Card Shape (`type: "card"`) ─────────────────────────
+    // ─── 10. Architecture Card Shape (`type: "card"`) ────────────────────────
     if (shape.type === "card") {
       const card = shape as CardShape;
       const iconName = card.icon ?? "server";
-      const iconColor = card.stroke ? resolveColor(card.stroke) ?? card.stroke : isDark ? "#818cf8" : "#4f46e5";
+      const iconColor = card.stroke ? resolveColor(card.stroke) ?? card.stroke : isDark ? "#60a5fa" : "#2563eb";
       const badgeText = card.badge?.text ?? card.role ?? "";
-      const badgeBg = card.badge?.bg ?? (isDark ? "rgba(99,102,241,0.25)" : "#eef2ff");
-      const badgeColor = card.badge?.color ?? (isDark ? "#c7d2fe" : "#4338ca");
+      const badgeBg = card.badge?.bg ?? (isDark ? "rgba(37,99,235,0.2)" : "#eff6ff");
+      const badgeColor = card.badge?.color ?? (isDark ? "#93c5fd" : "#1d4ed8");
 
       elements.push(
         `<g ${shadowFilter} ${opacity}>
@@ -960,7 +1022,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 10. Database Schema Table Shape (`type: "table"`) ───────────────────
+    // ─── 11. Database Schema Table Shape (`type: "table"`) ───────────────────
     if (shape.type === "table") {
       const table = shape as TableShape;
       const headerBg = table.headerBg ? resolveColor(table.headerBg) ?? table.headerBg : (isDark ? "#1e293b" : "#f1f5f9");

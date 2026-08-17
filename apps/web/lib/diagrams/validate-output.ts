@@ -188,7 +188,7 @@ const FreeformBaseSchema = z.object({
   text: FreeformTextSchema.optional(),
 });
 
-const FreeformSizedShapeSchema = FreeformBaseSchema.extend({
+const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
   type: z.enum([
     "rectangle",
     "ellipse",
@@ -201,6 +201,18 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.extend({
     "sticky",
     "text",
     "frame",
+    "card",
+    "table",
+    "image",
+    "metric",
+    "dashboard",
+    "chart",
+    "feed_table",
+    "mindmap",
+    "fishbone",
+    "scurve_timeline",
+    "isometric_block",
+    "mockup",
   ]),
   x: z.number(),
   y: z.number(),
