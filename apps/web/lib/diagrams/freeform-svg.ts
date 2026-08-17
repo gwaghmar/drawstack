@@ -86,54 +86,91 @@ export function getSvgIcon(iconName: string, size = 16, color = "#6366f1"): stri
   }
 }
 
-// ─── Smooth Rounded Fillet Orthogonal Router ────────────────────────────────
-function generateSmoothOrthogonalPath(
+// ─── Obstacle Clearance Manhattan Router ────────────────────────────────────
+function computeObstacleAwarePath(
   start: { x: number; y: number },
   end: { x: number; y: number },
   startAnchor?: string,
   endAnchor?: string,
   filletRadius = 8
-): string {
-  const points: { x: number; y: number }[] = [{ x: start.x, y: start.y }];
+): { pathD: string; waypoints: { x: number; y: number }[] } {
+  const waypoints: { x: number; y: number }[] = [{ x: start.x, y: start.y }];
   const dx = end.x - start.x;
   const dy = end.y - start.y;
 
   if (Math.abs(dx) < 2 || Math.abs(dy) < 2) {
-    return `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+    waypoints.push({ x: end.x, y: end.y });
+    return { pathD: `M ${start.x} ${start.y} L ${end.x} ${end.y}`, waypoints };
   }
 
-  if (startAnchor === "top" || startAnchor === "bottom") {
-    const stubY = startAnchor === "top" ? start.y - Math.min(30, Math.abs(dy) / 2) : start.y + Math.min(30, Math.abs(dy) / 2);
-    points.push({ x: start.x, y: stubY });
-    if (endAnchor === "left" || endAnchor === "right") {
-      points.push({ x: start.x, y: end.y });
+  const clearance = 24;
+
+  if (startAnchor === "top") {
+    waypoints.push({ x: start.x, y: start.y - clearance });
+    if (endAnchor === "bottom" && dy < 0) {
+      const midY = Math.round((start.y - clearance + end.y + clearance) / 2);
+      waypoints.push({ x: start.x, y: midY });
+      waypoints.push({ x: end.x, y: midY });
+    } else if (endAnchor === "left" || endAnchor === "right") {
+      waypoints.push({ x: start.x, y: end.y });
     } else {
       const midX = Math.round((start.x + end.x) / 2);
-      points.push({ x: midX, y: stubY });
-      points.push({ x: midX, y: end.y });
+      waypoints.push({ x: midX, y: start.y - clearance });
+      waypoints.push({ x: midX, y: end.y });
     }
-  } else if (startAnchor === "left" || startAnchor === "right") {
-    const stubX = startAnchor === "left" ? start.x - Math.min(30, Math.abs(dx) / 2) : start.x + Math.min(30, Math.abs(dx) / 2);
-    points.push({ x: stubX, y: start.y });
-    if (endAnchor === "top" || endAnchor === "bottom") {
-      points.push({ x: end.x, y: start.y });
+  } else if (startAnchor === "bottom") {
+    waypoints.push({ x: start.x, y: start.y + clearance });
+    if (endAnchor === "top" && dy > 0) {
+      const midY = Math.round((start.y + clearance + end.y - clearance) / 2);
+      waypoints.push({ x: start.x, y: midY });
+      waypoints.push({ x: end.x, y: midY });
+    } else if (endAnchor === "left" || endAnchor === "right") {
+      waypoints.push({ x: start.x, y: end.y });
     } else {
       const midX = Math.round((start.x + end.x) / 2);
-      points.push({ x: midX, y: start.y });
-      points.push({ x: midX, y: end.y });
+      waypoints.push({ x: midX, y: start.y + clearance });
+      waypoints.push({ x: midX, y: end.y });
+    }
+  } else if (startAnchor === "left") {
+    waypoints.push({ x: start.x - clearance, y: start.y });
+    if (endAnchor === "right" && dx < 0) {
+      const midX = Math.round((start.x - clearance + end.x + clearance) / 2);
+      waypoints.push({ x: midX, y: start.y });
+      waypoints.push({ x: midX, y: end.y });
+    } else if (endAnchor === "top" || endAnchor === "bottom") {
+      waypoints.push({ x: end.x, y: start.y });
+    } else {
+      const midY = Math.round((start.y + end.y) / 2);
+      waypoints.push({ x: start.x - clearance, y: midY });
+      waypoints.push({ x: end.x, y: midY });
+    }
+  } else if (startAnchor === "right") {
+    waypoints.push({ x: start.x + clearance, y: start.y });
+    if (endAnchor === "left" && dx > 0) {
+      const midX = Math.round((start.x + clearance + end.x - clearance) / 2);
+      waypoints.push({ x: midX, y: start.y });
+      waypoints.push({ x: midX, y: end.y });
+    } else if (endAnchor === "top" || endAnchor === "bottom") {
+      waypoints.push({ x: end.x, y: start.y });
+    } else {
+      const midY = Math.round((start.y + end.y) / 2);
+      waypoints.push({ x: start.x + clearance, y: midY });
+      waypoints.push({ x: end.x, y: midY });
     }
   } else {
     const midX = Math.round((start.x + end.x) / 2);
-    points.push({ x: midX, y: start.y });
-    points.push({ x: midX, y: end.y });
+    waypoints.push({ x: midX, y: start.y });
+    waypoints.push({ x: midX, y: end.y });
   }
-  points.push({ x: end.x, y: end.y });
 
-  let pathStr = `M ${points[0].x} ${points[0].y}`;
-  for (let i = 1; i < points.length - 1; i++) {
-    const pPrev = points[i - 1];
-    const pCurr = points[i];
-    const pNext = points[i + 1];
+  waypoints.push({ x: end.x, y: end.y });
+
+  // Convert to rounded fillet bezier path
+  let pathD = `M ${waypoints[0].x} ${waypoints[0].y}`;
+  for (let i = 1; i < waypoints.length - 1; i++) {
+    const pPrev = waypoints[i - 1];
+    const pCurr = waypoints[i];
+    const pNext = waypoints[i + 1];
 
     const d1x = pCurr.x - pPrev.x;
     const d1y = pCurr.y - pPrev.y;
@@ -145,6 +182,11 @@ function generateSmoothOrthogonalPath(
 
     const r = Math.min(filletRadius, len1 / 2, len2 / 2);
 
+    if (len1 < 1 || len2 < 1 || r < 1) {
+      pathD += ` L ${pCurr.x} ${pCurr.y}`;
+      continue;
+    }
+
     const pStartTurn = {
       x: pCurr.x - (d1x / len1) * r,
       y: pCurr.y - (d1y / len1) * r,
@@ -154,22 +196,58 @@ function generateSmoothOrthogonalPath(
       y: pCurr.y + (d2y / len2) * r,
     };
 
-    pathStr += ` L ${Math.round(pStartTurn.x)} ${Math.round(pStartTurn.y)}`;
-    pathStr += ` Q ${pCurr.x} ${pCurr.y} ${Math.round(pEndTurn.x)} ${Math.round(pEndTurn.y)}`;
+    pathD += ` L ${Math.round(pStartTurn.x)} ${Math.round(pStartTurn.y)}`;
+    pathD += ` Q ${pCurr.x} ${pCurr.y} ${Math.round(pEndTurn.x)} ${Math.round(pEndTurn.y)}`;
   }
-  pathStr += ` L ${points[points.length - 1].x} ${points[points.length - 1].y}`;
-  return pathStr;
+  pathD += ` L ${waypoints[waypoints.length - 1].x} ${waypoints[waypoints.length - 1].y}`;
+
+  return { pathD, waypoints };
 }
 
-export function freeformToSvg(doc: CanvasDocument): string {
-  if (doc.shapes.length === 0) {
-    return `<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300"><text x="200" y="150" text-anchor="middle" fill="#94a3b8" font-family="Inter, sans-serif" font-size="14">Empty Canvas</text></svg>`;
+// ─── Find Unobstructed Segment for Label Placement ──────────────────────────
+function findBestLabelPosition(
+  waypoints: { x: number; y: number }[],
+  obstacles: { x: number; y: number; width: number; height: number }[]
+): { x: number; y: number } {
+  let longestLen = -1;
+  let bestMid = {
+    x: Math.round((waypoints[0].x + waypoints[waypoints.length - 1].x) / 2),
+    y: Math.round((waypoints[0].y + waypoints[waypoints.length - 1].y) / 2),
+  };
+
+  for (let i = 0; i < waypoints.length - 1; i++) {
+    const p1 = waypoints[i];
+    const p2 = waypoints[i + 1];
+    const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+    const mid = { x: Math.round((p1.x + p2.x) / 2), y: Math.round((p1.y + p2.y) / 2) };
+
+    // Check collision with obstacles
+    const collides = obstacles.some(
+      (b) => mid.x >= b.x - 12 && mid.x <= b.x + b.width + 12 && mid.y >= b.y - 12 && mid.y <= b.y + b.height + 12
+    );
+
+    if (!collides && segLen > longestLen) {
+      longestLen = segLen;
+      bestMid = mid;
+    }
   }
+
+  return bestMid;
+}
+
+export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" | "dark" | "cyber" }): string {
+  if (doc.shapes.length === 0) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" viewBox="0 0 400 300"><text x="200" y="150" text-anchor="middle" fill="#94a3b8" font-family="Inter, sans-serif" font-size="14">Empty Canvas</text></svg>`;
+  }
+
+  const isDark = options?.theme === "dark" || options?.theme === "cyber";
 
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
     maxY = -Infinity;
+
+  const obstacleBounds: { x: number; y: number; width: number; height: number }[] = [];
 
   for (const shape of doc.shapes) {
     const b = getShapeBounds(doc, shape);
@@ -177,6 +255,10 @@ export function freeformToSvg(doc: CanvasDocument): string {
     minY = Math.min(minY, b.y);
     maxX = Math.max(maxX, b.x + b.width);
     maxY = Math.max(maxY, b.y + b.height);
+
+    if (shape.type !== "arrow" && shape.type !== "line" && shape.type !== "frame" && shape.type !== "mockup") {
+      obstacleBounds.push(b);
+    }
   }
 
   const padding = 60;
@@ -185,38 +267,47 @@ export function freeformToSvg(doc: CanvasDocument): string {
   const vw = Math.max(100, Math.round(maxX - minX + padding * 2));
   const vh = Math.max(100, Math.round(maxY - minY + padding * 2));
 
+  const canvasBg = isDark ? "#090d16" : "#f8fafc";
+  const dotColor = isDark ? "#1e293b" : "#cbd5e1";
+  const textColorPrimary = isDark ? "#f8fafc" : "#0f172a";
+  const textColorMuted = isDark ? "#94a3b8" : "#64748b";
+  const cardBg = isDark ? "#0f172a" : "#ffffff";
+  const cardBorder = isDark ? "rgba(255,255,255,0.12)" : "#e2e8f0";
+
   const defs = `
   <defs>
     <!-- Multi-layer Soft Physical Drop Shadows -->
     <filter id="soft-card-shadow" x="-10%" y="-10%" width="125%" height="125%">
-      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.08" />
-      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.04" />
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="${isDark ? "0.45" : "0.08"}" />
+      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#000000" flood-opacity="${isDark ? "0.2" : "0.04"}" />
     </filter>
     <filter id="pill-shadow" x="-15%" y="-15%" width="130%" height="130%">
-      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06" />
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="${isDark ? "0.3" : "0.06"}" />
     </filter>
     <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.35"/>
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="${isDark ? "0.55" : "0.35"}"/>
       <stop offset="100%" stop-color="#6366f1" stop-opacity="0.0"/>
     </linearGradient>
-    <linearGradient id="sparkline-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
-      <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
-    </linearGradient>
     <marker id="arrowhead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#64748b" />
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="${isDark ? "#94a3b8" : "#64748b"}" />
     </marker>
     <marker id="arrowhead-start" viewBox="0 0 10 10" refX="1.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
-      <path d="M 8.5 1.5 L 0 5 L 8.5 8.5 z" fill="#64748b" />
+      <path d="M 8.5 1.5 L 0 5 L 8.5 8.5 z" fill="${isDark ? "#94a3b8" : "#64748b"}" />
     </marker>
   </defs>`;
 
   const elements: string[] = [];
 
   for (const shape of doc.shapes) {
-    const rawFill = shape.fill ? resolveColor(shape.fill) ?? shape.fill : shape.type === "sticky" ? "#fef08a" : "#ffffff";
+    const bounds = getShapeBounds(doc, shape);
+    const w = bounds.width;
+    const h = bounds.height;
+    const x = bounds.x;
+    const y = bounds.y;
+
+    const rawFill = shape.fill ? resolveColor(shape.fill) ?? shape.fill : shape.type === "sticky" ? "#fef08a" : cardBg;
     const fill = rawFill === "transparent" ? "none" : rawFill;
-    const stroke = shape.stroke ? resolveColor(shape.stroke) ?? shape.stroke : shape.type === "frame" ? "#cbd5e1" : "#334155";
+    const stroke = shape.stroke ? resolveColor(shape.stroke) ?? shape.stroke : shape.type === "frame" ? (isDark ? "#334155" : "#cbd5e1") : cardBorder;
     const strokeWidth = shape.strokeWidth ?? 1.5;
     const opacity = shape.opacity !== undefined ? `opacity="${shape.opacity}"` : "";
     const strokeDash =
@@ -226,6 +317,9 @@ export function freeformToSvg(doc: CanvasDocument): string {
           ? 'stroke-dasharray="3,4"'
           : "";
 
+    const shadowFilter = shape.type === "sticky" ? 'filter="url(#soft-card-shadow)"' : shape.type !== "frame" ? 'filter="url(#soft-card-shadow)"' : "";
+
+    // ─── Freehand Path ────────────────────────────────────────────────────────
     if (shape.type === "path") {
       const pathShape = shape as PathShape;
       const strokePoints = getStroke(pathShape.points, {
@@ -239,6 +333,7 @@ export function freeformToSvg(doc: CanvasDocument): string {
       continue;
     }
 
+    // ─── Connectors (Arrows & Lines) with Obstacle Clearance ──────────────────
     if (shape.type === "arrow" || shape.type === "line") {
       const arrow = shape as ArrowShape;
       const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
@@ -249,10 +344,15 @@ export function freeformToSvg(doc: CanvasDocument): string {
       const endAnchor = isBoundEndpoint(arrow.end) ? arrow.end.anchor : undefined;
 
       let pathD: string;
+      let waypoints: { x: number; y: number }[] = [];
+
       if (arrow.routing === "orthogonal") {
-        pathD = generateSmoothOrthogonalPath(start, end, startAnchor, endAnchor, 8);
+        const res = computeObstacleAwarePath(start, end, startAnchor, endAnchor, 8);
+        pathD = res.pathD;
+        waypoints = res.waypoints;
       } else {
         pathD = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
+        waypoints = [start, end];
       }
 
       elements.push(
@@ -260,24 +360,17 @@ export function freeformToSvg(doc: CanvasDocument): string {
       );
 
       if (arrow.label) {
-        const midX = Math.round((start.x + end.x) / 2);
-        const midY = Math.round((start.y + end.y) / 2);
+        const bestPos = findBestLabelPosition(waypoints, obstacleBounds);
         const labelWidth = Math.max(52, arrow.label.length * 7.5 + 18);
         elements.push(
-          `<g transform="translate(${midX}, ${midY})">
-            <rect x="-${labelWidth / 2}" y="-11" width="${labelWidth}" height="22" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" filter="url(#pill-shadow)" />
-            <text x="0" y="4" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="#475569">${escapeXml(arrow.label)}</text>
+          `<g transform="translate(${bestPos.x}, ${bestPos.y})">
+            <rect x="-${labelWidth / 2}" y="-11" width="${labelWidth}" height="22" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1.2" filter="url(#pill-shadow)" />
+            <text x="0" y="4" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(arrow.label)}</text>
           </g>`
         );
       }
       continue;
     }
-
-    const w = (shape as RectShape).width;
-    const h = (shape as RectShape).height;
-    const x = shape.x;
-    const y = shape.y;
-    const shadowFilter = shape.type === "sticky" ? 'filter="url(#soft-card-shadow)"' : shape.type !== "frame" ? 'filter="url(#soft-card-shadow)"' : "";
 
     // ─── 1. Embedded Image / Picture Shape (`type: "image"`) ─────────────────
     if (shape.type === "image") {
@@ -289,7 +382,7 @@ export function freeformToSvg(doc: CanvasDocument): string {
           <clipPath id="${clipId}">
             <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" />
           </clipPath>
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="#f1f5f9" />
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
           <image href="${img.src}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />
         </g>`
@@ -301,10 +394,9 @@ export function freeformToSvg(doc: CanvasDocument): string {
     if (shape.type === "metric") {
       const m = shape as MetricShape;
       const deltaColor = m.deltaDirection === "down" ? "#ef4444" : "#10b981";
-      const deltaBg = m.deltaDirection === "down" ? "#fee2e2" : "#d1fae5";
+      const deltaBg = isDark ? (m.deltaDirection === "down" ? "rgba(239,68,68,0.2)" : "rgba(16,185,129,0.2)") : m.deltaDirection === "down" ? "#fee2e2" : "#d1fae5";
       const iconName = m.icon ?? "activity";
 
-      // Sparkline generation
       const pts = m.sparkline ?? [10, 25, 18, 30, 24, 42, 38, 55];
       const sparkW = 80;
       const sparkH = 30;
@@ -322,21 +414,17 @@ export function freeformToSvg(doc: CanvasDocument): string {
 
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 10}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Header Icon & Label -->
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 10}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <g transform="translate(${x + 14}, ${y + 14}) scale(0.66)">
-            ${getSvgIcon(iconName, 16, "#6366f1")}
+            ${getSvgIcon(iconName, 16, isDark ? "#818cf8" : "#6366f1")}
           </g>
-          <text x="${x + 36}" y="${y + 24}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="#64748b">${escapeXml(m.label)}</text>
-          <!-- Big KPI Value -->
-          <text x="${x + 14}" y="${y + 62}" font-family="Inter, -apple-system, sans-serif" font-size="24" font-weight="800" fill="#0f172a">${escapeXml(m.value)}</text>
-          <!-- Delta Pill Badge -->
+          <text x="${x + 36}" y="${y + 24}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="${textColorMuted}">${escapeXml(m.label)}</text>
+          <text x="${x + 14}" y="${y + 62}" font-family="Inter, -apple-system, sans-serif" font-size="24" font-weight="800" fill="${textColorPrimary}">${escapeXml(m.value)}</text>
           ${m.delta ? `
           <g transform="translate(${x + 14}, ${y + 78})">
             <rect x="0" y="0" width="${m.delta.length * 6.5 + 14}" height="18" rx="4" fill="${deltaBg}" />
             <text x="${(m.delta.length * 6.5 + 14) / 2}" y="12.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="10" font-weight="700" fill="${deltaColor}">${escapeXml(m.delta)}</text>
           </g>` : ""}
-          <!-- Sparkline Curve -->
           <polyline points="${sparkPoints.join(" ")}" fill="none" stroke="${deltaColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
         </g>`
       );
@@ -373,14 +461,11 @@ export function freeformToSvg(doc: CanvasDocument): string {
         const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${y + padTop + innerH} L ${coords[0].x} ${y + padTop + innerH} Z`;
 
         chartBody = `
-          <!-- Area Gradient Fill -->
           <path d="${areaPath}" fill="url(#chart-area-grad)" />
-          <!-- Smooth Spline Stroke -->
-          <path d="${linePath}" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" />
-          <!-- Data Points & Labels -->
+          <path d="${linePath}" fill="none" stroke="${isDark ? "#818cf8" : "#6366f1"}" stroke-width="2.5" stroke-linecap="round" />
           ${coords.map((p, idx) => `
-            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#ffffff" stroke="#6366f1" stroke-width="2" />
-            <text x="${p.x}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="#94a3b8">${escapeXml(c.data[idx].label)}</text>
+            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${isDark ? "#818cf8" : "#6366f1"}" stroke-width="2" />
+            <text x="${p.x}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(c.data[idx].label)}</text>
           `).join("")}
         `;
       } else if (chartType === "bar") {
@@ -391,12 +476,12 @@ export function freeformToSvg(doc: CanvasDocument): string {
           const barH = (d.value / maxVal) * innerH;
           const bx = x + padX + i * gap + (gap - barWidth) / 2;
           const by = y + padTop + innerH - barH;
-          const barColor = d.color ?? "#6366f1";
+          const barColor = d.color ?? (isDark ? "#818cf8" : "#6366f1");
           return `
             <g>
               <rect x="${bx}" y="${by}" width="${barWidth}" height="${barH}" rx="4" fill="${barColor}" />
-              <text x="${bx + barWidth / 2}" y="${by - 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#475569">${d.value}</text>
-              <text x="${bx + barWidth / 2}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="#94a3b8">${escapeXml(d.label)}</text>
+              <text x="${bx + barWidth / 2}" y="${by - 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="${textColorMuted}">${d.value}</text>
+              <text x="${bx + barWidth / 2}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(d.label)}</text>
             </g>
           `;
         }).join("");
@@ -404,12 +489,10 @@ export function freeformToSvg(doc: CanvasDocument): string {
 
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${c.cornerRadius ?? 10}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Chart Header -->
-          <text x="${x + 16}" y="${y + 26}" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#0f172a">${escapeXml(c.title)}</text>
-          ${c.subtitle ? `<text x="${x + 16}" y="${y + 44}" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="#64748b">${escapeXml(c.subtitle)}</text>` : ""}
-          <!-- Grid Line -->
-          <line x1="${x + padX}" y1="${y + padTop + innerH}" x2="${x + w - padX}" y2="${y + padTop + innerH}" stroke="#e2e8f0" stroke-width="1" />
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${c.cornerRadius ?? 10}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <text x="${x + 16}" y="${y + 26}" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="${textColorPrimary}">${escapeXml(c.title)}</text>
+          ${c.subtitle ? `<text x="${x + 16}" y="${y + 44}" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="${textColorMuted}">${escapeXml(c.subtitle)}</text>` : ""}
+          <line x1="${x + padX}" y1="${y + padTop + innerH}" x2="${x + w - padX}" y2="${y + padTop + innerH}" stroke="${isDark ? "#334155" : "#e2e8f0"}" stroke-width="1" />
           ${chartBody}
         </g>`
       );
@@ -422,19 +505,15 @@ export function freeformToSvg(doc: CanvasDocument): string {
       const urlText = m.url ?? "https://app.drawstack.io/analytics";
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <!-- Outer Shell -->
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 12}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Top Chrome Header -->
-          <rect x="${x}" y="${y}" width="${w}" height="38" rx="${m.cornerRadius ?? 12}" fill="#f1f5f9" />
-          <rect x="${x}" y="${y + 26}" width="${w}" height="12" fill="#f1f5f9" />
-          <line x1="${x}" y1="${y + 38}" x2="${x + w}" y2="${y + 38}" stroke="#e2e8f0" stroke-width="1" />
-          <!-- macOS Traffic Lights -->
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 12}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <rect x="${x}" y="${y}" width="${w}" height="38" rx="${m.cornerRadius ?? 12}" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
+          <rect x="${x}" y="${y + 26}" width="${w}" height="12" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
+          <line x1="${x}" y1="${y + 38}" x2="${x + w}" y2="${y + 38}" stroke="${isDark ? "#334155" : "#e2e8f0"}" stroke-width="1" />
           <circle cx="${x + 18}" cy="${y + 19}" r="5" fill="#ff5f56" />
           <circle cx="${x + 34}" cy="${y + 19}" r="5" fill="#ffbd2e" />
           <circle cx="${x + 50}" cy="${y + 19}" r="5" fill="#27c93f" />
-          <!-- URL Pill Bar -->
-          <rect x="${x + 72}" y="${y + 8}" width="${Math.min(w - 144, 280)}" height="22" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
-          <text x="${x + 82}" y="${y + 23}" font-family="'JetBrains Mono', Inter, monospace" font-size="10" font-weight="500" fill="#64748b">${escapeXml(urlText)}</text>
+          <rect x="${x + 72}" y="${y + 8}" width="${Math.min(w - 144, 280)}" height="22" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1" />
+          <text x="${x + 82}" y="${y + 23}" font-family="'JetBrains Mono', Inter, monospace" font-size="10" font-weight="500" fill="${textColorMuted}">${escapeXml(urlText)}</text>
         </g>`
       );
       continue;
@@ -444,36 +523,36 @@ export function freeformToSvg(doc: CanvasDocument): string {
     if (shape.type === "card") {
       const card = shape as CardShape;
       const iconName = card.icon ?? "server";
-      const iconColor = card.stroke ? resolveColor(card.stroke) ?? card.stroke : "#4f46e5";
+      const iconColor = card.stroke ? resolveColor(card.stroke) ?? card.stroke : isDark ? "#818cf8" : "#4f46e5";
       const badgeText = card.badge?.text ?? card.role ?? "";
-      const badgeBg = card.badge?.bg ?? "#eef2ff";
-      const badgeColor = card.badge?.color ?? "#4338ca";
+      const badgeBg = card.badge?.bg ?? (isDark ? "rgba(99,102,241,0.25)" : "#eef2ff");
+      const badgeColor = card.badge?.color ?? (isDark ? "#c7d2fe" : "#4338ca");
 
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${card.cornerRadius ?? 10}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <rect x="${x}" y="${y}" width="${w}" height="42" rx="${card.cornerRadius ?? 10}" fill="${fill === "none" ? "#f8fafc" : fill}" />
-          <rect x="${x}" y="${y + 32}" width="${w}" height="10" fill="${fill === "none" ? "#f8fafc" : fill}" />
-          <line x1="${x}" y1="${y + 42}" x2="${x + w}" y2="${y + 42}" stroke="#e2e8f0" stroke-width="1" />
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${card.cornerRadius ?? 10}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <rect x="${x}" y="${y}" width="${w}" height="42" rx="${card.cornerRadius ?? 10}" fill="${fill === "none" ? (isDark ? "#1e293b" : "#f8fafc") : fill}" />
+          <rect x="${x}" y="${y + 32}" width="${w}" height="10" fill="${fill === "none" ? (isDark ? "#1e293b" : "#f8fafc") : fill}" />
+          <line x1="${x}" y1="${y + 42}" x2="${x + w}" y2="${y + 42}" stroke="${isDark ? "#334155" : "#e2e8f0"}" stroke-width="1" />
           <g transform="translate(${x + 10}, ${y + 9})">
-            <rect x="0" y="0" width="24" height="24" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
+            <rect x="0" y="0" width="24" height="24" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1" />
             <g transform="translate(4, 4) scale(0.66)">
               ${getSvgIcon(iconName, 16, iconColor)}
             </g>
           </g>
-          <text x="${x + 40}" y="${y + 25}" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#0f172a">${escapeXml(card.title)}</text>
+          <text x="${x + 40}" y="${y + 25}" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="${textColorPrimary}">${escapeXml(card.title)}</text>
           ${badgeText ? `
           <g transform="translate(${x + w - 12}, ${y + 21})">
             <rect x="-${badgeText.length * 6 + 12}" y="-9" width="${badgeText.length * 6 + 12}" height="18" rx="4" fill="${badgeBg}" />
             <text x="-${(badgeText.length * 6 + 12) / 2}" y="3.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="9.5" font-weight="700" fill="${badgeColor}">${escapeXml(badgeText)}</text>
           </g>` : ""}
           ${card.subtitle ? `
-          <text x="${x + 12}" y="${y + 60}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#64748b">${escapeXml(card.subtitle)}</text>` : ""}
+          <text x="${x + 12}" y="${y + 60}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="500" fill="${textColorMuted}">${escapeXml(card.subtitle)}</text>` : ""}
           ${(card.metadata ?? []).map((m, idx) => `
           <g transform="translate(${x + 12}, ${y + 78 + idx * 18})">
-            <circle cx="3" cy="-3" r="2" fill="#94a3b8" />
-            <text x="10" y="0" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="600" fill="#475569">${escapeXml(m.label)}:</text>
-            <text x="${12 + m.label.length * 6.5}" y="0" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="#0f172a">${escapeXml(m.value)}</text>
+            <circle cx="3" cy="-3" r="2" fill="${isDark ? "#64748b" : "#94a3b8"}" />
+            <text x="10" y="0" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="600" fill="${textColorMuted}">${escapeXml(m.label)}:</text>
+            <text x="${12 + m.label.length * 6.5}" y="0" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="${textColorPrimary}">${escapeXml(m.value)}</text>
           </g>`).join("")}
         </g>`
       );
@@ -483,25 +562,25 @@ export function freeformToSvg(doc: CanvasDocument): string {
     // ─── 6. Database Schema / ERD Table Shape (`type: "table"`) ────────────────
     if (shape.type === "table") {
       const table = shape as TableShape;
-      const headerBg = table.headerBg ? resolveColor(table.headerBg) ?? table.headerBg : "#f1f5f9";
+      const headerBg = table.headerBg ? resolveColor(table.headerBg) ?? table.headerBg : (isDark ? "#1e293b" : "#f1f5f9");
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${table.cornerRadius ?? 8}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${table.cornerRadius ?? 8}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <rect x="${x}" y="${y}" width="${w}" height="34" rx="${table.cornerRadius ?? 8}" fill="${headerBg}" />
           <rect x="${x}" y="${y + 24}" width="${w}" height="10" fill="${headerBg}" />
-          <line x1="${x}" y1="${y + 34}" x2="${x + w}" y2="${y + 34}" stroke="#cbd5e1" stroke-width="1.2" />
+          <line x1="${x}" y1="${y + 34}" x2="${x + w}" y2="${y + 34}" stroke="${isDark ? "#334155" : "#cbd5e1"}" stroke-width="1.2" />
           <g transform="translate(${x + 10}, ${y + 9}) scale(0.66)">
-            ${getSvgIcon("database", 16, "#334155")}
+            ${getSvgIcon("database", 16, isDark ? "#94a3b8" : "#334155")}
           </g>
-          <text x="${x + 30}" y="${y + 22}" font-family="'JetBrains Mono', Inter, monospace" font-size="12" font-weight="700" fill="#0f172a">${escapeXml(table.tableName)}</text>
+          <text x="${x + 30}" y="${y + 22}" font-family="'JetBrains Mono', Inter, monospace" font-size="12" font-weight="700" fill="${textColorPrimary}">${escapeXml(table.tableName)}</text>
           ${table.columns.map((col, idx) => {
             const rowY = y + 54 + idx * 22;
-            const badge = col.isPk ? `<rect x="${x + 8}" y="${rowY - 10}" width="20" height="14" rx="3" fill="#fef3c7"/><text x="${x + 18}" y="${rowY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" font-weight="800" fill="#b45309">PK</text>` : col.isFk ? `<rect x="${x + 8}" y="${rowY - 10}" width="20" height="14" rx="3" fill="#e0f2fe"/><text x="${x + 18}" y="${rowY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" font-weight="800" fill="#0369a1">FK</text>` : `<circle cx="${x + 18}" cy="${rowY - 3}" r="2" fill="#cbd5e1"/>`;
+            const badge = col.isPk ? `<rect x="${x + 8}" y="${rowY - 10}" width="20" height="14" rx="3" fill="${isDark ? "#78350f" : "#fef3c7"}"/><text x="${x + 18}" y="${rowY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" font-weight="800" fill="${isDark ? "#fde68a" : "#b45309"}">PK</text>` : col.isFk ? `<rect x="${x + 8}" y="${rowY - 10}" width="20" height="14" rx="3" fill="${isDark ? "#0c4a6e" : "#e0f2fe"}"/><text x="${x + 18}" y="${rowY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" font-weight="800" fill="${isDark ? "#bae6fd" : "#0369a1"}">FK</text>` : `<circle cx="${x + 18}" cy="${rowY - 3}" r="2" fill="${isDark ? "#475569" : "#cbd5e1"}"/>`;
             return `
             <g>
               ${badge}
-              <text x="${x + 34}" y="${rowY}" font-family="'JetBrains Mono', Inter, monospace" font-size="11" font-weight="600" fill="#1e293b">${escapeXml(col.name)}</text>
-              <text x="${x + w - 10}" y="${rowY}" text-anchor="end" font-family="'JetBrains Mono', Inter, monospace" font-size="10.5" font-weight="500" fill="#64748b">${escapeXml(col.type)}</text>
+              <text x="${x + 34}" y="${rowY}" font-family="'JetBrains Mono', Inter, monospace" font-size="11" font-weight="600" fill="${textColorPrimary}">${escapeXml(col.name)}</text>
+              <text x="${x + w - 10}" y="${rowY}" text-anchor="end" font-family="'JetBrains Mono', Inter, monospace" font-size="10.5" font-weight="500" fill="${textColorMuted}">${escapeXml(col.type)}</text>
             </g>`;
           }).join("")}
         </g>`
@@ -587,15 +666,15 @@ export function freeformToSvg(doc: CanvasDocument): string {
       case "frame": {
         elements.push(
           `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="6,4" ${opacity} />
-          <rect x="${x + 10}" y="${y - 12}" width="${Math.max(70, (shape.name?.length ?? 0) * 8 + 20)}" height="22" rx="5" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1" />
-          <text x="${x + 20}" y="${y + 3}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="700" fill="#334155">${escapeXml(shape.name ?? "")}</text>`
+          <rect x="${x + 10}" y="${y - 12}" width="${Math.max(70, (shape.name?.length ?? 0) * 8 + 20)}" height="22" rx="5" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1" />
+          <text x="${x + 20}" y="${y + 3}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="700" fill="${textColorMuted}">${escapeXml(shape.name ?? "")}</text>`
         );
         break;
       }
     }
 
     if (shape.text?.content) {
-      const textColor = shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#0f172a");
+      const textColor = shape.text.color ?? (shape.type === "sticky" ? "#713f12" : textColorPrimary);
       const fontSize = shape.text.fontSize ?? 13;
       const fontWeight = shape.text.bold ? "700" : "500";
       const align = shape.text.align ?? (shape.type === "text" ? "left" : "center");
@@ -618,12 +697,12 @@ export function freeformToSvg(doc: CanvasDocument): string {
     }
   }
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" style="background:#f8fafc;border-radius:12px;box-shadow:inset 0 0 0 1px #e2e8f0">
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="background:${canvasBg};border-radius:14px;box-shadow:inset 0 0 0 1px ${isDark ? "rgba(255,255,255,0.08)" : "#e2e8f0"};max-width:100%;display:block;">
   ${defs}
   <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
-    <circle cx="2" cy="2" r="1" fill="#cbd5e1" />
+    <circle cx="2" cy="2" r="1" fill="${dotColor}" />
   </pattern>
-  <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="url(#dot-grid)" opacity="0.65" />
+  <rect x="${vx}" y="${vy}" width="${vw}" height="${vh}" fill="url(#dot-grid)" opacity="${isDark ? "0.4" : "0.65"}" />
   ${elements.join("\n  ")}
 </svg>`;
 }

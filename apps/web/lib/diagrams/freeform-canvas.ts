@@ -179,6 +179,72 @@ export function serializeFreeformDocument(doc: CanvasDocument): string {
   return JSON.stringify(doc);
 }
 
+export function computeDynamicShapeDimensions(
+  doc: CanvasDocument,
+  shape: CanvasShape
+): { x: number; y: number; width: number; height: number } {
+  if (shape.type === "card") {
+    const card = shape as CardShape;
+    const minH = 44 + (card.subtitle ? 24 : 0) + (card.metadata?.length ? card.metadata.length * 24 + 10 : 0) + 16;
+    return {
+      x: card.x,
+      y: card.y,
+      width: Math.max(card.width, 240),
+      height: Math.max(card.height, minH),
+    };
+  }
+
+  if (shape.type === "table") {
+    const table = shape as TableShape;
+    const minH = 38 + table.columns.length * 24 + 16;
+    return {
+      x: table.x,
+      y: table.y,
+      width: Math.max(table.width, 240),
+      height: Math.max(table.height, minH),
+    };
+  }
+
+  if (shape.type === "metric") {
+    const m = shape as MetricShape;
+    return {
+      x: m.x,
+      y: m.y,
+      width: Math.max(m.width, 220),
+      height: Math.max(m.height, 110),
+    };
+  }
+
+  if (shape.type === "frame" || shape.type === "mockup") {
+    const children = doc.shapes.filter(
+      (s) => s.id !== shape.id && (s.parentId === shape.id || s.frameId === shape.id)
+    );
+    if (children.length > 0) {
+      let minX = shape.x;
+      let minY = shape.y;
+      let maxX = shape.x + shape.width;
+      let maxY = shape.y + shape.height;
+
+      for (const child of children) {
+        const cb = computeDynamicShapeDimensions(doc, child);
+        minX = Math.min(minX, cb.x - 24);
+        minY = Math.min(minY, cb.y - (shape.type === "mockup" ? 48 : 36));
+        maxX = Math.max(maxX, cb.x + cb.width + 24);
+        maxY = Math.max(maxY, cb.y + cb.height + 24);
+      }
+      return {
+        x: minX,
+        y: minY,
+        width: Math.max(shape.width, maxX - minX),
+        height: Math.max(shape.height, maxY - minY),
+      };
+    }
+  }
+
+  const s = shape as Exclude<CanvasShape, ArrowShape | PathShape>;
+  return { x: s.x, y: s.y, width: s.width, height: s.height };
+}
+
 export function getShapeBounds(doc: CanvasDocument, shape: CanvasShape): { x: number; y: number; width: number; height: number } {
   if (shape.type === "arrow" || shape.type === "line") {
     const start = resolveArrowEndpoint(doc, shape.start);
@@ -203,8 +269,8 @@ export function getShapeBounds(doc: CanvasDocument, shape: CanvasShape): { x: nu
     }
     return { x: minX, y: minY, width: Math.max(0, maxX - minX), height: Math.max(0, maxY - minY) };
   }
-  const s = shape as Exclude<CanvasShape, ArrowShape | PathShape>;
-  return { x: s.x, y: s.y, width: s.width, height: s.height };
+
+  return computeDynamicShapeDimensions(doc, shape);
 }
 
 export function isBoundEndpoint(endpoint: ArrowEndpoint): endpoint is { shapeId: string; anchor?: "top" | "right" | "bottom" | "left" | "center" | "auto" } {

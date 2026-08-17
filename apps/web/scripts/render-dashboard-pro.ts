@@ -9,18 +9,18 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
   version: 1,
   renderMode: "clean",
   shapes: [
-    // ─── Outer MacBook Device Mockup Frame ─────────────────────────────────────
+    // ─── Outer MacBook Window Frame ───────────────────────────────────────────
     {
       id: "macbook_window",
       type: "mockup",
       mockupType: "browser",
-      title: "Drawstack AI Studio — Cloud Analytics & Agent Ops",
+      title: "Drawstack AI Studio — Executive Cloud & Agent Ops",
       url: "https://app.drawstack.io/analytics/live",
       x: 30,
       y: 30,
-      width: 1280,
+      width: 1340,
       height: 740,
-      stroke: "#cbd5e1",
+      stroke: "#334155",
       strokeWidth: 1.5,
       cornerRadius: 14,
     },
@@ -38,9 +38,9 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       icon: "activity",
       stroke: "#6366f1",
       x: 60,
-      y: 90,
-      width: 280,
-      height: 110,
+      y: 95,
+      width: 290,
+      height: 115,
     },
     {
       id: "tokens_kpi",
@@ -53,10 +53,10 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       sparkline: [40, 48, 55, 62, 70, 78, 85, 92],
       icon: "cpu",
       stroke: "#10a37f",
-      x: 360,
-      y: 90,
-      width: 280,
-      height: 110,
+      x: 380,
+      y: 95,
+      width: 290,
+      height: 115,
     },
     {
       id: "latency_kpi",
@@ -69,10 +69,10 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       sparkline: [60, 52, 45, 38, 30, 22, 18, 14],
       icon: "activity",
       stroke: "#0284c7",
-      x: 660,
-      y: 90,
-      width: 280,
-      height: 110,
+      x: 700,
+      y: 95,
+      width: 290,
+      height: 115,
     },
     {
       id: "uptime_kpi",
@@ -85,10 +85,10 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       sparkline: [99, 99.5, 99.8, 99.9, 99.99, 100, 100, 100],
       icon: "shield",
       stroke: "#16a34a",
-      x: 960,
-      y: 90,
-      width: 320,
-      height: 110,
+      x: 1020,
+      y: 95,
+      width: 310,
+      height: 115,
     },
 
     // ─── Row 2: Vector Charts (Area + Bar) ───────────────────────────────────
@@ -110,9 +110,9 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
         { label: "23:59", value: 410 },
       ],
       x: 60,
-      y: 220,
-      width: 720,
-      height: 250,
+      y: 235,
+      width: 730,
+      height: 255,
     },
     {
       id: "cost_bar_chart",
@@ -129,10 +129,10 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
         { label: "Claude Sonnet", value: 80, color: "#7c3aed" },
         { label: "GPT-4o", value: 95, color: "#ef4444" },
       ],
-      x: 800,
-      y: 220,
-      width: 480,
-      height: 250,
+      x: 820,
+      y: 235,
+      width: 510,
+      height: 255,
     },
 
     // ─── Row 3: Active Architecture Microservice & Live Database Table ────────
@@ -142,17 +142,16 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       parentId: "macbook_window",
       icon: "openai",
       stroke: "#10a37f",
-      badge: { text: "AUTONOMOUS", bg: "#ecfdf5", color: "#047857" },
+      badge: { text: "AUTONOMOUS", bg: "#022c22", color: "#34d399" },
       title: "Agent Ops Gateway Cluster",
       subtitle: "Vercel AI SDK v6 • Multi-Model Subagent Pipeline",
       metadata: [
         { label: "Active Workers", value: "48 Edge Sandboxes" },
         { label: "Memory Footprint", value: "42MB per instance" },
-        { label: "Subagent Queue", value: "0 pending (sub-millisecond ACK)" },
       ],
       x: 60,
-      y: 490,
-      width: 460,
+      y: 515,
+      width: 400,
       height: 145,
     },
     {
@@ -160,8 +159,8 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       type: "table",
       parentId: "macbook_window",
       tableName: "live_agent_executions",
-      stroke: "#336791",
-      headerBg: "#e0f2fe",
+      stroke: "#0284c7",
+      headerBg: "#0c4a6e",
       columns: [
         { name: "task_id", type: "uuid", isPk: true },
         { name: "model_id", type: "varchar(64)" },
@@ -169,10 +168,10 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
         { name: "cost_usd", type: "numeric(8,6)" },
         { name: "status", type: "varchar(16)" },
       ],
-      x: 540,
-      y: 490,
+      x: 500,
+      y: 515,
       width: 440,
-      height: 160,
+      height: 175,
     },
     {
       id: "stripe_settlement_card",
@@ -180,20 +179,20 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       parentId: "macbook_window",
       icon: "stripe",
       stroke: "#635bff",
-      badge: { text: "PRO REVENUE", bg: "#eef2ff", color: "#4338ca" },
+      badge: { text: "PRO REVENUE", bg: "#1e1b4b", color: "#818cf8" },
       title: "Real-Time Stripe Invoicing",
       subtitle: "Instant Settlement & Credit Top-ups",
       metadata: [
         { label: "Success Rate", value: "99.98%" },
         { label: "Webhooks", value: "240 events/sec" },
       ],
-      x: 1000,
-      y: 490,
-      width: 280,
+      x: 980,
+      y: 515,
+      width: 350,
       height: 145,
     },
 
-    // ─── Smooth Connectors Linking Dashboard Nodes ───────────────────────────
+    // ─── Smooth Connectors with Obstacle Clearance ───────────────────────────
     {
       id: "a1",
       type: "arrow",
@@ -212,12 +211,19 @@ const PRO_DASHBOARD_DOC: CanvasDocument = {
       start: { shapeId: "live_db_table", anchor: "right" },
       end: { shapeId: "stripe_settlement_card", anchor: "left" },
       routing: "orthogonal",
-      label: "Debit Pro Credits",
+      label: "Debit Credits",
     },
   ],
 };
 
-const svg = freeformToSvg(PRO_DASHBOARD_DOC);
-const outPath = path.join(ARTIFACT_DIR, "nextgen_dashboard_macbook.svg");
-fs.writeFileSync(outPath, svg, "utf-8");
-console.log("Rendered Next-Gen Dashboard to:", outPath);
+// 1. Render Dark Obsidian & Neon Cyber Theme
+const svgDark = freeformToSvg(PRO_DASHBOARD_DOC, { theme: "dark" });
+const outDark = path.join(ARTIFACT_DIR, "dashboard_dark_obsidian.svg");
+fs.writeFileSync(outDark, svgDark, "utf-8");
+console.log("Rendered Dark Obsidian Dashboard to:", outDark);
+
+// 2. Render High-Contrast Light Theme
+const svgLight = freeformToSvg(PRO_DASHBOARD_DOC, { theme: "light" });
+const outLight = path.join(ARTIFACT_DIR, "dashboard_high_contrast_light.svg");
+fs.writeFileSync(outLight, svgLight, "utf-8");
+console.log("Rendered High-Contrast Light Dashboard to:", outLight);
