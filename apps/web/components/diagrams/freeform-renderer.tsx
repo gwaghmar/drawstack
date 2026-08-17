@@ -261,6 +261,7 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "tech_hud_panel",
   "layered_process_map",
   "venn_timeline",
+  "dot_matrix",
   "feed_table",
 ]);
 
@@ -925,6 +926,7 @@ function renderShape(
             text={shape.text?.content ?? ""}
             fontSize={shape.text?.fontSize ?? 14}
             fontFamily={shape.text?.fontFamily ?? "Inter, Arial, sans-serif"}
+            wrap={shape.text?.wrap === false ? "none" : "word"}
             fontStyle={shape.text?.bold ? "bold" : "normal"}
             fill={shape.text?.color ?? "#1e293b"}
             align={shape.text?.align ?? "left"}
@@ -981,6 +983,7 @@ function renderShape(
         text={shape.text.content}
         fontSize={shape.text.fontSize ?? 13}
         fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
+        wrap={shape.text.wrap === false ? "none" : "word"}
         fill={shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#1e293b")}
         align={shape.text.align ?? "center"}
         verticalAlign="middle"

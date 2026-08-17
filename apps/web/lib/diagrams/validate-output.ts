@@ -1,10 +1,6 @@
 import { z } from "zod";
 import { jsonrepair } from "jsonrepair";
-import { MermaidSourceSchema } from "@flowchart/core";
 import type { DiagramType } from "@flowchart/core";
-import { BpmnModdle } from "bpmn-moddle";
-import { parseSocialCard, isSocialCardType } from "./social-cards.ts";
-import { validateGraphSource } from "./xyflow-base.ts";
 import { validateFreeformRefs, type CanvasDocument } from "./freeform-canvas.ts";
 
 function extractFirstJsonValue(text: string): string | null {
@@ -84,23 +80,6 @@ export function parsePossiblyBrokenJson(raw: string): string | null {
   return null;
 }
 
-async function validateBpmnXml(xml: string): Promise<{ ok: true } | { ok: false; error: string }> {
-  const trimmed = xml.trim();
-  if (!trimmed.startsWith("<?xml")) {
-    return { ok: false, error: 'BPMN XML must start with `<?xml version="1.0" encoding="UTF-8"?>`.' };
-  }
-  if (!trimmed.includes("<bpmn2:definitions") && !trimmed.includes("<definitions")) {
-    return { ok: false, error: "BPMN XML must include a <bpmn2:definitions> root element." };
-  }
-  try {
-    const moddle = new BpmnModdle();
-    await moddle.fromXML(trimmed);
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Invalid BPMN XML" };
-  }
-}
-
 function cleanModelOutput(text: string): string {
   return text
     .trim()
@@ -113,56 +92,6 @@ function cleanModelOutput(text: string): string {
 // Per-type structural validators — go beyond "is it valid JSON?" and catch
 // structurally empty/broken outputs so the retry pass actually fires.
 // ---------------------------------------------------------------------------
-
-const MERMAID_VALID_KEYWORDS = [
-  "flowchart", "graph", "sequenceDiagram", "erDiagram", "gantt",
-  "mindmap", "classDiagram", "stateDiagram", "timeline", "C4Context",
-  "pie", "quadrantChart", "sankey-beta", "gitGraph", "xychart-beta",
-  "block-beta", "architecture-beta", "journey", "requirementDiagram",
-  "zenuml",
-];
-
-function validateMermaidStructure(source: string): { ok: boolean; reason?: string } {
-  const first = source.trimStart().split(/[\s\n(]/)[0].toLowerCase();
-  const valid = MERMAID_VALID_KEYWORDS.some((kw) => source.trimStart().toLowerCase().startsWith(kw.toLowerCase()));
-  if (!valid) {
-    return { ok: false, reason: `Mermaid output does not start with a valid diagram type keyword (got: "${first}"). Must start with flowchart, sequenceDiagram, erDiagram, gantt, etc.` };
-  }
-  return { ok: true };
-}
-
-const ExcalidrawSchema = z.object({
-  elements: z.array(
-    z.object({
-      id: z.string(),
-      type: z.string(),
-      x: z.number(),
-      y: z.number(),
-    })
-  ).min(1, "Excalidraw elements array must have at least one element"),
-});
-
-const ReactFlowSchema = z.object({
-  nodes: z.array(
-    z.object({
-      id: z.string(),
-      position: z.object({ x: z.number(), y: z.number() }),
-      data: z.record(z.string(), z.unknown()),
-    })
-  ).min(1, "ReactFlow nodes array must have at least one node"),
-  edges: z.array(
-    z.object({ id: z.string(), source: z.string(), target: z.string() })
-  ),
-});
-
-const EChartsSchema = z.object({
-  series: z.array(z.unknown()).min(1, "ECharts option must have at least one series entry"),
-});
-
-const NivoSchema = z.object({
-  type: z.string().min(1, "Nivo JSON must have a 'type' field"),
-  data: z.unknown().refine((v) => v !== undefined && v !== null, { message: "Nivo JSON must have a 'data' field" }),
-});
 
 const FreeformTextSchema = z.object({
   content: z.string(),
@@ -213,6 +142,10 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
     "scurve_timeline",
     "isometric_block",
     "mockup",
+    "venn_timeline",
+    "tech_hud_panel",
+    "layered_process_map",
+    "dot_matrix",
   ]),
   x: z.number(),
   y: z.number(),
@@ -252,150 +185,31 @@ const FreeformCanvasSchema = z.object({
   shapes: z.array(FreeformShapeSchema).min(1, "Freeform canvas must have at least one shape"),
 });
 
-const D3Schema = z.object({
-  subtype: z.enum(["force", "tree", "chord", "sunburst", "sankey"]),
-  nodes: z.array(z.object({ id: z.string() })).min(1, { message: "D3 spec must have at least one node" }),
-  links: z.array(z.object({ source: z.string(), target: z.string() })).optional(),
-  config: z.record(z.string(), z.unknown()).optional(),
-  title: z.string().optional(),
-});
-
-const CytoscapeSchema = z.object({
-  elements: z.object({
-    nodes: z.array(z.object({ data: z.object({ id: z.string() }) })).min(1, { message: "Cytoscape must have at least one node" }),
-    edges: z.array(z.object({ data: z.object({ source: z.string(), target: z.string() }) })).optional(),
-  }),
-  layout: z.record(z.string(), z.unknown()).optional(),
-  style: z.array(z.unknown()).optional(),
-});
-
-const VisNetworkSchema = z.object({
-  nodes: z.array(z.object({ id: z.union([z.string(), z.number()]) })).min(1, { message: "vis-network must have at least one node" }),
-  edges: z.array(z.object({ from: z.union([z.string(), z.number()]), to: z.union([z.string(), z.number()]) })).optional(),
-  options: z.record(z.string(), z.unknown()).optional(),
-});
-
-const FabricSchema = z.object({
-  version: z.string(),
-  objects: z.array(z.unknown()),
-  background: z.string().optional(),
-});
-
-const PixiSchema = z.object({
-  config: z.object({
-    width: z.number().optional(),
-    height: z.number().optional(),
-    background: z.string().optional(),
-  }).optional(),
-  stage: z.array(z.object({ type: z.string() })).min(1, { message: "PixiJS spec must have at least one stage object" }),
-});
-
-function validateReactFlowEdgeRefs(parsed: { nodes: { id: string }[]; edges: { id: string; source: string; target: string }[] }): string | null {
-  const nodeIds = new Set(parsed.nodes.map((n) => n.id));
-  const dangling = parsed.edges.filter((e) => !nodeIds.has(e.source) || !nodeIds.has(e.target));
-  if (dangling.length > 0) {
-    return `ReactFlow edges reference non-existent node IDs: ${dangling.map((e) => e.id).join(", ")}`;
-  }
-  return null;
-}
-
-export async function validateAndRepairOutput(diagramType: DiagramType, raw: string): Promise<{ ok: true; source: string } | { ok: false; reason: string }> {
+export async function validateAndRepairOutput(
+  _diagramType: DiagramType,
+  raw: string,
+): Promise<{ ok: true; source: string } | { ok: false; reason: string }> {
   const cleaned = cleanModelOutput(raw);
 
-  if (diagramType === "mermaid") {
-    try {
-      MermaidSourceSchema.parse(cleaned);
-    } catch {
-      return { ok: false, reason: "Mermaid source is empty or exceeds maximum length" };
-    }
-    const structural = validateMermaidStructure(cleaned);
-    if (!structural.ok) return { ok: false, reason: structural.reason! };
-    return { ok: true, source: cleaned };
+  const repaired = parsePossiblyBrokenJson(cleaned);
+  if (!repaired) return { ok: false, reason: "Invalid JSON for freeform canvas" };
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(repaired);
+  } catch {
+    return { ok: false, reason: "Could not parse freeform canvas JSON after repair" };
   }
 
-  if (["excalidraw", "reactflow", "echarts", "nivo", "freeform"].includes(diagramType)) {
-    const repaired = parsePossiblyBrokenJson(cleaned);
-    if (!repaired) return { ok: false, reason: `Invalid JSON for ${diagramType}` };
-
-    let parsed: unknown;
-    try { parsed = JSON.parse(repaired); } catch { return { ok: false, reason: `Could not parse ${diagramType} JSON after repair` }; }
-
-    if (diagramType === "excalidraw") {
-      const result = ExcalidrawSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `Excalidraw structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "reactflow") {
-      const result = ReactFlowSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `ReactFlow structure invalid: ${result.error.issues[0]?.message}` };
-      const refError = validateReactFlowEdgeRefs(result.data as { nodes: { id: string }[]; edges: { id: string; source: string; target: string }[] });
-      if (refError) return { ok: false, reason: refError };
-    }
-    if (diagramType === "echarts") {
-      const result = EChartsSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `ECharts structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "nivo") {
-      const result = NivoSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `Nivo structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "freeform") {
-      const result = FreeformCanvasSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `Freeform canvas structure invalid: ${result.error.issues[0]?.message}` };
-      const refErrors = validateFreeformRefs(result.data as CanvasDocument);
-      if (refErrors.length > 0) return { ok: false, reason: `Freeform canvas has broken references: ${refErrors.join("; ")}` };
-    }
-
-    return { ok: true, source: repaired };
+  const result = FreeformCanvasSchema.safeParse(parsed);
+  if (!result.success) {
+    return { ok: false, reason: `Freeform canvas structure invalid: ${result.error.issues[0]?.message}` };
   }
 
-  if (diagramType === "bpmn") {
-    const v = await validateBpmnXml(cleaned);
-    if (!v.ok) return { ok: false, reason: v.error };
-    return { ok: true, source: cleaned };
+  const refErrors = validateFreeformRefs(result.data as CanvasDocument);
+  if (refErrors.length > 0) {
+    return { ok: false, reason: `Freeform canvas has broken references: ${refErrors.join("; ")}` };
   }
 
-  if (isSocialCardType(diagramType)) {
-    const r = parseSocialCard(parsePossiblyBrokenJson(cleaned) ?? cleaned);
-    if (!r.ok) return { ok: false, reason: r.error };
-    return { ok: true, source: JSON.stringify(r.card, null, 2) };
-  }
-
-  if (diagramType === "cloud" || diagramType === "erd" || diagramType === "orgchart") {
-    const repaired = parsePossiblyBrokenJson(cleaned);
-    if (!repaired) return { ok: false, reason: `Invalid JSON for ${diagramType}` };
-    const v = validateGraphSource(repaired);
-    if (!v.ok) return { ok: false, reason: `${diagramType} structure invalid: ${v.reason}` };
-    return { ok: true, source: repaired };
-  }
-
-  if (diagramType === "d3" || diagramType === "cytoscape" || diagramType === "visnetwork" || diagramType === "fabric" || diagramType === "pixi") {
-    const repaired = parsePossiblyBrokenJson(cleaned);
-    if (!repaired) return { ok: false, reason: `Invalid JSON for ${diagramType}` };
-    let parsed: unknown;
-    try { parsed = JSON.parse(repaired); } catch { return { ok: false, reason: `Could not parse ${diagramType} JSON after repair` }; }
-
-    if (diagramType === "d3") {
-      const result = D3Schema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `D3 structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "cytoscape") {
-      const result = CytoscapeSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `Cytoscape structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "visnetwork") {
-      const result = VisNetworkSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `vis-network structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "fabric") {
-      const result = FabricSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `Fabric.js structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "pixi") {
-      const result = PixiSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `PixiJS structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    return { ok: true, source: repaired };
-  }
-
-  return { ok: false, reason: "Unsupported diagram type" };
+  return { ok: true, source: repaired };
 }

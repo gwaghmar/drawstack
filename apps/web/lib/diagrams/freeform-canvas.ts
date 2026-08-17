@@ -28,6 +28,8 @@ export type BaseShape = {
     align?: "left" | "center" | "right";
     color?: string;
     bold?: boolean;
+    /** false = never soft-wrap (ASCII art, terminal layouts); explicit \n only */
+    wrap?: boolean;
   };
 };
 
@@ -242,6 +244,19 @@ export type LayeredProcessMapShape = BaseShape & {
   }[];
 };
 
+export type DotMatrixShape = BaseShape & {
+  type: "dot_matrix";
+  width: number;
+  height: number;
+  /** One string per row; each char is a density 0-9 (or " .:-=+*#%@" ramp). Dot size scales with density. */
+  rows: string[];
+  dotColor?: string;
+  /** Color for zero-density cells; omit for none */
+  offColor?: string;
+  background?: string;
+  glyph?: "circle" | "square" | "diamond";
+};
+
 export type PathShape = BaseShape & {
   type: "path";
   points: [number, number][];
@@ -287,6 +302,7 @@ export type CanvasShape =
   | VennTimelineShape
   | TechHudPanelShape
   | LayeredProcessMapShape
+  | DotMatrixShape
   | PathShape
   | ArrowShape;
 

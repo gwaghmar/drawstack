@@ -18,6 +18,7 @@ import {
   type VennTimelineShape,
   type TechHudPanelShape,
   type LayeredProcessMapShape,
+  type DotMatrixShape,
   resolveArrowRenderEndpoints,
   getShapeBounds,
   resolveColor,
@@ -1248,6 +1249,49 @@ export function freeformToSvg(
       continue;
     }
 
+    // ─── Dot Matrix (`type: "dot_matrix"`) — halftone portraits, dithered art, dot-density charts ───
+    if (shape.type === "dot_matrix") {
+      const dm = shape as DotMatrixShape;
+      const rows = dm.rows ?? [];
+      const nRows = rows.length;
+      const nCols = Math.max(1, ...rows.map((r) => r.length));
+      if (nRows === 0) continue;
+      const cellW = w / nCols;
+      const cellH = h / nRows;
+      const maxR = Math.min(cellW, cellH) / 2;
+      const RAMP = " .:-=+*#%@";
+      const on = dm.dotColor ?? (isDark ? "#f8fafc" : "#0f172a");
+      const glyph = dm.glyph ?? "circle";
+
+      const dots: string[] = [];
+      if (dm.background) dots.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${dm.background}" />`);
+      for (let ri = 0; ri < nRows; ri++) {
+        for (let ci = 0; ci < rows[ri].length; ci++) {
+          const ch = rows[ri][ci];
+          const density = ch >= "0" && ch <= "9" ? Number(ch) / 9 : Math.max(0, RAMP.indexOf(ch)) / (RAMP.length - 1);
+          if (density <= 0) {
+            if (dm.offColor) {
+              const r0 = maxR * 0.18;
+              dots.push(`<circle cx="${x + (ci + 0.5) * cellW}" cy="${y + (ri + 0.5) * cellH}" r="${r0.toFixed(2)}" fill="${dm.offColor}" />`);
+            }
+            continue;
+          }
+          const r = maxR * (0.25 + 0.75 * density);
+          const cx = x + (ci + 0.5) * cellW;
+          const cy = y + (ri + 0.5) * cellH;
+          if (glyph === "square") {
+            dots.push(`<rect x="${(cx - r).toFixed(2)}" y="${(cy - r).toFixed(2)}" width="${(2 * r).toFixed(2)}" height="${(2 * r).toFixed(2)}" fill="${on}" />`);
+          } else if (glyph === "diamond") {
+            dots.push(`<rect x="${(cx - r).toFixed(2)}" y="${(cy - r).toFixed(2)}" width="${(2 * r).toFixed(2)}" height="${(2 * r).toFixed(2)}" fill="${on}" transform="rotate(45 ${cx.toFixed(2)} ${cy.toFixed(2)})" />`);
+          } else {
+            dots.push(`<circle cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}" fill="${on}" />`);
+          }
+        }
+      }
+      elements.push(`<g ${opacity}>${dots.join("")}</g>`);
+      continue;
+    }
+
     // ─── 12. Image Shape ───────────────────────────────────────────────────────
     if (shape.type === "image") {
       const img = shape as ImageShape;
@@ -1435,8 +1479,9 @@ export function freeformToSvg(
       const availW = Math.max(24, w - 24);
       const approxCharW = fontSize * (shape.text.bold ? 0.58 : 0.55);
       const maxChars = Math.max(4, Math.floor(availW / approxCharW));
+      const noWrap = shape.text.wrap === false;
       const lines = shape.text.content.split("\n").flatMap((raw) => {
-        if (raw.length <= maxChars) return [raw];
+        if (noWrap || raw.length <= maxChars) return [raw];
         const words = raw.split(" ");
         const out: string[] = [];
         let cur = "";
@@ -1462,7 +1507,7 @@ export function freeformToSvg(
         .join("");
 
       elements.push(
-        `<text font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
+        `<text xml:space="preserve" font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
       );
     }
   }
