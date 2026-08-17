@@ -216,7 +216,7 @@ function renderShape(
 
   // Render selection outline if selected (arrows/lines already handled above)
   if (isSelected) {
-    const bounds = getShapeBounds(shape);
+    const bounds = getShapeBounds(doc, shape);
     const outlineNode =
       shape.type === "ellipse" ? (
         <Ellipse
@@ -252,7 +252,8 @@ function renderShape(
 
 export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const [doc, setDoc] = useState<CanvasDocument>(() => {
-    const parsed = parseFreeformSource(source);
+    const { doc: parsed, errors } = parseFreeformSource(source);
+    if (errors.length > 0) return parsed;
     return parsed.shapes.length > 0 ? parsed : FIXTURE_DOCUMENT;
   });
 
@@ -274,9 +275,11 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   useEffect(() => {
     if (source === lastSourceRef.current) return;
     isApplyingRef.current = true;
-    const parsed = parseFreeformSource(source);
-    const newDoc = parsed.shapes.length > 0 ? parsed : FIXTURE_DOCUMENT;
-    setDoc(newDoc);
+    const { doc: parsed, errors } = parseFreeformSource(source);
+    if (errors.length === 0) {
+      const newDoc = parsed.shapes.length > 0 ? parsed : FIXTURE_DOCUMENT;
+      setDoc(newDoc);
+    }
     lastSourceRef.current = source;
     queueMicrotask(() => {
       isApplyingRef.current = false;
@@ -400,7 +403,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     const selected = new Set<string>();
     for (const shape of doc.shapes) {
       if (shape.type === "arrow" || shape.type === "line") continue;
-      const bounds = getShapeBounds(shape);
+      const bounds = getShapeBounds(doc, shape);
       if (aabbOverlap(marqueeRect, bounds)) {
         selected.add(shape.id);
       }

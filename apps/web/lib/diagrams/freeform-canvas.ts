@@ -2,6 +2,8 @@ export type CanvasDocument = { version: 1; shapes: CanvasShape[] };
 
 export type BaseShape = {
   id: string;
+  name?: string;
+  role?: string;
   x: number;
   y: number;
   rotation?: number;
@@ -36,6 +38,7 @@ export type ArrowShape = BaseShape & {
   type: "arrow" | "line";
   start: ArrowEndpoint;
   end: ArrowEndpoint;
+  label?: string;
 };
 
 export type CanvasShape = RectShape | EllipseShape | DiamondShape | StickyShape | TextShape | FrameShape | ArrowShape;
@@ -44,27 +47,38 @@ export function createEmptyDocument(): CanvasDocument {
   return { version: 1, shapes: [] };
 }
 
-export function parseFreeformSource(source: string): CanvasDocument {
+export function parseFreeformSource(source: string): { doc: CanvasDocument; errors: string[] } {
+  let parsed: unknown;
   try {
-    const parsed = JSON.parse(source);
-    if (typeof parsed === "object" && parsed !== null && "version" in parsed && "shapes" in parsed) {
-      if (Array.isArray(parsed.shapes)) {
-        return parsed as CanvasDocument;
-      }
-    }
-  } catch {
-    // fall through to empty document
+    parsed = JSON.parse(source);
+  } catch (e) {
+    return { doc: createEmptyDocument(), errors: [`Invalid JSON: ${e instanceof Error ? e.message : String(e)}`] };
   }
-  return createEmptyDocument();
+
+  if (typeof parsed !== "object" || parsed === null) {
+    return { doc: createEmptyDocument(), errors: ["Document must be a JSON object"] };
+  }
+  if (!("version" in parsed) || !("shapes" in parsed)) {
+    return { doc: createEmptyDocument(), errors: ["Document must have \"version\" and \"shapes\" fields"] };
+  }
+  if (!Array.isArray((parsed as { shapes: unknown }).shapes)) {
+    return { doc: createEmptyDocument(), errors: ["\"shapes\" must be an array"] };
+  }
+
+  return { doc: parsed as CanvasDocument, errors: [] };
 }
 
 export function serializeFreeformDocument(doc: CanvasDocument): string {
   return JSON.stringify(doc);
 }
 
-export function getShapeBounds(shape: CanvasShape): { x: number; y: number; width: number; height: number } {
+export function getShapeBounds(doc: CanvasDocument, shape: CanvasShape): { x: number; y: number; width: number; height: number } {
   if (shape.type === "arrow" || shape.type === "line") {
-    return { x: 0, y: 0, width: 0, height: 0 };
+    const start = resolveArrowEndpoint(doc, shape.start);
+    const end = resolveArrowEndpoint(doc, shape.end);
+    const minX = Math.min(start.x, end.x);
+    const minY = Math.min(start.y, end.y);
+    return { x: minX, y: minY, width: Math.max(start.x, end.x) - minX, height: Math.max(start.y, end.y) - minY };
   }
   const s = shape as Exclude<CanvasShape, ArrowShape>;
   return { x: s.x, y: s.y, width: s.width, height: s.height };
@@ -74,17 +88,17 @@ export function isBoundEndpoint(endpoint: ArrowEndpoint): endpoint is { shapeId:
   return "shapeId" in endpoint;
 }
 
-export function resolveArrowEndpoint(doc: CanvasDocument, endpoint: ArrowEndpoint): { x: number; y: number } {
+export function resolveArrowEndpoint(doc: CanvasDocument, endpoint: ArrowEndpoint): { x: number; y: number; error?: string } {
   if (!isBoundEndpoint(endpoint)) {
     return endpoint as { x: number; y: number };
   }
 
   const shape = doc.shapes.find((s) => s.id === endpoint.shapeId);
   if (!shape) {
-    return { x: 0, y: 0 };
+    return { x: 0, y: 0, error: `Arrow endpoint references missing shape "${endpoint.shapeId}"` };
   }
 
-  const bounds = getShapeBounds(shape);
+  const bounds = getShapeBounds(doc, shape);
   const anchor = endpoint.anchor ?? "center";
 
   switch (anchor) {
@@ -110,6 +124,7 @@ export function generateShapeId(prefix = "s"): string {
 export function validateFreeformRefs(doc: CanvasDocument): string[] {
   const errors: string[] = [];
   const idSet = new Set<string>();
+  const nameSet = new Set<string>();
 
   // Check for duplicate IDs
   for (const shape of doc.shapes) {
@@ -117,6 +132,13 @@ export function validateFreeformRefs(doc: CanvasDocument): string[] {
       errors.push(`Duplicate shape id: ${shape.id}`);
     }
     idSet.add(shape.id);
+
+    if (shape.name) {
+      if (nameSet.has(shape.name)) {
+        errors.push(`Duplicate shape name: ${shape.name}`);
+      }
+      nameSet.add(shape.name);
+    }
   }
 
   // Check frameId references and arrow shape references
@@ -148,4 +170,19 @@ export function validateFreeformRefs(doc: CanvasDocument): string[] {
   }
 
   return errors;
+}
+
+export const CANVAS_PALETTE: Record<string, { light: string; dark: string }> = {
+  "1": { light: "#e03131", dark: "#ff8787" },
+  "2": { light: "#e8590c", dark: "#ffa94d" },
+  "3": { light: "#f08c00", dark: "#ffd43b" },
+  "4": { light: "#2f9e44", dark: "#69db7c" },
+  "5": { light: "#1971c2", dark: "#4dabf7" },
+  "6": { light: "#9c36b5", dark: "#da77f2" },
+};
+
+export function resolveColor(value: string | undefined, theme: "light" | "dark" = "light"): string | undefined {
+  if (value === undefined) return undefined;
+  const paletteEntry = CANVAS_PALETTE[value];
+  return paletteEntry ? paletteEntry[theme] : value;
 }
