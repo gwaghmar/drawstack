@@ -108,6 +108,52 @@ per committed change. Export: falls into the existing `html-to-image` fallback f
   narrower `update_shape`. String-based `apply_patch` is explicitly the wrong tool here.
 - Both routes reuse `validateAndRepairOutput`.
 
+## STATUS (2026-08-16, end of build session) — READ THIS FIRST ON RESUME
+
+**Milestones A–J are DONE and committed on master** (commits `50fbe08`..`005502e`).
+186 unit tests green, tsc clean, build clean. D–G were click-verified in the
+browser via the `/freeform-lab` harness (drag/snap committed exact coords, frames
+adopt + carry children, zoom-space insertion exact, text editing, bound arrows).
+
+**Pushed to origin: only through milestone G** (`6181dfe`). Commits for the PDF
+fix + H + I + J are LOCAL ONLY — deliberately unpushed because pushing deploys
+production and the AI round-trip has never been tested.
+
+### Next steps, in order
+1. **AI round-trip verification (the gate for everything else).** Start the MAIN
+   repo dev server (`pnpm --filter @flowchart/web dev`, port 3040 — the lab copy
+   is stale on editor-client, don't use it for this). In the editor with
+   `diagramType=freeform` (explicit selection/URL — the intent pass deliberately
+   can't pick freeform yet): (a) generate "draw me a project kickoff board with
+   a frame, three named boxes and a sticky note" → must pass validation and
+   render; (b) in Agent Mode: "make the second box red" → `apply_ops` tool must
+   fire and apply. First-generation validation failures are prompt-quality
+   signal — fix `DIAGRAM_SYSTEM_PROMPTS.freeform`, not the validator.
+2. **Push** H+I+J (+ the PDF-export fix commit) once (1) passes.
+3. **Milestone K — remove tldraw** (own revertible commit): VERIFIED 2026-08-16
+   that the production DB has ZERO tldraw projects and ZERO tldraw share links
+   (7 projects total: 3 cloud, 2 mermaid, 2 excalidraw) → clean removal, no
+   migration needed. Remove: dep from package.json, `tldraw-renderer.tsx`, the
+   union entry + every Record entry removal un-forces, templates. Also swap
+   tldraw→freeform in the generate route's intent-pass `suggestedDiagramType`
+   prompt enum (deferred from J). Then update CLAUDE.md (stack line, type
+   table: tldraw out / freeform in, "In progress" section becomes shipped).
+4. **Deferred polish parked intentionally**: diamond renders as a plain Rect;
+   text-edit overlay ignores rotation; no freeform starter templates;
+   `resolveArrowEndpoint` anchors ignore shape rotation; freehand pen
+   (perfect-freehand) + sketchy mode (roughjs) unbuilt.
+5. **Product launch gate (unrelated to canvas)**: production signup → generate →
+   checkout funnel still never click-tested (see Launch risks below).
+
+### Hard-won implementation rules (do not relearn these)
+- ALL Konva gesture bookkeeping lives in synchronously-written refs
+  (dragStateRef/marqueeRef/arrowDraftRef/modeRef/panRef). React state read from
+  a gesture handler WILL be stale mid-burst — this shipped two real bugs.
+- Transformer: bake scale into width/height on transformend, reset scale to 1.
+- Exactly ONE Konva node per shape carries `id={shape.id}`.
+- `w-full` on the editor render-branch wrapper (flex parent collapses it to 0).
+- Browser click-testing catches what tsc+tests+build cannot — keep doing it.
+
 ## Build order (each step = one bounded Sonnet coding task; tsc + unit tests green after each)
 
 - **A. Schema upgrade + parse hardening** (L1 above) — pure lib + tests. ✅ safe on

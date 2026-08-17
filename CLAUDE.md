@@ -99,9 +99,15 @@ rebuilt drawing primitives. Excalidraw (MIT) is the codebase to mine with attrib
 tldraw is ideas-from-docs only, never code. Full plan (v2, single source of truth):
 `docs/planning/freeform-canvas-engine-plan.md`.
 
-**Status: v1 milestones 1–2 done (schema, tests, renderer with select/move/delete),
-not yet wired into the app. Next step: plan-v2 milestone A (schema upgrade + parse
-hardening — pure lib work, safe on master).**
+**Status: plan-v2 milestones A–J DONE and committed (2026-08-16)** — schema +
+ops engine (`freeform-ops.ts`) + model view (`freeform-model-view.ts`) + full
+renderer (select/drag/snap/resize/rotate/text-edit/arrows-with-binding/frames/
+zoom-pan) + AI generation wiring + `apply_ops` agent tool + app-wide wiring.
+186 unit tests green. **Pushed only through milestone G — H/I/J are local,
+unpushed, gated on the first real AI round-trip test.** Next steps, exact
+verification commands, milestone-K removal plan (production DB verified: zero
+tldraw rows → clean removal), and hard-won implementation rules are all in the
+STATUS section at the top of the build order in the plan doc. Read it first.
 - `apps/web/lib/diagrams/freeform-canvas.ts` — scene-graph schema (`CanvasDocument`/
   `CanvasShape`) + pure functions (parse/serialize/resolveArrowEndpoint/validateRefs).
 - `apps/web/lib/diagrams/freeform-canvas.test.ts` — unit tests, in `test:unit`.
