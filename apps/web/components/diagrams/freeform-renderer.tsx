@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
-import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage } from "react-konva";
+import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage, Circle as KonvaCircle } from "react-konva";
 import Konva from "konva";
 import rough from "roughjs";
 import { getStroke } from "perfect-freehand";
@@ -264,12 +264,24 @@ function getSvgPathFromStroke(stroke: number[][]): string {
   return d.join(" ");
 }
 
-function computeOrthogonalPoints(
+function computeOrthogonalSegment(
   start: { x: number; y: number },
   end: { x: number; y: number }
 ): number[] {
   const midX = Math.round((start.x + end.x) / 2);
   return [start.x, start.y, midX, start.y, midX, end.y, end.x, end.y];
+}
+
+// Applies the right-angle bend between every consecutive pair so multi-waypoint
+// arrows stay orthogonal along their whole route, not just start->end.
+function computeOrthogonalPoints(points: { x: number; y: number }[]): number[] {
+  if (points.length < 2) return points.flatMap((p) => [p.x, p.y]);
+  const out: number[] = [];
+  for (let i = 0; i + 1 < points.length; i++) {
+    const seg = computeOrthogonalSegment(points[i], points[i + 1]);
+    out.push(...(i === 0 ? seg : seg.slice(2)));
+  }
+  return out;
 }
 
 const FIXTURE_DOCUMENT: CanvasDocument = {
@@ -354,6 +366,7 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "feed_table",
   "pictogram",
   "pictogram_row",
+  "mesh_connector",
 ]);
 
 type MacroShapeNodeProps = {
@@ -517,15 +530,33 @@ function renderShape(
     const arrowShape = shape as ArrowShape;
     const { start: startPoint, end: endPoint } = resolveArrowRenderEndpoints(doc, arrowShape);
     const stroke = isSelected ? "#4f46e5" : commonProps.stroke;
+    const fullPoints = [startPoint, ...(arrowShape.waypoints ?? []), endPoint];
 
     let points: number[];
+    let tension = 0;
     if (arrowShape.routing === "orthogonal") {
-      points = computeOrthogonalPoints(startPoint, endPoint);
+      points = computeOrthogonalPoints(fullPoints);
     } else {
-      points = [startPoint.x, startPoint.y, endPoint.x, endPoint.y];
+      points = fullPoints.flatMap((p) => [p.x, p.y]);
+      if (arrowShape.routing === "curved") tension = 0.4;
     }
 
     const { x: midX, y: midY } = polylineMidpoint(points);
+
+    const junctionNodes = arrowShape.showJunctions
+      ? fullPoints.map((p, i) => (
+          <KonvaCircle
+            key={`${shape.id}-junction-${i}`}
+            x={p.x}
+            y={p.y}
+            radius={4}
+            fill="#ffffff"
+            stroke={stroke}
+            strokeWidth={1.5}
+            listening={false}
+          />
+        ))
+      : null;
 
     const arrowNode =
       shape.type === "arrow" ? (
@@ -533,6 +564,7 @@ function renderShape(
           key={shape.id}
           id={shape.id}
           points={points}
+          tension={tension}
           stroke={stroke}
           fill={stroke}
           strokeWidth={commonProps.strokeWidth}
@@ -550,6 +582,7 @@ function renderShape(
           key={shape.id}
           id={shape.id}
           points={points}
+          tension={tension}
           stroke={stroke}
           strokeWidth={commonProps.strokeWidth}
           dash={strokeDash}
@@ -588,6 +621,7 @@ function renderShape(
     return (
       <Fragment key={shape.id}>
         {arrowNode}
+        {junctionNodes}
         {labelNode}
       </Fragment>
     );

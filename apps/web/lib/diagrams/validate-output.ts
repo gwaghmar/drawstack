@@ -149,6 +149,7 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
     "dot_matrix",
     "pictogram",
     "pictogram_row",
+    "mesh_connector",
   ]),
   x: z.number(),
   y: z.number(),
@@ -178,6 +179,8 @@ const FreeformArrowShapeSchema = FreeformBaseSchema.extend({
   routing: z.enum(["straight", "curved", "orthogonal"]).optional(),
   arrowStart: z.boolean().optional(),
   arrowEnd: z.boolean().optional(),
+  waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
+  showJunctions: z.boolean().optional(),
 });
 
 const FreeformShapeSchema = z.union([FreeformSizedShapeSchema, FreeformPathShapeSchema, FreeformArrowShapeSchema]);

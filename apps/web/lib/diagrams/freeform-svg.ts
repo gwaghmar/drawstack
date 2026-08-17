@@ -23,6 +23,7 @@ import {
   type DotMatrixShape,
   type PictogramShape,
   type PictogramRowShape,
+  type MeshConnectorShape,
   resolveArrowRenderEndpoints,
   getShapeBounds,
   resolveColor,
@@ -350,6 +351,53 @@ function computeObstacleAwarePath(
   return { pathD, waypoints };
 }
 
+// Runs the obstacle-aware bend logic across every consecutive pair in a multi-point
+// route (waypoints), stitching the per-segment paths so multi-bend arrows stay orthogonal
+// along the whole route rather than only between the raw start and end.
+function computeObstacleAwarePathMulti(
+  points: { x: number; y: number }[],
+  startAnchor?: string,
+  endAnchor?: string,
+  filletRadius = 8
+): { pathD: string; waypoints: { x: number; y: number }[] } {
+  if (points.length < 2) return { pathD: "", waypoints: points };
+  let pathD = "";
+  const waypoints: { x: number; y: number }[] = [];
+  for (let i = 0; i + 1 < points.length; i++) {
+    const segStartAnchor = i === 0 ? startAnchor : undefined;
+    const segEndAnchor = i === points.length - 2 ? endAnchor : undefined;
+    const res = computeObstacleAwarePath(points[i], points[i + 1], segStartAnchor, segEndAnchor, filletRadius);
+    if (i === 0) {
+      pathD += res.pathD;
+      waypoints.push(...res.waypoints);
+    } else {
+      pathD += res.pathD.replace(/^M\s+[\d.-]+\s+[\d.-]+/, "");
+      waypoints.push(...res.waypoints.slice(1));
+    }
+  }
+  return { pathD, waypoints };
+}
+
+// Catmull-Rom through all points converted to cubic Beziers — smooth, non-self-intersecting
+// for reasonable waypoint layouts, degrades to a single "C" for the classic 2-point case.
+function computeCatmullRomPathD(points: { x: number; y: number }[]): string {
+  if (points.length === 0) return "";
+  if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
+  let d = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i - 1] ?? points[i];
+    const p1 = points[i];
+    const p2 = points[i + 1];
+    const p3 = points[i + 2] ?? p2;
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    d += ` C ${Math.round(cp1x)} ${Math.round(cp1y)}, ${Math.round(cp2x)} ${Math.round(cp2y)}, ${Math.round(p2.x)} ${Math.round(p2.y)}`;
+  }
+  return d;
+}
+
 function findBestLabelPosition(
   waypoints: { x: number; y: number }[],
   obstacles: { x: number; y: number; width: number; height: number }[]
@@ -522,14 +570,25 @@ export function freeformToSvg(
 
   const elements: string[] = [];
 
-  // Sort containers (frame, mockup, dashboard) to render first in array order
-  const sortedShapes = [...doc.shapes].sort((a, b) => {
-    const isContA = a.type === "dashboard" || a.type === "frame" || a.type === "mockup";
-    const isContB = b.type === "dashboard" || b.type === "frame" || b.type === "mockup";
-    if (isContA && !isContB) return -1;
-    if (!isContA && isContB) return 1;
-    return 0;
+  // Array order is the documented z-order contract — a container must not jump
+  // in front of unrelated shapes just because it's a container (that broke plain
+  // background rects authored before a frame). Only pull a container ahead of
+  // its OWN children when those children were authored before it in the array.
+  const earliestChildIndex = new Map<string, number>();
+  doc.shapes.forEach((s, i) => {
+    if (s.frameId && (earliestChildIndex.get(s.frameId) ?? Infinity) > i) {
+      earliestChildIndex.set(s.frameId, i);
+    }
   });
+  const sortedShapes = doc.shapes
+    .map((shape, i) => {
+      const isContainer = shape.type === "dashboard" || shape.type === "frame" || shape.type === "mockup";
+      const earliestChild = isContainer ? earliestChildIndex.get(shape.id) : undefined;
+      const key = earliestChild !== undefined && earliestChild < i ? earliestChild - 0.5 : i;
+      return { shape, key };
+    })
+    .sort((a, b) => a.key - b.key)
+    .map((entry) => entry.shape);
 
   for (const shape of sortedShapes) {
     const bounds = getShapeBounds(doc, shape);
@@ -575,22 +634,34 @@ export function freeformToSvg(
 
       const startAnchor = isBoundEndpoint(arrow.start) ? arrow.start.anchor : undefined;
       const endAnchor = isBoundEndpoint(arrow.end) ? arrow.end.anchor : undefined;
+      const fullPoints = [start, ...(arrow.waypoints ?? []), end];
 
       let pathD: string;
       let waypoints: { x: number; y: number }[] = [];
 
       if (arrow.routing === "orthogonal") {
-        const res = computeObstacleAwarePath(start, end, startAnchor, endAnchor, 8);
+        const res = computeObstacleAwarePathMulti(fullPoints, startAnchor, endAnchor, 8);
         pathD = res.pathD;
         waypoints = res.waypoints;
+      } else if (arrow.routing === "curved") {
+        pathD = computeCatmullRomPathD(fullPoints);
+        waypoints = fullPoints;
       } else {
-        pathD = `M ${start.x} ${start.y} L ${end.x} ${end.y}`;
-        waypoints = [start, end];
+        pathD = fullPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
+        waypoints = fullPoints;
       }
 
       elements.push(
         `<path d="${pathD}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" ${strokeDash} fill="none" ${markerStart} ${markerEnd} ${opacity} />`
       );
+
+      if (arrow.showJunctions) {
+        for (const p of fullPoints) {
+          elements.push(
+            `<circle cx="${p.x}" cy="${p.y}" r="4" fill="${cardBg}" stroke="${stroke}" stroke-width="1.5" ${opacity} />`
+          );
+        }
+      }
 
       if (arrow.label) {
         const bestPos = findBestLabelPosition(waypoints, obstacleBounds);
@@ -1606,6 +1677,59 @@ export function freeformToSvg(
       });
 
       elements.push(`<g ${opacity}>${stSvg}</g>`);
+      continue;
+    }
+
+    // ─── Mesh Connector (`type: "mesh_connector"`) — dense many-to-many crosshatch fan ───
+    if (shape.type === "mesh_connector") {
+      const mc = shape as MeshConnectorShape;
+      const fromCount = Math.floor(mc.fromCount ?? 0);
+      const toCount = Math.floor(mc.toCount ?? 0);
+      if (fromCount <= 0 || toCount <= 0) continue;
+
+      const orientation = mc.orientation ?? "horizontal";
+      const insetX = w * 0.1;
+      const insetY = h * 0.1;
+      const lineStroke = mc.lineColor ?? (isDark ? "#475569" : "#94a3b8");
+      const lineOpacity = mc.lineOpacity ?? 0.15;
+      const dotFill = mc.dotColor ?? textColorMuted;
+      const dotRadius = mc.dotRadius ?? 3;
+
+      const fromPoints: { x: number; y: number }[] = [];
+      const toPoints: { x: number; y: number }[] = [];
+
+      if (orientation === "vertical") {
+        for (let i = 0; i < fromCount; i++) {
+          const px = fromCount === 1 ? x + w / 2 : x + insetX + (i * (w - 2 * insetX)) / (fromCount - 1);
+          fromPoints.push({ x: px, y: y + insetY });
+        }
+        for (let i = 0; i < toCount; i++) {
+          const px = toCount === 1 ? x + w / 2 : x + insetX + (i * (w - 2 * insetX)) / (toCount - 1);
+          toPoints.push({ x: px, y: y + h - insetY });
+        }
+      } else {
+        for (let i = 0; i < fromCount; i++) {
+          const py = fromCount === 1 ? y + h / 2 : y + insetY + (i * (h - 2 * insetY)) / (fromCount - 1);
+          fromPoints.push({ x: x + insetX, y: py });
+        }
+        for (let i = 0; i < toCount; i++) {
+          const py = toCount === 1 ? y + h / 2 : y + insetY + (i * (h - 2 * insetY)) / (toCount - 1);
+          toPoints.push({ x: x + w - insetX, y: py });
+        }
+      }
+
+      const meshLines: string[] = [];
+      for (const fp of fromPoints) {
+        for (const tp of toPoints) {
+          meshLines.push(`<line x1="${fp.x.toFixed(2)}" y1="${fp.y.toFixed(2)}" x2="${tp.x.toFixed(2)}" y2="${tp.y.toFixed(2)}" stroke="${lineStroke}" stroke-width="0.6" opacity="${lineOpacity}" />`);
+        }
+      }
+      const meshDots: string[] = [];
+      for (const p of [...fromPoints, ...toPoints]) {
+        meshDots.push(`<circle cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="${dotRadius}" fill="${dotFill}" />`);
+      }
+
+      elements.push(`<g ${opacity}>${meshLines.join("")}${meshDots.join("")}</g>`);
       continue;
     }
 

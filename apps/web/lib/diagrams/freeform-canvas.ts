@@ -274,6 +274,20 @@ export type PathShape = BaseShape & {
   points: [number, number][];
 };
 
+export type MeshConnectorShape = BaseShape & {
+  type: "mesh_connector";
+  width: number;
+  height: number;
+  fromCount: number;
+  toCount: number;
+  /** horizontal (default): left edge -> right edge. vertical: top edge -> bottom edge. */
+  orientation?: "horizontal" | "vertical";
+  lineColor?: string;
+  lineOpacity?: number;
+  dotColor?: string;
+  dotRadius?: number;
+};
+
 export type PictogramShape = BaseShape & {
   type: "pictogram";
   width: number;
@@ -304,6 +318,10 @@ export type ArrowShape = BaseShape & {
   routing?: "straight" | "curved" | "orthogonal";
   arrowStart?: boolean;
   arrowEnd?: boolean;
+  /** intermediate points, in order, between resolved start and end */
+  waypoints?: { x: number; y: number }[];
+  /** draw small hollow circles at start, each waypoint, and end */
+  showJunctions?: boolean;
 };
 
 export type CanvasShape =
@@ -337,6 +355,7 @@ export type CanvasShape =
   | PathShape
   | PictogramShape
   | PictogramRowShape
+  | MeshConnectorShape
   | ArrowShape;
 
 export function createEmptyDocument(): CanvasDocument {
@@ -441,9 +460,12 @@ export function getShapeBounds(doc: CanvasDocument, shape: CanvasShape): { x: nu
   if (shape.type === "arrow" || shape.type === "line") {
     const start = resolveArrowEndpoint(doc, shape.start);
     const end = resolveArrowEndpoint(doc, shape.end);
-    const minX = Math.min(start.x, end.x);
-    const minY = Math.min(start.y, end.y);
-    return { x: minX, y: minY, width: Math.max(start.x, end.x) - minX, height: Math.max(start.y, end.y) - minY };
+    const pts = [start, end, ...(shape.waypoints ?? [])];
+    const minX = Math.min(...pts.map((p) => p.x));
+    const minY = Math.min(...pts.map((p) => p.y));
+    const maxX = Math.max(...pts.map((p) => p.x));
+    const maxY = Math.max(...pts.map((p) => p.y));
+    return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
   }
   if (shape.type === "path") {
     if (!shape.points || shape.points.length === 0) {

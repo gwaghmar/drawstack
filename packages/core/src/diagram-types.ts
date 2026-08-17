@@ -77,7 +77,8 @@ SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, 
    - "table": { "type": "table", "tableName": "users", "columns": [{"name":"id","type":"uuid","isPk":true}, {"name":"email","type":"varchar"}] }
    - "image": { "type": "image", "src": "data:image/..." | "https://...", "width": 200, "height": 150 }
    - "rectangle" | "ellipse" | "diamond" | "cylinder" | "cloud" | "sticky" | "frame"
-   - "arrow" | "line": { "start": {"shapeId":"id1","anchor":"auto"}, "end": {"shapeId":"id2","anchor":"auto"}, "routing": "orthogonal" | "curved" | "straight", "label": "..." }
+   - "arrow" | "line": { "start": {"shapeId":"id1","anchor":"auto"}, "end": {"shapeId":"id2","anchor":"auto"}, "routing": "orthogonal" | "curved" | "straight", "label": "...", "waypoints": [{"x":300,"y":150}], "showJunctions": true } — waypoints bend the connector through intermediate points; showJunctions draws small ring markers at each point — use for routed/dense diagrams with visible junctions.
+   - "mesh_connector": { "type": "mesh_connector", "width": 400, "height": 200, "fromCount": 6, "toCount": 8, "orientation": "horizontal" } — dense many-to-many crosshatch of thin lines fanning between two groups of points, with dots at each point. Use for "all X connect to all Y" visualizations, network-density motifs, decorative connection fans in system/process maps. Not for real semantic connections (those are separate arrows) — this is a visual density/relationship-field motif.
 
 RULES:
 - Every shape needs a unique "id" (short, kebab-case, e.g. "rev_chart", "step1").

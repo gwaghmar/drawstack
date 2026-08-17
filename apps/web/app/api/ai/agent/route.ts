@@ -53,6 +53,7 @@ const CanvasOpSchema = z.union([
         "dot_matrix",
         "pictogram",
         "pictogram_row",
+        "mesh_connector",
         "arrow",
         "line",
       ]),
@@ -326,6 +327,8 @@ export async function POST(req: Request) {
 You can use tools to inspect and update the diagram, its title, theme, palette, and use-case.
 The current diagram type is: ${diagramType}.
 
+All text you write for the user to read — chat replies and every tool's "explanation" field — must be plain, direct sentences: no em dashes, no filler ("certainly", "delve", "let's dive in"), no hedging, no restating the request back before answering it.
+
 ${stateContext}
 
 ${brandDirective}
@@ -570,7 +573,12 @@ ${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targe
       },
     });
 
-    return result.toUIMessageStreamResponse();
+    // Forwards real model reasoning tokens as "reasoning" message parts when the
+    // selected provider/model emits them (e.g. extended-thinking Claude, Gemini
+    // thinking, deepseek-r1). A no-op for models that don't — there is no
+    // separate "thinking" call to configure or pay for, just whether to relay
+    // what the model already produced.
+    return result.toUIMessageStreamResponse({ sendReasoning: true });
   } catch (e) {
     if (creditReserved) {
       creditReserved = false;
