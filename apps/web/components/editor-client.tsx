@@ -516,6 +516,12 @@ export function EditorClient({
   const handleFreeformChange = useCallback((next: string) => {
     if (next === sourceRef.current) return;
     recordUndo(sourceRef.current);
+    // Update the ref synchronously, not just via the `sourceRef.current = source`
+    // effect below — that effect only flushes after React commits and paints,
+    // so two canvas commits fired back-to-back (e.g. clicking two style-panel
+    // buttons in quick succession) would both read the SAME stale "previous"
+    // value and collapse into a single undo step instead of two.
+    sourceRef.current = next;
     setSource(next);
   }, [recordUndo]);
 
@@ -524,6 +530,7 @@ export function EditorClient({
   // own edits, not a collaborator's.
   const handleFreeformRemoteChange = useCallback((next: string) => {
     if (next === sourceRef.current) return;
+    sourceRef.current = next;
     setSource(next);
   }, []);
 
