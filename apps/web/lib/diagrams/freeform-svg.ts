@@ -401,6 +401,23 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       const actions = d.actions ?? [{ label: "Filters", icon: "filter" }, { label: "Download CSV" }, { label: "Ask AI" }, { label: "Dark" }];
       const banner = d.highlightBanner;
 
+      const bannerBg = banner?.variant === "emerald"
+        ? (isDark ? "rgba(16,185,129,0.15)" : "#ecfdf5")
+        : banner?.variant === "blue"
+          ? (isDark ? "rgba(2,132,199,0.15)" : "#f0f9ff")
+          : (isDark ? "rgba(244,63,94,0.15)" : "#fff1f2");
+      const bannerBorder = banner?.variant === "emerald"
+        ? (isDark ? "#10b981" : "#a7f3d0")
+        : banner?.variant === "blue"
+          ? (isDark ? "#0284c7" : "#bae6fd")
+          : (isDark ? "#f43f5e" : "#fda4af");
+      const bannerBar = banner?.variant === "emerald" ? "#059669" : banner?.variant === "blue" ? "#0284c7" : "#e11d48";
+      const bannerText = banner?.variant === "emerald"
+        ? (isDark ? "#6ee7b7" : "#047857")
+        : banner?.variant === "blue"
+          ? (isDark ? "#7dd3fc" : "#0369a1")
+          : (isDark ? "#fda4af" : "#be123c");
+
       elements.push(
         `<g ${opacity}>
           <!-- Dashboard Top Navigation Bar -->
@@ -428,16 +445,51 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
           <!-- Highlight Banner Callout -->
           ${banner ? `
           <g transform="translate(${x + 16}, ${y + 92})">
-            <rect x="0" y="0" width="${w - 32}" height="32" rx="6" fill="${isDark ? "rgba(244,63,94,0.15)" : "#fff1f2"}" stroke="${isDark ? "#f43f5e" : "#fda4af"}" stroke-width="1" />
-            <line x1="0" y1="0" x2="0" y2="32" stroke="#e11d48" stroke-width="4" />
-            <text x="14" y="20" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="${isDark ? "#fda4af" : "#be123c"}">${escapeXml(banner.text)}</text>
+            <rect x="0" y="0" width="${w - 32}" height="32" rx="6" fill="${bannerBg}" stroke="${bannerBorder}" stroke-width="1" />
+            <line x1="0" y1="0" x2="0" y2="32" stroke="${bannerBar}" stroke-width="4" />
+            <text x="14" y="20" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="${bannerText}">${escapeXml(banner.text)}</text>
           </g>` : ""}
         </g>`
       );
       continue;
     }
 
-    // ─── 2. Metric / KPI Stat Card (`type: "metric"`) ────────────────────────
+    // ─── 2. Device / Browser / Mobile Mockup (`type: "mockup"`) ──────────────
+    if (shape.type === "mockup") {
+      const m = shape as MockupShape;
+      const rx = m.cornerRadius ?? (m.mockupType === "mobile" ? 36 : 14);
+
+      if (m.mockupType === "mobile") {
+        elements.push(
+          `<g ${shadowFilter} ${opacity}>
+            <!-- Phone Chassis -->
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${cardBg}" stroke="${stroke}" stroke-width="3" />
+            <!-- Dynamic Island Notch -->
+            <rect x="${x + w / 2 - 45}" y="${y + 12}" width="90" height="22" rx="11" fill="#000000" />
+            <!-- Bottom Home Bar -->
+            <rect x="${x + w / 2 - 50}" y="${y + h - 14}" width="100" height="4" rx="2" fill="${isDark ? "#475569" : "#cbd5e1"}" />
+          </g>`
+        );
+      } else {
+        const urlText = m.url ?? "https://app.drawstack.io/analytics";
+        elements.push(
+          `<g ${shadowFilter} ${opacity}>
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
+            <rect x="${x}" y="${y}" width="${w}" height="38" rx="${rx}" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
+            <rect x="${x}" y="${y + 26}" width="${w}" height="12" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
+            <line x1="${x}" y1="${y + 38}" x2="${x + w}" y2="${y + 38}" stroke="${isDark ? "#334155" : "#e2e8f0"}" stroke-width="1" />
+            <circle cx="${x + 18}" cy="${y + 19}" r="5" fill="#ff5f56" />
+            <circle cx="${x + 34}" cy="${y + 19}" r="5" fill="#ffbd2e" />
+            <circle cx="${x + 50}" cy="${y + 19}" r="5" fill="#27c93f" />
+            <rect x="${x + 72}" y="${y + 8}" width="${Math.min(w - 144, 280)}" height="22" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1" />
+            <text x="${x + 82}" y="${y + 23}" font-family="'JetBrains Mono', Inter, monospace" font-size="10" font-weight="500" fill="${textColorMuted}">${escapeXml(urlText)}</text>
+          </g>`
+        );
+      }
+      continue;
+    }
+
+    // ─── 3. Metric / KPI Stat Card (`type: "metric"`) ────────────────────────
     if (shape.type === "metric") {
       const m = shape as MetricShape;
       const deltaColor = m.deltaDirection === "down" ? "#ef4444" : "#10b981";

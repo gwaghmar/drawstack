@@ -1,0 +1,781 @@
+import fs from "node:fs";
+import path from "node:path";
+import { freeformToSvg } from "../lib/diagrams/freeform-svg.ts";
+import type { CanvasDocument } from "../lib/diagrams/freeform-canvas.ts";
+
+const ARTIFACT_DIR = "/Users/redforman/.gemini/antigravity/brain/7cb2b6fa-3312-4321-a25d-6ede85631a3c/test_suite";
+if (!fs.existsSync(ARTIFACT_DIR)) {
+  fs.mkdirSync(ARTIFACT_DIR, { recursive: true });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 1: SaaS Financial & User Growth Dashboard (Dark Theme)
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_1_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "dash_shell_1",
+      type: "dashboard",
+      title: "Linear SaaS Metrics",
+      subtitle: "Executive Summary · Q3 Live Telemetry",
+      badge: "ARR $12.4M",
+      tabs: [{ label: "Overview", active: true }, { label: "Revenue" }, { label: "Retention" }],
+      actions: [{ label: "Filter" }, { label: "Export" }],
+      highlightBanner: { text: "Net Revenue Retention at 134%. Customer Acquisition Cost dropped 14% this quarter.", variant: "emerald" },
+      x: 20,
+      y: 20,
+      width: 1240,
+      height: 720,
+    },
+    {
+      id: "kpi_arr",
+      type: "metric",
+      parentId: "dash_shell_1",
+      label: "Annual Recurring Revenue",
+      value: "$12,450,000",
+      delta: "+34.2% YoY",
+      deltaDirection: "up",
+      sparkline: [15, 22, 28, 36, 44, 58, 72, 85],
+      icon: "activity",
+      x: 40,
+      y: 150,
+      width: 270,
+      height: 110,
+    },
+    {
+      id: "kpi_cac",
+      type: "metric",
+      parentId: "dash_shell_1",
+      label: "Blended CAC",
+      value: "$420",
+      delta: "-14.1% MoM",
+      deltaDirection: "up",
+      sparkline: [65, 58, 54, 49, 46, 44, 42, 40],
+      icon: "activity",
+      x: 330,
+      y: 150,
+      width: 270,
+      height: 110,
+    },
+    {
+      id: "kpi_nrr",
+      type: "metric",
+      parentId: "dash_shell_1",
+      label: "Net Revenue Retention",
+      value: "134.5%",
+      delta: "+4.5% vs Plan",
+      deltaDirection: "up",
+      sparkline: [120, 122, 125, 128, 130, 131, 133, 134.5],
+      icon: "shield",
+      x: 620,
+      y: 150,
+      width: 270,
+      height: 110,
+    },
+    {
+      id: "kpi_ltv",
+      type: "metric",
+      parentId: "dash_shell_1",
+      label: "LTV / CAC Ratio",
+      value: "5.8x",
+      delta: "Top Quartile",
+      deltaDirection: "up",
+      sparkline: [4.2, 4.5, 4.8, 5.0, 5.2, 5.5, 5.6, 5.8],
+      icon: "activity",
+      x: 910,
+      y: 150,
+      width: 330,
+      height: 110,
+    },
+    {
+      id: "chart_rev_mix",
+      type: "chart",
+      parentId: "dash_shell_1",
+      title: "Revenue by Plan Mix",
+      subtitle: "Enterprise vs Pro vs Starter Tier",
+      chartType: "donut",
+      donutData: [
+        { label: "Enterprise", value: "$7.2M", percent: 58, color: "#6366f1" },
+        { label: "Pro Team", value: "$3.8M", percent: 31, color: "#06b6d4" },
+        { label: "Starter", value: "$1.4M", percent: 11, color: "#10b981" },
+      ],
+      centerLabel: { primary: "$12.4M", secondary: "Total ARR" },
+      x: 40,
+      y: 280,
+      width: 560,
+      height: 380,
+    },
+    {
+      id: "chart_quarterly_growth",
+      type: "chart",
+      parentId: "dash_shell_1",
+      title: "Quarterly Revenue Growth ($M)",
+      subtitle: "Reported vs Budgeted Target",
+      chartType: "grouped_bar",
+      groupedData: [
+        { category: "Q1", series: [{ name: "Actual", value: 2.4, color: "#6366f1", formatted: "$2.4M" }, { name: "Budget", value: 2.2, color: "#475569", formatted: "$2.2M" }] },
+        { category: "Q2", series: [{ name: "Actual", value: 2.9, color: "#6366f1", formatted: "$2.9M" }, { name: "Budget", value: 2.7, color: "#475569", formatted: "$2.7M" }] },
+        { category: "Q3", series: [{ name: "Actual", value: 3.4, color: "#6366f1", formatted: "$3.4M" }, { name: "Budget", value: 3.1, color: "#475569", formatted: "$3.1M" }] },
+        { category: "Q4E", series: [{ name: "Estimated", value: 3.8, color: "#f59e0b", formatted: "$3.8M", isEstimate: true }, { name: "Budget", value: 3.5, color: "#475569", formatted: "$3.5M" }] },
+      ],
+      x: 620,
+      y: 280,
+      width: 620,
+      height: 380,
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 2: High-Density Cloud & Microservices Mesh
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_2_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "frame_ingress",
+      type: "frame",
+      name: "Global Edge & Ingress Layer",
+      x: 30,
+      y: 30,
+      width: 320,
+      height: 480,
+    },
+    {
+      id: "cf_edge",
+      type: "card",
+      frameId: "frame_ingress",
+      icon: "cloudflare",
+      stroke: "#f38020",
+      badge: { text: "CDN EDGE", bg: "rgba(243,128,32,0.2)", color: "#f38020" },
+      title: "Cloudflare Edge",
+      subtitle: "DDoS Mitigation & WAF",
+      metadata: [{ label: "Global PoPs", value: "320+" }, { label: "SSL Handshake", value: "8ms" }],
+      x: 50,
+      y: 80,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "k8s_gateway",
+      type: "card",
+      frameId: "frame_ingress",
+      icon: "k8s",
+      stroke: "#326ce5",
+      badge: { text: "GATEWAY", bg: "rgba(50,108,229,0.2)", color: "#326ce5" },
+      title: "Envoy API Gateway",
+      subtitle: "Rate Limiting & Auth JWT",
+      metadata: [{ label: "Active Replicas", value: "16 pods" }, { label: "Throughput", value: "45k rps" }],
+      x: 50,
+      y: 280,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "frame_compute",
+      type: "frame",
+      name: "Core Services Cluster (EKS)",
+      x: 410,
+      y: 30,
+      width: 340,
+      height: 480,
+    },
+    {
+      id: "auth_service",
+      type: "card",
+      frameId: "frame_compute",
+      icon: "openai",
+      stroke: "#10a37f",
+      badge: { text: "SERVICE", bg: "rgba(16,163,127,0.2)", color: "#10a37f" },
+      title: "AI Orchestrator",
+      subtitle: "Subagent Execution Mesh",
+      metadata: [{ label: "Concurrency", value: "500 ops" }, { label: "p99 Latency", value: "12ms" }],
+      x: 440,
+      y: 80,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "billing_service",
+      type: "card",
+      frameId: "frame_compute",
+      icon: "stripe",
+      stroke: "#635bff",
+      badge: { text: "PAYMENTS", bg: "rgba(99,91,255,0.2)", color: "#635bff" },
+      title: "Stripe Billing Worker",
+      subtitle: "Metered Invoicing Engine",
+      metadata: [{ label: "Webhook Lag", value: "sub-10ms" }, { label: "Retry Rate", value: "0.01%" }],
+      x: 440,
+      y: 280,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "frame_data",
+      type: "frame",
+      name: "Persistence & Event Streams",
+      x: 810,
+      y: 30,
+      width: 340,
+      height: 480,
+    },
+    {
+      id: "kafka_stream",
+      type: "card",
+      frameId: "frame_data",
+      icon: "kafka",
+      stroke: "#231f20",
+      badge: { text: "EVENT BUS", bg: "rgba(100,116,139,0.2)", color: "#94a3b8" },
+      title: "Kafka Event Bus",
+      subtitle: "3-Broker Confluent Cluster",
+      metadata: [{ label: "Partition Lag", value: "0 ms" }, { label: "Topic Ingest", value: "1.2 GB/s" }],
+      x: 840,
+      y: 80,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "pg_cluster",
+      type: "card",
+      frameId: "frame_data",
+      icon: "postgres",
+      stroke: "#336791",
+      badge: { text: "DATABASE", bg: "rgba(51,103,145,0.2)", color: "#336791" },
+      title: "Neon Postgres Primary",
+      subtitle: "Autoscaling Multi-AZ Pool",
+      metadata: [{ label: "Pool Size", value: "128 conns" }, { label: "Read Replica", value: "2 standby" }],
+      x: 840,
+      y: 280,
+      width: 280,
+      height: 140,
+    },
+    // Connectors
+    { id: "e1", type: "arrow", start: { shapeId: "cf_edge", anchor: "bottom" }, end: { shapeId: "k8s_gateway", anchor: "top" }, routing: "orthogonal", label: "Encrypted Ingress" },
+    { id: "e2", type: "arrow", start: { shapeId: "k8s_gateway", anchor: "right" }, end: { shapeId: "auth_service", anchor: "left" }, routing: "orthogonal", label: "Route Task" },
+    { id: "e3", type: "arrow", start: { shapeId: "k8s_gateway", anchor: "right" }, end: { shapeId: "billing_service", anchor: "left" }, routing: "orthogonal", label: "Verify Token" },
+    { id: "e4", type: "arrow", start: { shapeId: "auth_service", anchor: "right" }, end: { shapeId: "kafka_stream", anchor: "left" }, routing: "orthogonal", label: "Emit Telemetry" },
+    { id: "e5", type: "arrow", start: { shapeId: "billing_service", anchor: "right" }, end: { shapeId: "pg_cluster", anchor: "left" }, routing: "orthogonal", label: "Debit Ledger" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 3: Complex Multi-Table Database Schema ERD
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_3_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "users_table",
+      type: "table",
+      tableName: "users",
+      stroke: "#336791",
+      headerBg: "#0c4a6e",
+      columns: [
+        { name: "id", type: "uuid", isPk: true },
+        { name: "email", type: "varchar(255)" },
+        { name: "full_name", type: "varchar(100)" },
+        { name: "tier", type: "enum('pro','ent')" },
+        { name: "created_at", type: "timestamptz" },
+      ],
+      x: 50,
+      y: 50,
+      width: 280,
+      height: 180,
+    },
+    {
+      id: "workspaces_table",
+      type: "table",
+      tableName: "workspaces",
+      stroke: "#336791",
+      headerBg: "#0c4a6e",
+      columns: [
+        { name: "id", type: "uuid", isPk: true },
+        { name: "owner_id", type: "uuid", isFk: true },
+        { name: "slug", type: "varchar(64)" },
+        { name: "settings", type: "jsonb" },
+      ],
+      x: 420,
+      y: 50,
+      width: 280,
+      height: 160,
+    },
+    {
+      id: "projects_table",
+      type: "table",
+      tableName: "projects",
+      stroke: "#336791",
+      headerBg: "#0c4a6e",
+      columns: [
+        { name: "id", type: "uuid", isPk: true },
+        { name: "workspace_id", type: "uuid", isFk: true },
+        { name: "title", type: "varchar(128)" },
+        { name: "scene_graph", type: "jsonb" },
+        { name: "updated_at", type: "timestamptz" },
+      ],
+      x: 790,
+      y: 50,
+      width: 300,
+      height: 180,
+    },
+    {
+      id: "invoices_table",
+      type: "table",
+      tableName: "invoices",
+      stroke: "#635bff",
+      headerBg: "#1e1b4b",
+      columns: [
+        { name: "id", type: "uuid", isPk: true },
+        { name: "user_id", type: "uuid", isFk: true },
+        { name: "amount_cents", type: "int8" },
+        { name: "status", type: "varchar(32)" },
+      ],
+      x: 50,
+      y: 320,
+      width: 280,
+      height: 160,
+    },
+    {
+      id: "agent_runs_table",
+      type: "table",
+      tableName: "agent_executions",
+      stroke: "#10a37f",
+      headerBg: "#022c22",
+      columns: [
+        { name: "id", type: "uuid", isPk: true },
+        { name: "project_id", type: "uuid", isFk: true },
+        { name: "model_name", type: "varchar(64)" },
+        { name: "tokens_used", type: "int4" },
+        { name: "duration_ms", type: "int4" },
+      ],
+      x: 790,
+      y: 320,
+      width: 300,
+      height: 180,
+    },
+    // Foreign Key Relationships
+    { id: "fk1", type: "arrow", start: { shapeId: "users_table", anchor: "right" }, end: { shapeId: "workspaces_table", anchor: "left" }, routing: "orthogonal", label: "1:N Owner" },
+    { id: "fk2", type: "arrow", start: { shapeId: "workspaces_table", anchor: "right" }, end: { shapeId: "projects_table", anchor: "left" }, routing: "orthogonal", label: "1:N Documents" },
+    { id: "fk3", type: "arrow", start: { shapeId: "users_table", anchor: "bottom" }, end: { shapeId: "invoices_table", anchor: "top" }, routing: "orthogonal", label: "1:N Invoicing" },
+    { id: "fk4", type: "arrow", start: { shapeId: "projects_table", anchor: "bottom" }, end: { shapeId: "agent_runs_table", anchor: "top" }, routing: "orthogonal", label: "1:N Agent Runs" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 4: Multi-Stage Sales & Conversion Funnel
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_4_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "funnel_header",
+      type: "dashboard",
+      title: "Conversion Funnel Analysis",
+      subtitle: "Q3 Acquisition & Enterprise Pipeline Velocity",
+      badge: "Conversion Rate 4.2%",
+      x: 20,
+      y: 20,
+      width: 1100,
+      height: 600,
+    },
+    {
+      id: "funnel_bars",
+      type: "chart",
+      parentId: "funnel_header",
+      title: "Funnel Stage Drop-off ($ Values & Volume)",
+      subtitle: "Unique Visitors to Signed Enterprise Contracts",
+      chartType: "horizontal_bar",
+      data: [
+        { label: "1. Website Visitors (450,000)", value: 100, color: "#3b82f6" },
+        { label: "2. Signups / Free Tier (38,200)", value: 72, color: "#06b6d4" },
+        { label: "3. Activated Canvas (19,400)", value: 48, color: "#10b981" },
+        { label: "4. Sales Qualified Leads (2,100)", value: 24, color: "#f59e0b" },
+        { label: "5. Closed Enterprise (420)", value: 12, color: "#8b5cf6" },
+      ],
+      x: 50,
+      y: 140,
+      width: 600,
+      height: 400,
+    },
+    {
+      id: "funnel_stats",
+      type: "feed_table",
+      parentId: "funnel_header",
+      title: "Stage Velocity & Conversion Milestones",
+      subtitle: "Benchmark vs Top 10% B2B SaaS",
+      rows: [
+        { date: "Top of Funnel", event: "Visitor to Signup Rate: 8.5%", amount: "Top 5%", amountColor: "#10b981" },
+        { date: "Activation", event: "Signup to Active Canvas: 50.8%", amount: "+12% YoY", amountColor: "#10b981" },
+        { date: "PQL Trigger", event: "AI Agent Ops > 50 runs / user", amount: "Strong", amountColor: "#3b82f6" },
+        { date: "Sales Cycle", event: "Average Deal Length: 18 days", amount: "-6 days", amountColor: "#10b981" },
+        { date: "ACV Average", event: "Enterprise Contract: $28,500/yr", amount: "$28.5k", amountColor: "#8b5cf6" },
+      ],
+      x: 680,
+      y: 140,
+      width: 420,
+      height: 400,
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 5: Swiss Minimalist Graphic Strategy Mindmap
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_5_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "swiss_map_5",
+      type: "mindmap",
+      title: "Strategic Brand Identity Framework",
+      x: 30,
+      y: 30,
+      width: 560,
+      height: 980,
+      steps: [
+        { number: "01", title: "Brand Identity", subtitle: "core purpose", isTerminal: true },
+        {
+          number: "02",
+          title: "Visual Dimensions",
+          branches: [
+            { side: "left", text: "typography" },
+            { side: "right", text: "color system" },
+            { side: "left", text: "spatial grid" },
+            { side: "right", text: "motion curves" },
+            { side: "left", text: "physical depth" },
+            { side: "right", text: "iconography" },
+          ],
+        },
+        {
+          number: "03",
+          title: "Audience Intersection",
+          vennNodes: [
+            { label: "functional\nutility", callout: "Does it accelerate productivity?" },
+            { label: "emotional\ndelight", callout: "Does it feel magical & alive?" },
+          ],
+        },
+        { number: "04", title: "Execution Paradigm", isTerminal: true },
+        { number: "05", title: "Delivery Phases", pills: ["wireframe concept", "interactive test", "launch to global master"] },
+      ],
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 6: Editorial Serpentine S-Curve Product Roadmap
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_6_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "scurve_roadmap",
+      type: "scurve_timeline",
+      title: "Strategic Engineering Roadmap",
+      subtitle: "2026 PRODUCT VISION",
+      strokeColor: "#2c5282",
+      x: 30,
+      y: 30,
+      width: 740,
+      height: 960,
+      hasSilhouette: true,
+      steps: [
+        { stepNumber: "01", title: "Custom Canvas Core", description: "Declarative AST scene graph engine with sub-millisecond patch ops.\nZero third-party commercial drawing dependencies.", hubColor: "#cf3c2e" },
+        { stepNumber: "02", title: "Multimodal AI Agents", description: "Two-pass intent planning and tool-calling execution loops.\nDirect streaming updates without canvas reloads.", hubColor: "#cf3c2e" },
+        { stepNumber: "03", title: "Executive Dashboards", description: "Apple-grade financial tables, grouped bar charts, and donut mix.\nHigh-contrast obsidian and clean light modes.", hubColor: "#cf3c2e" },
+        { stepNumber: "04", title: "Enterprise Multiplayer", description: "CRDT-backed real-time multi-cursor collaboration.\nInstant vector SVG export and PDF document generation.", hubColor: "#cf3c2e" },
+      ],
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 7: 3D Isometric Cloud Platform Architecture
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_7_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "iso_platform",
+      type: "isometric_block",
+      title: "Autonomous Agent Cloud Architecture",
+      subtitle: "3D DISTRIBUTED EXECUTION MESH",
+      baseColor: "#e11d48",
+      x: 30,
+      y: 30,
+      width: 820,
+      height: 740,
+      hasSilhouette: true,
+      callouts: [
+        { number: "01", title: "Edge Gateway Tier", description: "Global Anycast DNS and WebAssembly worker sandboxes.\nInstant token authentication and rate limiting.", side: "left" },
+        { number: "02", title: "LLM Orchestrator Layer", description: "Parallel tool calling and recursive subagent decomposition.\nStreaming live state changes directly to the canvas.", side: "right" },
+        { number: "03", title: "Persistence & Vector Store", description: "Neon serverless Postgres with pgvector similarity indexing.\nImmutable scene graph snapshotting.", side: "right" },
+      ],
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 8: Mobile Wireframe & Interactive Screen Mockup
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_8_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "mobile_chrome",
+      type: "mockup",
+      mockupType: "mobile",
+      title: "Drawstack Mobile",
+      url: "drawstack.app/feed",
+      x: 50,
+      y: 30,
+      width: 380,
+      height: 700,
+      cornerRadius: 32,
+    },
+    {
+      id: "mobile_card_1",
+      type: "card",
+      parentId: "mobile_chrome",
+      icon: "activity",
+      stroke: "#6366f1",
+      title: "Daily Generation Run",
+      subtitle: "Completed in 420ms",
+      badge: { text: "SUCCESS", bg: "#dcfce7", color: "#15803d" },
+      metadata: [{ label: "Shapes Added", value: "+14 nodes" }],
+      x: 75,
+      y: 100,
+      width: 330,
+      height: 120,
+    },
+    {
+      id: "mobile_chart",
+      type: "chart",
+      parentId: "mobile_chrome",
+      title: "Hourly Token Usage",
+      chartType: "area",
+      data: [{ label: "08h", value: 20 }, { label: "12h", value: 65 }, { label: "16h", value: 85 }, { label: "20h", value: 40 }],
+      x: 75,
+      y: 240,
+      width: 330,
+      height: 200,
+    },
+    {
+      id: "mobile_table",
+      type: "feed_table",
+      parentId: "mobile_chrome",
+      title: "Recent Ops Stream",
+      rows: [
+        { date: "12:04", event: "Added 'users' schema table", amount: "+op" },
+        { date: "12:05", event: "Connected orthogonal link", amount: "+link" },
+        { date: "12:06", event: "Exported SVG high-res", amount: "2.4MB" },
+      ],
+      x: 75,
+      y: 460,
+      width: 330,
+      height: 220,
+    },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 9: Incident Response & Automated Failover Decision Tree
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_9_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "inc_start",
+      type: "card",
+      icon: "shield",
+      stroke: "#ef4444",
+      badge: { text: "P0 TRIGGER", bg: "#fee2e2", color: "#b91c1c" },
+      title: "Alert: p99 Latency > 200ms",
+      subtitle: "Synthetics Alert from Global Edge",
+      metadata: [{ label: "Error Rate", value: "2.4%" }, { label: "Affected Region", value: "us-east-1" }],
+      x: 400,
+      y: 40,
+      width: 300,
+      height: 140,
+    },
+    {
+      id: "dec_db_check",
+      type: "diamond",
+      x: 450,
+      y: 230,
+      width: 200,
+      height: 120,
+      fill: "2",
+      text: { content: "Database Pool\nExhausted?", bold: true, fontSize: 12 },
+    },
+    {
+      id: "act_autoscale_db",
+      type: "card",
+      icon: "postgres",
+      stroke: "#f59e0b",
+      badge: { text: "AUTOSCALE", bg: "#fef3c7", color: "#b45309" },
+      title: "Provision Read Replica",
+      subtitle: "Scale connection pool to 256",
+      metadata: [{ label: "Action Time", value: "45 sec" }],
+      x: 100,
+      y: 400,
+      width: 280,
+      height: 120,
+    },
+    {
+      id: "act_reroute_traffic",
+      type: "card",
+      icon: "cloudflare",
+      stroke: "#06b6d4",
+      badge: { text: "FAILOVER", bg: "#e0f2fe", color: "#0369a1" },
+      title: "Failover Traffic to us-west-2",
+      subtitle: "BGP Anycast Route Shift",
+      metadata: [{ label: "Convergence", value: "3.2 sec" }],
+      x: 720,
+      y: 400,
+      width: 280,
+      height: 120,
+    },
+    {
+      id: "inc_resolved",
+      type: "card",
+      icon: "activity",
+      stroke: "#10b981",
+      badge: { text: "RESOLVED", bg: "#d1fae5", color: "#047857" },
+      title: "System Normalized SLA",
+      subtitle: "Latency returned to 1.4ms",
+      metadata: [{ label: "Total Downtime", value: "0 sec (Zero Drop)" }],
+      x: 400,
+      y: 570,
+      width: 300,
+      height: 120,
+    },
+    // Links
+    { id: "l1", type: "arrow", start: { shapeId: "inc_start", anchor: "bottom" }, end: { shapeId: "dec_db_check", anchor: "top" }, routing: "orthogonal", label: "Evaluate" },
+    { id: "l2", type: "arrow", start: { shapeId: "dec_db_check", anchor: "left" }, end: { shapeId: "act_autoscale_db", anchor: "top" }, routing: "orthogonal", label: "Yes (Pool Full)" },
+    { id: "l3", type: "arrow", start: { shapeId: "dec_db_check", anchor: "right" }, end: { shapeId: "act_reroute_traffic", anchor: "top" }, routing: "orthogonal", label: "No (Regional Outage)" },
+    { id: "l4", type: "arrow", start: { shapeId: "act_autoscale_db", anchor: "bottom" }, end: { shapeId: "inc_resolved", anchor: "left" }, routing: "orthogonal", label: "Pool Verified" },
+    { id: "l5", type: "arrow", start: { shapeId: "act_reroute_traffic", anchor: "bottom" }, end: { shapeId: "inc_resolved", anchor: "right" }, routing: "orthogonal", label: "Traffic Stabilized" },
+  ],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEST 10: Global Multi-Region Payment Settlement Flow
+// ─────────────────────────────────────────────────────────────────────────────
+const TEST_10_DOC: CanvasDocument = {
+  version: 1,
+  renderMode: "clean",
+  shapes: [
+    {
+      id: "card_merchant",
+      type: "card",
+      icon: "stripe",
+      stroke: "#635bff",
+      badge: { text: "MERCHANT", bg: "#eef2ff", color: "#4338ca" },
+      title: "Global E-Commerce Store",
+      subtitle: "Checkout Session Init",
+      metadata: [{ label: "Currencies", value: "135+ Supported" }, { label: "Fraud Check", value: "Radar AI" }],
+      x: 40,
+      y: 80,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "card_gateway",
+      type: "card",
+      icon: "activity",
+      stroke: "#06b6d4",
+      badge: { text: "SETTLEMENT", bg: "#e0f2fe", color: "#0369a1" },
+      title: "Stripe Treasury Core",
+      subtitle: "Instant Multi-Currency Ledger",
+      metadata: [{ label: "Clearing Time", value: "Instant" }, { label: "Reserve Pool", value: "$50M Tier 1" }],
+      x: 420,
+      y: 80,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "card_banking",
+      type: "card",
+      icon: "shield",
+      stroke: "#10b981",
+      badge: { text: "CENTRAL BANK", bg: "#d1fae5", color: "#047857" },
+      title: "Federal Reserve FedNow",
+      subtitle: "Real-Time Gross Settlement",
+      metadata: [{ label: "Finality", value: "200ms irrevocable" }],
+      x: 800,
+      y: 80,
+      width: 280,
+      height: 140,
+    },
+    {
+      id: "table_settlement_ledger",
+      type: "table",
+      tableName: "payment_settlement_ledger",
+      stroke: "#336791",
+      headerBg: "#0c4a6e",
+      columns: [
+        { name: "tx_id", type: "uuid", isPk: true },
+        { name: "source_currency", type: "varchar(3)" },
+        { name: "dest_currency", type: "varchar(3)" },
+        { name: "exchange_rate", type: "numeric(10,6)" },
+        { name: "settled_amount", type: "numeric(12,2)" },
+        { name: "status", type: "varchar(16)" },
+      ],
+      x: 220,
+      y: 290,
+      width: 480,
+      height: 200,
+    },
+    {
+      id: "metric_daily_vol",
+      type: "metric",
+      label: "Daily Settlement Volume",
+      value: "$84,290,000",
+      delta: "+18.4% vs Avg",
+      deltaDirection: "up",
+      sparkline: [40, 52, 60, 68, 72, 79, 81, 84.2],
+      icon: "activity",
+      x: 740,
+      y: 290,
+      width: 340,
+      height: 120,
+    },
+    // Orthogonal links
+    { id: "pl1", type: "arrow", start: { shapeId: "card_merchant", anchor: "right" }, end: { shapeId: "card_gateway", anchor: "left" }, routing: "orthogonal", label: "Submit Charge" },
+    { id: "pl2", type: "arrow", start: { shapeId: "card_gateway", anchor: "right" }, end: { shapeId: "card_banking", anchor: "left" }, routing: "orthogonal", label: "FedNow ACH" },
+    { id: "pl3", type: "arrow", start: { shapeId: "card_gateway", anchor: "bottom" }, end: { shapeId: "table_settlement_ledger", anchor: "top" }, routing: "orthogonal", label: "Record Ledger" },
+    { id: "pl4", type: "arrow", start: { shapeId: "table_settlement_ledger", anchor: "right" }, end: { shapeId: "metric_daily_vol", anchor: "left" }, routing: "orthogonal", label: "Aggregate" },
+  ],
+};
+
+// ─── EXECUTE ALL 10 TESTS ────────────────────────────────────────────────────
+const tests = [
+  { name: "test_01_saas_metrics_dashboard", doc: TEST_1_DOC, theme: "dark" as const },
+  { name: "test_02_cloud_microservices_mesh", doc: TEST_2_DOC, theme: "dark" as const },
+  { name: "test_03_database_schema_erd", doc: TEST_3_DOC, theme: "dark" as const },
+  { name: "test_04_sales_conversion_funnel", doc: TEST_4_DOC, theme: "light" as const },
+  { name: "test_05_swiss_brand_mindmap", doc: TEST_5_DOC, theme: "light" as const },
+  { name: "test_06_editorial_scurve_roadmap", doc: TEST_6_DOC, theme: "editorial" as const },
+  { name: "test_07_isometric_agent_cloud", doc: TEST_7_DOC, theme: "editorial" as const },
+  { name: "test_08_mobile_app_mockup", doc: TEST_8_DOC, theme: "light" as const },
+  { name: "test_09_incident_decision_tree", doc: TEST_9_DOC, theme: "light" as const },
+  { name: "test_10_global_payment_settlement", doc: TEST_10_DOC, theme: "light" as const },
+];
+
+console.log(`Starting 10 Comprehensive High-Fidelity Canvas Tests...`);
+tests.forEach((t, i) => {
+  const svg = freeformToSvg(t.doc, { theme: t.theme });
+  const out = path.join(ARTIFACT_DIR, `${t.name}.svg`);
+  fs.writeFileSync(out, svg, "utf-8");
+  console.log(`[PASS] Test ${i + 1}/10: Rendered ${t.name}.svg (Theme: ${t.theme})`);
+});
+console.log(`\nAll 10 tests rendered to: ${ARTIFACT_DIR}`);
