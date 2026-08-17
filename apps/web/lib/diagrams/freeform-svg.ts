@@ -30,6 +30,13 @@ import {
   isBoundEndpoint,
 } from "./freeform-canvas.ts";
 import { getStroke } from "perfect-freehand";
+import {
+  hasRichTextMarkers,
+  layoutRichTextLines,
+  measureRunWidth,
+  RICH_TEXT_HIGHLIGHT_FILL,
+  RICH_TEXT_HIGHLIGHT_OPACITY,
+} from "./rich-text.ts";
 
 function getSvgPathFromStroke(stroke: number[][]): string {
   if (!stroke.length) return "";
@@ -2007,35 +2014,72 @@ export function freeformToSvg(
       const approxCharW = fontSize * (shape.text.bold ? 0.58 : 0.55);
       const maxChars = Math.max(4, Math.floor(availW / approxCharW));
       const noWrap = shape.text.wrap === false;
-      const lines = shape.text.content.split("\n").flatMap((raw) => {
-        if (noWrap || raw.length <= maxChars) return [raw];
-        const words = raw.split(" ");
-        const out: string[] = [];
-        let cur = "";
-        for (const word of words) {
-          const candidate = cur ? `${cur} ${word}` : word;
-          if (candidate.length > maxChars && cur) {
-            out.push(cur);
-            cur = word;
-          } else {
-            cur = candidate;
+      const richText = !noWrap && hasRichTextMarkers(shape.text.content);
+
+      if (richText) {
+        const richLines = layoutRichTextLines(shape.text.content, { maxWidth: availW, fontSize, bold: shape.text.bold });
+        const lineHeight = fontSize * 1.35;
+        const totalTextHeight = richLines.length * lineHeight;
+        const yOffset = shape.type === "cylinder" ? h * 0.1 : 0;
+        const startY = y + yOffset + (h - yOffset) / 2 - totalTextHeight / 2 + fontSize * 0.85;
+
+        const tspans = richLines
+          .map((line, idx) => {
+            const lineY = Math.round(startY + idx * lineHeight);
+            const lineWidth = line.runs.reduce((sum, run) => sum + measureRunWidth(run, fontSize, shape.text?.bold), 0);
+            const lineStartX = align === "center" ? tx - lineWidth / 2 : align === "right" ? tx - lineWidth : tx;
+            let runX = lineStartX;
+            const runSpans = line.runs.map((run) => {
+              const runWidth = measureRunWidth(run, fontSize, shape.text?.bold);
+              const bold = shape.text?.bold || run.bold;
+              const italic = run.italic;
+              if (run.highlight) {
+                elements.push(
+                  `<rect x="${runX}" y="${lineY - fontSize * 0.85}" width="${runWidth}" height="${fontSize * 1.2}" fill="${RICH_TEXT_HIGHLIGHT_FILL}" opacity="${RICH_TEXT_HIGHLIGHT_OPACITY}" />`
+                );
+              }
+              const span = `<tspan x="${runX}" y="${lineY}" font-weight="${bold ? "700" : "500"}" font-style="${italic ? "italic" : "normal"}">${escapeXml(run.text)}</tspan>`;
+              runX += runWidth;
+              return span;
+            });
+            return runSpans.join("");
+          })
+          .join("");
+
+        elements.push(
+          `<text xml:space="preserve" font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" fill="${textColor}" text-anchor="start">${tspans}</text>`
+        );
+      } else {
+        const lines = shape.text.content.split("\n").flatMap((raw) => {
+          if (noWrap || raw.length <= maxChars) return [raw];
+          const words = raw.split(" ");
+          const out: string[] = [];
+          let cur = "";
+          for (const word of words) {
+            const candidate = cur ? `${cur} ${word}` : word;
+            if (candidate.length > maxChars && cur) {
+              out.push(cur);
+              cur = word;
+            } else {
+              cur = candidate;
+            }
           }
-        }
-        if (cur) out.push(cur);
-        return out;
-      });
-      const lineHeight = fontSize * 1.35;
-      const totalTextHeight = lines.length * lineHeight;
-      const yOffset = shape.type === "cylinder" ? h * 0.1 : 0;
-      const startY = y + yOffset + (h - yOffset) / 2 - totalTextHeight / 2 + fontSize * 0.85;
+          if (cur) out.push(cur);
+          return out;
+        });
+        const lineHeight = fontSize * 1.35;
+        const totalTextHeight = lines.length * lineHeight;
+        const yOffset = shape.type === "cylinder" ? h * 0.1 : 0;
+        const startY = y + yOffset + (h - yOffset) / 2 - totalTextHeight / 2 + fontSize * 0.85;
 
-      const tspans = lines
-        .map((line, idx) => `<tspan x="${tx}" y="${Math.round(startY + idx * lineHeight)}">${escapeXml(line)}</tspan>`)
-        .join("");
+        const tspans = lines
+          .map((line, idx) => `<tspan x="${tx}" y="${Math.round(startY + idx * lineHeight)}">${escapeXml(line)}</tspan>`)
+          .join("");
 
-      elements.push(
-        `<text xml:space="preserve" font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
-      );
+        elements.push(
+          `<text xml:space="preserve" font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
+        );
+      }
     }
   }
 

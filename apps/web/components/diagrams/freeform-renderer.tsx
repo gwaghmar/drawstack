@@ -110,6 +110,13 @@ import { freeformToSvg, getSvgIcon } from "@/lib/diagrams/freeform-svg";
 import { SHAPE_CATEGORIES, catalogByCategory, type ShapeCatalogEntry } from "@/lib/diagrams/freeform-shape-catalog";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
 import { YjsCanvasStore, type PeerInfo } from "@/lib/diagrams/yjs-store";
+import {
+  hasRichTextMarkers,
+  layoutRichTextLines,
+  measureRunWidth,
+  RICH_TEXT_HIGHLIGHT_FILL,
+  RICH_TEXT_HIGHLIGHT_OPACITY,
+} from "@/lib/diagrams/rich-text";
 
 type Props = {
   source: string;
@@ -213,6 +220,117 @@ function CardIcon({ name, x, y }: { name: string; x: number; y: number }) {
 
   if (!img) return null;
   return <KonvaImage image={img} x={x} y={y} width={16} height={16} listening={false} />;
+}
+
+function RichTextGroup({
+  id,
+  x,
+  y,
+  width,
+  height,
+  content,
+  fontSize,
+  fontFamily,
+  align,
+  verticalAlign,
+  bold,
+  color,
+  rotation,
+  opacity,
+  draggable,
+  listening,
+  onClick,
+  onDblClick,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  id?: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  content: string;
+  fontSize: number;
+  fontFamily: string;
+  align: "left" | "center" | "right";
+  verticalAlign: "top" | "middle";
+  bold?: boolean;
+  color: string;
+  rotation?: number;
+  opacity?: number;
+  draggable?: boolean;
+  listening?: boolean;
+  onClick?: (e: Konva.KonvaEventObject<MouseEvent>) => void;
+  onDblClick?: () => void;
+  onDragStart?: () => void;
+  onDragMove?: (e: Konva.KonvaEventObject<DragEvent>) => void;
+  onDragEnd?: () => void;
+}) {
+  const lines = layoutRichTextLines(content, { maxWidth: width, fontSize, bold });
+  const lineHeight = fontSize * 1.35;
+  const totalTextHeight = lines.length * lineHeight;
+  const startY = verticalAlign === "middle" ? Math.max(0, (height - totalTextHeight) / 2) : 0;
+
+  return (
+    <Group
+      id={id}
+      x={x}
+      y={y}
+      rotation={rotation}
+      opacity={opacity}
+      draggable={draggable}
+      listening={listening}
+      onClick={onClick}
+      onDblClick={onDblClick}
+      onDragStart={onDragStart}
+      onDragMove={onDragMove}
+      onDragEnd={onDragEnd}
+    >
+      {lines.map((line, idx) => {
+        const lineY = startY + idx * lineHeight;
+        const lineWidth = line.runs.reduce((sum, run) => sum + measureRunWidth(run, fontSize, bold), 0);
+        const lineStartX = align === "center" ? (width - lineWidth) / 2 : align === "right" ? width - lineWidth : 0;
+        let runX = lineStartX;
+        return (
+          <Fragment key={idx}>
+            {line.runs.map((run, runIdx) => {
+              const runWidth = measureRunWidth(run, fontSize, bold);
+              const runFontStyle =
+                bold || run.bold ? (run.italic ? "bold italic" : "bold") : run.italic ? "italic" : "normal";
+              const node = (
+                <Fragment key={runIdx}>
+                  {run.highlight && (
+                    <Rect
+                      x={runX}
+                      y={lineY + (lineHeight - fontSize * 1.2) / 2}
+                      width={runWidth}
+                      height={fontSize * 1.2}
+                      fill={RICH_TEXT_HIGHLIGHT_FILL}
+                      opacity={RICH_TEXT_HIGHLIGHT_OPACITY}
+                      listening={false}
+                    />
+                  )}
+                  <Text
+                    x={runX}
+                    y={lineY}
+                    text={run.text}
+                    fontSize={fontSize}
+                    fontFamily={fontFamily}
+                    fontStyle={runFontStyle}
+                    fill={color}
+                    listening={false}
+                  />
+                </Fragment>
+              );
+              runX += runWidth;
+              return node;
+            })}
+          </Fragment>
+        );
+      })}
+    </Group>
+  );
 }
 
 function stagePointFromEvent(stage: Konva.Stage | null): { x: number; y: number } | null {
@@ -1375,8 +1493,37 @@ function renderShape(
           />
         );
 
-      case "text":
+      case "text": {
         if (isEditingThis) return null;
+        const textContent = shape.text?.content ?? "";
+        const textWrap = shape.text?.wrap !== false;
+        if (textWrap && hasRichTextMarkers(textContent)) {
+          return (
+            <RichTextGroup
+              key={shape.id}
+              id={shape.id}
+              x={shape.x}
+              y={shape.y}
+              width={w}
+              height={h}
+              content={textContent}
+              fontSize={shape.text?.fontSize ?? 14}
+              fontFamily={shape.text?.fontFamily ?? "Inter, Arial, sans-serif"}
+              align={shape.text?.align ?? "left"}
+              verticalAlign="top"
+              bold={shape.text?.bold}
+              color={shape.text?.color ?? "#1e293b"}
+              rotation={commonProps.rotation}
+              opacity={commonProps.opacity}
+              draggable={draggable}
+              onClick={(e) => onShapeClick?.(e, shape.id)}
+              onDblClick={() => onShapeDblClick?.(shape.id)}
+              onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+              onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+              onDragEnd={() => onShapeDragEnd?.(shape.id)}
+            />
+          );
+        }
         return (
           <Text
             key={shape.id}
@@ -1385,7 +1532,7 @@ function renderShape(
             y={shape.y}
             width={w}
             height={h}
-            text={shape.text?.content ?? ""}
+            text={textContent}
             fontSize={shape.text?.fontSize ?? 14}
             fontFamily={shape.text?.fontFamily ?? "Inter, Arial, sans-serif"}
             wrap={shape.text?.wrap === false ? "none" : "word"}
@@ -1403,6 +1550,7 @@ function renderShape(
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
         );
+      }
 
       default:
         if (MACRO_SHAPE_TYPES.has(shape.type)) {
@@ -1440,25 +1588,47 @@ function renderShape(
   const laysOutOwnText = shape.type === "card" || shape.type === "table" || shape.type === "frame";
   if (!isEditingThis && shape.type !== "text" && !laysOutOwnText && shape.text?.content) {
     const labelBounds = getShapeBounds(doc, shape);
-    nodes.push(
-      <Text
-        key={`${shape.id}-label`}
-        x={labelBounds.x + 8}
-        y={labelBounds.y + 8}
-        width={Math.max(20, labelBounds.width - 16)}
-        height={Math.max(20, labelBounds.height - 16)}
-        text={shape.text.content}
-        fontSize={shape.text.fontSize ?? 13}
-        fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
-        wrap={shape.text.wrap === false ? "none" : "word"}
-        fill={shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#1e293b")}
-        align={shape.text.align ?? "center"}
-        verticalAlign="middle"
-        fontStyle={shape.text.bold ? "bold" : "normal"}
-        rotation={commonProps.rotation}
-        listening={false}
-      />
-    );
+    const labelWrap = shape.text.wrap !== false;
+    if (labelWrap && hasRichTextMarkers(shape.text.content)) {
+      nodes.push(
+        <RichTextGroup
+          key={`${shape.id}-label`}
+          x={labelBounds.x + 8}
+          y={labelBounds.y + 8}
+          width={Math.max(20, labelBounds.width - 16)}
+          height={Math.max(20, labelBounds.height - 16)}
+          content={shape.text.content}
+          fontSize={shape.text.fontSize ?? 13}
+          fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
+          align={shape.text.align ?? "center"}
+          verticalAlign="middle"
+          bold={shape.text.bold}
+          color={shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#1e293b")}
+          rotation={commonProps.rotation}
+          listening={false}
+        />
+      );
+    } else {
+      nodes.push(
+        <Text
+          key={`${shape.id}-label`}
+          x={labelBounds.x + 8}
+          y={labelBounds.y + 8}
+          width={Math.max(20, labelBounds.width - 16)}
+          height={Math.max(20, labelBounds.height - 16)}
+          text={shape.text.content}
+          fontSize={shape.text.fontSize ?? 13}
+          fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
+          wrap={shape.text.wrap === false ? "none" : "word"}
+          fill={shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#1e293b")}
+          align={shape.text.align ?? "center"}
+          verticalAlign="middle"
+          fontStyle={shape.text.bold ? "bold" : "normal"}
+          rotation={commonProps.rotation}
+          listening={false}
+        />
+      );
+    }
   }
 
   // Selected outline
