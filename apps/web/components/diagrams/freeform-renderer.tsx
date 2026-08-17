@@ -187,8 +187,8 @@ type SnapCandidates = { verticals: number[]; horizontals: number[] };
 
 type Viewport = { scale: number; x: number; y: number };
 
-const STAGE_WIDTH = 960;
-const STAGE_HEIGHT = 600;
+const DEFAULT_STAGE_WIDTH = 960;
+const DEFAULT_STAGE_HEIGHT = 600;
 const SNAP_THRESHOLD = 6;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
@@ -340,6 +340,14 @@ function RichTextGroup({
 function stagePointFromEvent(stage: Konva.Stage | null): { x: number; y: number } | null {
   if (!stage) return null;
   return stage.getRelativePointerPosition();
+}
+
+function touchDistance(a: Touch, b: Touch): number {
+  return Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+}
+
+function touchMidpoint(a: Touch, b: Touch): { x: number; y: number } {
+  return { x: (a.clientX + b.clientX) / 2, y: (a.clientY + b.clientY) / 2 };
 }
 
 function formatCommentTimestamp(createdAt: number): string {
@@ -1723,6 +1731,10 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const openCommentIdRef = useRef<string | null>(null);
   openCommentIdRef.current = openCommentId;
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
+  const [stageSize, setStageSize] = useState<{ width: number; height: number }>({
+    width: DEFAULT_STAGE_WIDTH,
+    height: DEFAULT_STAGE_HEIGHT,
+  });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   // Present Mode frame-stepping position — ephemeral UI/viewport state only,
   // deliberately NOT part of `doc` (never runs through commitChanges). Doc
@@ -1754,6 +1766,16 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const panRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
+  const stageSizeRef = useRef(stageSize);
+  stageSizeRef.current = stageSize;
+  // Two-finger pinch/pan bookkeeping — written synchronously inside the touch
+  // handlers themselves, per the project's rule that gesture state must never
+  // live in React state read back mid-gesture (see "Hard-won canvas rules").
+  const touchGestureRef = useRef<{
+    startDist: number;
+    startCenter: { x: number; y: number };
+    startViewport: Viewport;
+  } | null>(null);
   const selectedIdsRef = useRef(selectedIds);
   selectedIdsRef.current = selectedIds;
   const [isDragOverCanvas, setIsDragOverCanvas] = useState(false);
@@ -1901,6 +1923,27 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     commentTextareaRef.current?.focus();
   }, [openCommentId]);
 
+  // Measures the actual rendered container instead of trusting a hardcoded
+  // 960x600 — needed for correct zoom-to-fit/centering math on phone/tablet
+  // viewports where the container is a different size than desktop.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const measure = (width: number, height: number) => {
+      setStageSize({ width: Math.max(1, Math.round(width)), height: Math.max(1, Math.round(height)) });
+    };
+    const rect = el.getBoundingClientRect();
+    measure(rect.width, rect.height);
+    const observer = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const { width, height } = entry.contentRect;
+      measure(width, height);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const startEditing = (shapeId: string) => {
     if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
     const shape = doc.shapes.find((s) => s.id === shapeId);
@@ -2047,8 +2090,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   };
 
   const insertCatalogShapeAtCenter = (entry: ShapeCatalogEntry) => {
-    const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
-    const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+    const cx = (stageSize.width / 2 - viewportRef.current.x) / viewportRef.current.scale;
+    const cy = (stageSize.height / 2 - viewportRef.current.y) / viewportRef.current.scale;
     insertCatalogShapeAt(entry, cx, cy);
   };
 
@@ -2098,16 +2141,16 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
-    const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+    const cx = (stageSize.width / 2 - viewportRef.current.x) / viewportRef.current.scale;
+    const cy = (stageSize.height / 2 - viewportRef.current.y) / viewportRef.current.scale;
     insertImageFromFile(file, cx, cy);
   };
 
   const zoomBy = (factor: number) => {
     setViewport((prev) => {
       const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, prev.scale * factor));
-      const cx = STAGE_WIDTH / 2;
-      const cy = STAGE_HEIGHT / 2;
+      const cx = stageSize.width / 2;
+      const cy = stageSize.height / 2;
       const docX = (cx - prev.x) / prev.scale;
       const docY = (cy - prev.y) / prev.scale;
       return { scale: newScale, x: cx - docX * newScale, y: cy - docY * newScale };
@@ -2136,16 +2179,16 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     const contentHeight = Math.max(1, maxY - minY);
 
     const PADDING = 48;
-    const scaleX = (STAGE_WIDTH - PADDING * 2) / contentWidth;
-    const scaleY = (STAGE_HEIGHT - PADDING * 2) / contentHeight;
+    const scaleX = (stageSize.width - PADDING * 2) / contentWidth;
+    const scaleY = (stageSize.height - PADDING * 2) / contentHeight;
     const finalScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.min(scaleX, scaleY)));
 
     const cx = minX + contentWidth / 2;
     const cy = minY + contentHeight / 2;
     setViewport({
       scale: finalScale,
-      x: STAGE_WIDTH / 2 - cx * finalScale,
-      y: STAGE_HEIGHT / 2 - cy * finalScale,
+      x: stageSize.width / 2 - cx * finalScale,
+      y: stageSize.height / 2 - cy * finalScale,
     });
   };
 
@@ -2153,12 +2196,12 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   // Present Mode next/prev stepping below — one frame-fit computation, two
   // callers, so they never drift out of sync.
   const navigateViewportToFrame = (frame: FrameShape) => {
-    const scaleX = (STAGE_WIDTH - 80) / frame.width;
-    const scaleY = (STAGE_HEIGHT - 80) / frame.height;
+    const scaleX = (stageSize.width - 80) / frame.width;
+    const scaleY = (stageSize.height - 80) / frame.height;
     const scale = Math.min(scaleX, scaleY);
     const finalScale = Math.min(Math.max(scale, MIN_SCALE), MAX_SCALE);
-    const x = STAGE_WIDTH / 2 - (frame.x + frame.width / 2) * finalScale;
-    const y = STAGE_HEIGHT / 2 - (frame.y + frame.height / 2) * finalScale;
+    const x = stageSize.width / 2 - (frame.x + frame.width / 2) * finalScale;
+    const y = stageSize.height / 2 - (frame.y + frame.height / 2) * finalScale;
     setViewport({ scale: finalScale, x, y });
   };
 
@@ -2427,8 +2470,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
 
       if (imageFile) {
         e.preventDefault();
-        const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
-        const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+        const cx = (stageSize.width / 2 - viewportRef.current.x) / viewportRef.current.scale;
+        const cy = (stageSize.height / 2 - viewportRef.current.y) / viewportRef.current.scale;
         insertImageFromFile(imageFile, cx, cy);
         return;
       }
@@ -3183,6 +3226,59 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     }
   };
 
+  // Pinch-to-zoom / two-finger pan. Only exactly-2-finger touches are
+  // handled here; 1-touch (select/drag) and 3+-touch input fall through to
+  // whatever Konva already does natively for touch pointers.
+  const handleTouchStart = (e: Konva.KonvaEventObject<TouchEvent>) => {
+    const touches = e.evt.touches;
+    if (touches.length !== 2) return;
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.container().getBoundingClientRect();
+    const mid = touchMidpoint(touches[0], touches[1]);
+    touchGestureRef.current = {
+      startDist: touchDistance(touches[0], touches[1]),
+      startCenter: { x: mid.x - rect.left, y: mid.y - rect.top },
+      startViewport: viewportRef.current,
+    };
+  };
+
+  const handleTouchMove = (e: Konva.KonvaEventObject<TouchEvent>) => {
+    const gesture = touchGestureRef.current;
+    const touches = e.evt.touches;
+    if (!gesture || touches.length !== 2) return;
+    e.evt.preventDefault();
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.container().getBoundingClientRect();
+    const mid = touchMidpoint(touches[0], touches[1]);
+    const currentCenter = { x: mid.x - rect.left, y: mid.y - rect.top };
+    const dist = touchDistance(touches[0], touches[1]);
+
+    const rawScale = gesture.startViewport.scale * (dist / gesture.startDist);
+    const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, rawScale));
+
+    // Same anchor-preserving math as the ctrl-zoom path in handleWheel, but
+    // anchored at the gesture's moving midpoint rather than a fixed pointer —
+    // this is what makes a two-finger drag pan the canvas, not just pinch.
+    const docPoint = {
+      x: (gesture.startCenter.x - gesture.startViewport.x) / gesture.startViewport.scale,
+      y: (gesture.startCenter.y - gesture.startViewport.y) / gesture.startViewport.scale,
+    };
+
+    setViewport({
+      scale: newScale,
+      x: currentCenter.x - docPoint.x * newScale,
+      y: currentCenter.y - docPoint.y * newScale,
+    });
+  };
+
+  const handleTouchEnd = (e: Konva.KonvaEventObject<TouchEvent>) => {
+    if (e.evt.touches.length < 2) {
+      touchGestureRef.current = null;
+    }
+  };
+
   // Selection bounding box for Floating Quick-Style Bar
   const selectedShapes = doc.shapes.filter((s) => selectedIds.has(s.id));
   const primarySelected = selectedShapes[0];
@@ -3473,10 +3569,10 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     files.forEach((file, i) => {
       const dropX = stageContainerRect
         ? (e.clientX - stageContainerRect.left - viewport.x) / viewport.scale
-        : (STAGE_WIDTH / 2 - viewport.x) / viewport.scale;
+        : (stageSize.width / 2 - viewport.x) / viewport.scale;
       const dropY = stageContainerRect
         ? (e.clientY - stageContainerRect.top - viewport.y) / viewport.scale
-        : (STAGE_HEIGHT / 2 - viewport.y) / viewport.scale;
+        : (stageSize.height / 2 - viewport.y) / viewport.scale;
       insertImageFromFile(file, dropX + i * 24, dropY + i * 24);
     });
   };
@@ -4018,8 +4114,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       {/* ─── Konva Canvas Stage ──────────────────────────────────────────── */}
       <Stage
         ref={stageRef}
-        width={STAGE_WIDTH}
-        height={STAGE_HEIGHT}
+        width={stageSize.width}
+        height={stageSize.height}
         scaleX={viewport.scale}
         scaleY={viewport.scale}
         x={viewport.x}
@@ -4031,6 +4127,9 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         onMouseUp={handleStageMouseUp}
         onMouseLeave={handleStageMouseLeave}
         onWheel={handleWheel}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
         <Layer>
           {orderedShapes.map((shape) =>
@@ -4083,7 +4182,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           {/* Alignment Snap Guides */}
           {snapGuides.v !== null && (
             <Line
-              points={[snapGuides.v, 0, snapGuides.v, STAGE_HEIGHT]}
+              points={[snapGuides.v, 0, snapGuides.v, stageSize.height]}
               stroke="#f59e0b"
               strokeWidth={1}
               dash={[4, 4]}
@@ -4092,7 +4191,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           )}
           {snapGuides.h !== null && (
             <Line
-              points={[0, snapGuides.h, STAGE_WIDTH, snapGuides.h]}
+              points={[0, snapGuides.h, stageSize.width, snapGuides.h]}
               stroke="#f59e0b"
               strokeWidth={1}
               dash={[4, 4]}
