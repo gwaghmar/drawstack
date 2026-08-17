@@ -869,10 +869,10 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       const trackColor = sc.strokeColor ?? "#034641";
       const hubColor = "#c2410c";
 
-      const leftX = x + 160;
-      const rightX = x + w - 160;
-      const trackStartY = y + 130;
-      const stepGapY = (h - 190) / (numSteps - 1);
+      const leftX = x + 85;
+      const rightX = x + w - 85;
+      const trackStartY = y + 170;
+      const stepGapY = (h - 250) / Math.max(numSteps - 1, 1);
 
       let scurvePath = `M ${leftX} ${trackStartY}`;
       sc.steps.forEach((_, idx) => {
@@ -887,18 +887,26 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       });
 
       const hubsSvg = sc.steps.map((st, idx) => {
-        const hx = idx % 2 === 0 ? leftX : rightX;
+        const isLeft = idx % 2 === 0;
+        const hx = isLeft ? leftX : rightX;
         const hy = trackStartY + idx * stepGapY;
-        const textX = idx % 2 === 0 ? hx + 70 : hx - 70;
-        const align = idx % 2 === 0 ? "start" : "end";
+        const textX = isLeft ? hx + 55 : hx - 55;
+        const align = isLeft ? "start" : "end";
+
+        const descLines = st.description.split("\n");
+        const descTspans = descLines
+          .map((line, lIdx) => `<tspan x="${textX}" dy="${lIdx === 0 ? 0 : 16}">${escapeXml(line)}</tspan>`)
+          .join("");
 
         return `
           <g>
-            <circle cx="${hx}" cy="${hy}" r="48" fill="${st.hubColor ?? hubColor}" />
-            <g transform="translate(${textX}, ${hy - 24})">
-              <text x="0" y="0" text-anchor="${align}" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="${textColorPrimary}">${escapeXml(st.stepNumber)} ${escapeXml(st.title)}</text>
-              <text x="0" y="18" text-anchor="${align}" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="${textColorMuted}">${escapeXml(st.description)}</text>
-            </g>
+            <!-- Vermillion Step Circle -->
+            <circle cx="${hx}" cy="${hy}" r="40" fill="${st.hubColor ?? hubColor}" />
+            <!-- Step Number INSIDE Hub -->
+            <text x="${hx}" y="${hy + 8}" text-anchor="middle" font-family="'JetBrains Mono', Inter, monospace" font-size="22" font-weight="900" fill="#ffffff">${escapeXml(st.stepNumber)}</text>
+            <!-- Step Title & Description Alongside Hub -->
+            <text x="${textX}" y="${hy - 12}" text-anchor="${align}" font-family="Inter, sans-serif" font-size="15" font-weight="800" fill="${textColorPrimary}">${escapeXml(st.title)}</text>
+            <text x="${textX}" y="${hy + 10}" text-anchor="${align}" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${textColorMuted}">${descTspans}</text>
           </g>`;
       }).join("");
 
@@ -908,9 +916,10 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       elements.push(
         `<g ${opacity}>
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${sc.cornerRadius ?? 14}" fill="${isEditorial ? "#f5f2eb" : cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Clean Spaced Header Area -->
-          <text x="${x + w / 2}" y="${y + 40}" text-anchor="middle" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="${textColorPrimary}">${escapeXml(sc.title)}</text>
-          ${sc.subtitle ? `<text x="${x + w / 2}" y="${y + 66}" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="600" letter-spacing="0.08em" fill="${textColorMuted}">${escapeXml(sc.subtitle.toUpperCase())}</text>` : ""}
+          <!-- Dedicated Header Banner at Top -->
+          <text x="${x + 36}" y="${y + 38}" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="${textColorPrimary}">${escapeXml(sc.title)}</text>
+          ${sc.subtitle ? `<text x="${x + 36}" y="${y + 58}" font-family="Inter, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="${textColorMuted}">${escapeXml(sc.subtitle.toUpperCase())}</text>` : ""}
+          <line x1="${x + 36}" y1="${y + 74}" x2="${x + w - 36}" y2="${y + 74}" stroke="${isDark ? "#334155" : "#e2ded4"}" stroke-width="1" />
           <!-- Continuous Serpentine S-Curve Track -->
           <path d="${scurvePath}" fill="none" stroke="${trackColor}" stroke-width="5" stroke-linecap="round" />
           ${hubsSvg}
