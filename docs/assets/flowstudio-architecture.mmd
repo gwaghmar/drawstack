@@ -1,10 +1,10 @@
 flowchart LR
     User["User prompt"] --> Web["Next.js web app"]
     Web --> Intent["AI intent planner"]
-    Intent --> Core["packages/core diagram registry"]
-    Core --> Renderers["Diagram renderers"]
-    Renderers --> Export["PNG/SVG export"]
-    Web --> DB["Supabase Postgres"]
+    Intent --> Core["packages/core freeform prompt"]
+    Core --> Canvas["Freeform canvas engine"]
+    Canvas --> Export["PNG/SVG export"]
+    Web --> DB["Postgres (Neon)"]
     Web --> Share["Share, embed, OG preview"]
     MCP["MCP server"] --> Core
     CLI["CLI"] --> Core
