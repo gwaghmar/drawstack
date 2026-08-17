@@ -13,7 +13,7 @@ import {
 
 // Shared between the in-app Agent Mode tool and the external MCP endpoint —
 // one schema, so the two surfaces can't drift on what a valid op looks like.
-const ArrowHeadStyleSchema = z.enum(["arrow", "triangle-open", "diamond", "diamond-open", "none"]);
+const ArrowHeadStyleSchema = z.enum(["arrow", "triangle-open", "diamond", "diamond-open", "crowfoot-one", "crowfoot-many", "crowfoot-zero-one", "crowfoot-one-many", "crowfoot-zero-many", "none"]);
 
 export const CanvasOpSchema = z.union([
   z.object({

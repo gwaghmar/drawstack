@@ -502,6 +502,22 @@ function squarifyTreemap(items: { value: number }[], rect: TreemapRect): Treemap
   return placed;
 }
 
+// Konva draws these natively with no shadow; the exporter used to add one to
+// every shape, so canvas and export never matched. Sticky/card/table and the
+// rasterized macro shapes do carry one on canvas, so they keep it here.
+const FLAT_BY_DEFAULT_TYPES = new Set([
+  "rectangle",
+  "ellipse",
+  "diamond",
+  "triangle",
+  "cylinder",
+  "cloud",
+  "hexagon",
+  "star",
+  "text",
+  "path",
+]);
+
 export function freeformToSvg(
   doc: CanvasDocument,
   options?: { theme?: "light" | "dark" | "cyber" | "editorial"; bare?: boolean }
@@ -623,11 +639,11 @@ export function freeformToSvg(
     const shadowFilter =
       shape.shadow === false
         ? ""
-        : shape.type === "sticky"
+        : shape.shadow === true
           ? 'filter="url(#soft-card-shadow)"'
-          : shape.type !== "frame" && shape.type !== "dashboard"
-            ? 'filter="url(#soft-card-shadow)"'
-            : "";
+          : FLAT_BY_DEFAULT_TYPES.has(shape.type) || shape.type === "frame" || shape.type === "dashboard"
+            ? ""
+            : 'filter="url(#soft-card-shadow)"';
 
     // ─── Freehand Path ────────────────────────────────────────────────────────
     if (shape.type === "path") {
@@ -687,9 +703,22 @@ export function freeformToSvg(
 
       for (const geom of [startGeom, endGeom]) {
         if (!geom) continue;
-        elements.push(
-          `<polygon points="${geom.points.map((p) => `${p.x},${p.y}`).join(" ")}" fill="${geom.filled ? stroke : cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" ${opacity} />`
-        );
+        for (const mark of geom.marks) {
+          const pts = mark.kind === "circle" ? "" : mark.points.map((p) => `${p.x},${p.y}`).join(" ");
+          if (mark.kind === "polygon") {
+            elements.push(
+              `<polygon points="${pts}" fill="${mark.filled ? stroke : cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" ${opacity} />`
+            );
+          } else if (mark.kind === "polyline") {
+            elements.push(
+              `<polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" ${opacity} />`
+            );
+          } else {
+            elements.push(
+              `<circle cx="${mark.cx}" cy="${mark.cy}" r="${mark.r}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" ${opacity} />`
+            );
+          }
+        }
       }
 
       if (arrow.showJunctions) {

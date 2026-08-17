@@ -987,20 +987,35 @@ function renderShape(
       points[points.length - 1] = endHead.lineEnd.y;
     }
 
-    const headNodes = [startHead, endHead].map((geom, i) =>
-      geom ? (
-        <Line
-          key={`${shape.id}-head-${i}`}
-          points={geom.points.flatMap((p) => [p.x, p.y])}
-          closed
-          fill={geom.filled ? stroke : "#ffffff"}
-          stroke={stroke}
-          strokeWidth={commonProps.strokeWidth}
-          lineJoin="round"
-          opacity={commonProps.opacity}
-          listening={false}
-        />
-      ) : null
+    const headNodes = [startHead, endHead].flatMap((geom, i) =>
+      (geom?.marks ?? []).map((mark, j) =>
+        mark.kind === "circle" ? (
+          <KonvaCircle
+            key={`${shape.id}-head-${i}-${j}`}
+            x={mark.cx}
+            y={mark.cy}
+            radius={mark.r}
+            fill="#ffffff"
+            stroke={stroke}
+            strokeWidth={commonProps.strokeWidth}
+            opacity={commonProps.opacity}
+            listening={false}
+          />
+        ) : (
+          <Line
+            key={`${shape.id}-head-${i}-${j}`}
+            points={mark.points.flatMap((p) => [p.x, p.y])}
+            closed={mark.kind === "polygon"}
+            fill={mark.kind === "polygon" && mark.filled ? stroke : undefined}
+            stroke={stroke}
+            strokeWidth={commonProps.strokeWidth}
+            lineCap="round"
+            lineJoin="round"
+            opacity={commonProps.opacity}
+            listening={false}
+          />
+        )
+      )
     );
 
     const junctionNodes = arrowShape.showJunctions

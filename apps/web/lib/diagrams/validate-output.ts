@@ -179,7 +179,7 @@ const FreeformEndpointSchema = z.union([
   }),
 ]);
 
-const FreeformArrowHeadSchema = z.enum(["arrow", "triangle-open", "diamond", "diamond-open", "none"]);
+const FreeformArrowHeadSchema = z.enum(["arrow", "triangle-open", "diamond", "diamond-open", "crowfoot-one", "crowfoot-many", "crowfoot-zero-one", "crowfoot-one-many", "crowfoot-zero-many", "none"]);
 
 const FreeformArrowShapeSchema = FreeformBaseSchema.passthrough().extend({
   type: z.enum(["arrow", "line"]),

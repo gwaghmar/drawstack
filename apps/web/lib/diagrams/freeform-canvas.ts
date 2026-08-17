@@ -325,7 +325,22 @@ export type ArrowEndpoint =
   | { x: number; y: number }
   | { shapeId: string; anchor?: "top" | "right" | "bottom" | "left" | "center" | "auto" };
 
-export type ArrowHeadStyle = "arrow" | "triangle-open" | "diamond" | "diamond-open" | "none";
+export type ArrowHeadStyle =
+  | "arrow"
+  | "triangle-open"
+  | "diamond"
+  | "diamond-open"
+  | "crowfoot-one"
+  | "crowfoot-many"
+  | "crowfoot-zero-one"
+  | "crowfoot-one-many"
+  | "crowfoot-zero-many"
+  | "none";
+
+export type ArrowHeadMark =
+  | { kind: "polygon"; points: { x: number; y: number }[]; filled: boolean }
+  | { kind: "polyline"; points: { x: number; y: number }[] }
+  | { kind: "circle"; cx: number; cy: number; r: number };
 
 export type ArrowShape = BaseShape & {
   type: "arrow" | "line";
@@ -696,13 +711,13 @@ export function resolveArrowHeadStyle(arrow: ArrowShape, end: "start" | "end"): 
   return on ? "arrow" : "none";
 }
 
-/** Head polygon + the point the line must stop at so it never pokes through an open head. */
+/** Head marks + the point the line must stop at so it never pokes through an open head. */
 export function computeArrowHeadGeometry(
   tip: { x: number; y: number },
   from: { x: number; y: number },
   style: ArrowHeadStyle,
   strokeWidth = 2
-): { points: { x: number; y: number }[]; filled: boolean; lineEnd: { x: number; y: number } } | null {
+): { marks: ArrowHeadMark[]; lineEnd: { x: number; y: number } } | null {
   if (style === "none" || style === "arrow") return null;
 
   const dx = tip.x - from.x;
@@ -714,20 +729,52 @@ export function computeArrowHeadGeometry(
   const ny = ux;
 
   const scale = Math.max(1, strokeWidth / 1.5);
-  const depth = (style === "diamond" || style === "diamond-open" ? 18 : 13) * scale;
-  const half = 5.5 * scale;
-
   const at = (along: number, across: number) => ({
-    x: tip.x - ux * along + nx * across,
-    y: tip.y - uy * along + ny * across,
+    x: tip.x - ux * along * scale + nx * across * scale,
+    y: tip.y - uy * along * scale + ny * across * scale,
   });
 
-  const points =
-    style === "triangle-open"
-      ? [tip, at(depth, half), at(depth, -half)]
-      : [tip, at(depth / 2, half), at(depth, 0), at(depth / 2, -half)];
+  if (style === "triangle-open" || style === "diamond" || style === "diamond-open") {
+    const depth = style === "triangle-open" ? 13 : 18;
+    const half = 5.5;
+    const points =
+      style === "triangle-open"
+        ? [tip, at(depth, half), at(depth, -half)]
+        : [tip, at(depth / 2, half), at(depth, 0), at(depth / 2, -half)];
+    return { marks: [{ kind: "polygon", points, filled: style === "diamond" }], lineEnd: at(depth, 0) };
+  }
 
-  return { points, filled: style === "diamond", lineEnd: at(depth, 0) };
+  // Crow's foot (ERD cardinality). The foot opens onto the entity edge; bars and
+  // the optionality ring sit further back along the line.
+  const FOOT = 14;
+  const half = 7;
+  const marks: ArrowHeadMark[] = [];
+  const hasFoot = style === "crowfoot-many" || style === "crowfoot-one-many" || style === "crowfoot-zero-many";
+  const hasRing = style === "crowfoot-zero-one" || style === "crowfoot-zero-many";
+
+  if (hasFoot) {
+    marks.push({ kind: "polyline", points: [at(0, half), at(FOOT, 0), at(0, -half)] });
+    marks.push({ kind: "polyline", points: [at(FOOT, 0), at(0, 0)] });
+  }
+
+  const barAt = style === "crowfoot-one-many" ? FOOT + 6 : hasFoot ? FOOT + 6 : 9;
+  if (style !== "crowfoot-zero-many" && style !== "crowfoot-many") {
+    marks.push({ kind: "polyline", points: [at(barAt, half), at(barAt, -half)] });
+  }
+
+  const ringCenter = hasFoot ? FOOT + 5 : 15;
+  if (hasRing) {
+    const c = at(ringCenter, 0);
+    marks.push({ kind: "circle", cx: c.x, cy: c.y, r: 5 * scale });
+  }
+
+  const lineEnd = hasRing
+    ? at(ringCenter + 5, 0)
+    : hasFoot
+      ? at(style === "crowfoot-one-many" ? barAt : FOOT, 0)
+      : at(barAt, 0);
+
+  return { marks, lineEnd };
 }
 
 export function wrapTextLines(content: string, maxChars: number): string[] {
