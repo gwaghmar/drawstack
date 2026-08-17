@@ -5,6 +5,8 @@ import {
   parseFreeformSource,
   serializeFreeformDocument,
   resolveArrowEndpoint,
+  resolveArrowRenderEndpoints,
+  nearestEdgeAnchor,
   validateFreeformRefs,
   getShapeBounds,
   resolveColor,
@@ -347,6 +349,97 @@ describe("getShapeBounds", () => {
     };
     const doc: CanvasDocument = { version: 1, shapes: [rect1, rect2, arrow] };
     assert.deepEqual(getShapeBounds(doc, arrow), { x: 50, y: 50, width: 300, height: 300 });
+  });
+});
+
+describe("nearestEdgeAnchor", () => {
+  it("picks right when the target is directly to the right", () => {
+    const bounds = { x: 0, y: 0, width: 100, height: 50 };
+    assert.equal(nearestEdgeAnchor(bounds, 300, 25), "right");
+  });
+
+  it("picks left when the target is directly to the left", () => {
+    const bounds = { x: 0, y: 0, width: 100, height: 50 };
+    assert.equal(nearestEdgeAnchor(bounds, -200, 25), "left");
+  });
+
+  it("picks top when the target is above", () => {
+    const bounds = { x: 0, y: 0, width: 100, height: 100 };
+    assert.equal(nearestEdgeAnchor(bounds, 50, -200), "top");
+  });
+
+  it("picks bottom when the target is below", () => {
+    const bounds = { x: 0, y: 0, width: 100, height: 100 };
+    assert.equal(nearestEdgeAnchor(bounds, 50, 300), "bottom");
+  });
+});
+
+describe("resolveArrowRenderEndpoints", () => {
+  it("attaches auto-anchored endpoints to the nearest edge midpoint for horizontally arranged shapes", () => {
+    const s1: RectShape = { id: "s1", type: "rectangle", x: 0, y: 0, width: 100, height: 100 };
+    const s2: RectShape = { id: "s2", type: "rectangle", x: 300, y: 0, width: 100, height: 100 };
+    const arrow: ArrowShape = {
+      id: "arrow1",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      start: { shapeId: "s1", anchor: "auto" },
+      end: { shapeId: "s2", anchor: "auto" },
+    };
+    const doc: CanvasDocument = { version: 1, shapes: [s1, s2, arrow] };
+    const result = resolveArrowRenderEndpoints(doc, arrow);
+    assert.deepEqual(result.start, { x: 100, y: 50 });
+    assert.deepEqual(result.end, { x: 300, y: 50 });
+  });
+
+  it("attaches auto-anchored endpoints to the nearest edge midpoint for vertically arranged shapes", () => {
+    const s1: RectShape = { id: "s1", type: "rectangle", x: 0, y: 0, width: 100, height: 100 };
+    const s2: RectShape = { id: "s2", type: "rectangle", x: 0, y: 300, width: 100, height: 100 };
+    const arrow: ArrowShape = {
+      id: "arrow1",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      start: { shapeId: "s1" },
+      end: { shapeId: "s2" },
+    };
+    const doc: CanvasDocument = { version: 1, shapes: [s1, s2, arrow] };
+    const result = resolveArrowRenderEndpoints(doc, arrow);
+    assert.deepEqual(result.start, { x: 50, y: 100 });
+    assert.deepEqual(result.end, { x: 50, y: 300 });
+  });
+
+  it("keeps an explicit anchor unchanged even when auto would pick a different edge", () => {
+    const s1: RectShape = { id: "s1", type: "rectangle", x: 0, y: 0, width: 100, height: 100 };
+    const s2: RectShape = { id: "s2", type: "rectangle", x: 300, y: 0, width: 100, height: 100 };
+    const arrow: ArrowShape = {
+      id: "arrow1",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      start: { shapeId: "s1", anchor: "top" },
+      end: { shapeId: "s2", anchor: "auto" },
+    };
+    const doc: CanvasDocument = { version: 1, shapes: [s1, s2, arrow] };
+    const result = resolveArrowRenderEndpoints(doc, arrow);
+    assert.deepEqual(result.start, { x: 50, y: 0 });
+    assert.deepEqual(result.end, { x: 300, y: 50 });
+  });
+
+  it("leaves free-point endpoints unchanged", () => {
+    const s1: RectShape = { id: "s1", type: "rectangle", x: 0, y: 0, width: 100, height: 100 };
+    const arrow: ArrowShape = {
+      id: "arrow1",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      start: { shapeId: "s1", anchor: "auto" },
+      end: { x: 500, y: 500 },
+    };
+    const doc: CanvasDocument = { version: 1, shapes: [s1, arrow] };
+    const result = resolveArrowRenderEndpoints(doc, arrow);
+    assert.deepEqual(result.end, { x: 500, y: 500 });
+    assert.deepEqual(result.start, { x: 50, y: 100 });
   });
 });
 

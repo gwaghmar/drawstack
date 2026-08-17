@@ -120,6 +120,52 @@ export function resolveArrowEndpoint(doc: CanvasDocument, endpoint: ArrowEndpoin
   }
 }
 
+export type EdgeAnchor = "top" | "right" | "bottom" | "left";
+
+export function nearestEdgeAnchor(
+  bounds: { x: number; y: number; width: number; height: number },
+  towardX: number,
+  towardY: number
+): EdgeAnchor {
+  const cx = bounds.x + bounds.width / 2;
+  const cy = bounds.y + bounds.height / 2;
+  const dx = towardX - cx;
+  const dy = towardY - cy;
+  if (Math.abs(dx) * bounds.height > Math.abs(dy) * bounds.width) {
+    return dx >= 0 ? "right" : "left";
+  }
+  return dy >= 0 ? "bottom" : "top";
+}
+
+function resolveAutoEndpoint(
+  doc: CanvasDocument,
+  endpoint: ArrowEndpoint,
+  towardPoint: { x: number; y: number }
+): { x: number; y: number } {
+  if (!isBoundEndpoint(endpoint)) return endpoint;
+  const anchor = endpoint.anchor ?? "auto";
+  if (anchor !== "auto") return resolveArrowEndpoint(doc, endpoint);
+
+  const shape = doc.shapes.find((s) => s.id === endpoint.shapeId);
+  if (!shape) return resolveArrowEndpoint(doc, endpoint);
+
+  const bounds = getShapeBounds(doc, shape);
+  const side = nearestEdgeAnchor(bounds, towardPoint.x, towardPoint.y);
+  return resolveArrowEndpoint(doc, { shapeId: endpoint.shapeId, anchor: side });
+}
+
+export function resolveArrowRenderEndpoints(
+  doc: CanvasDocument,
+  arrow: ArrowShape
+): { start: { x: number; y: number }; end: { x: number; y: number } } {
+  const startHint = resolveArrowEndpoint(doc, arrow.start);
+  const endHint = resolveArrowEndpoint(doc, arrow.end);
+  return {
+    start: resolveAutoEndpoint(doc, arrow.start, endHint),
+    end: resolveAutoEndpoint(doc, arrow.end, startHint),
+  };
+}
+
 export function generateShapeId(prefix = "s"): string {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
 }

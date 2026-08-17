@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Ellipse, Line, Text, Transformer } from "react-konva";
+import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer } from "react-konva";
 import Konva from "konva";
 import {
   parseFreeformSource,
   serializeFreeformDocument,
-  resolveArrowEndpoint,
+  resolveArrowRenderEndpoints,
   getShapeBounds,
+  generateShapeId,
   type CanvasDocument,
   type CanvasShape,
   type ArrowShape,
@@ -25,6 +26,35 @@ type MarqueeState = {
   x1: number;
   y1: number;
 };
+
+type ToolMode = "select" | "arrow";
+
+type ArrowDraft = {
+  startPoint: { x: number; y: number };
+  startBinding: string | null;
+  currentPoint: { x: number; y: number };
+  hoverShapeId: string | null;
+};
+
+type SnapCandidates = { verticals: number[]; horizontals: number[] };
+
+const STAGE_WIDTH = 800;
+const STAGE_HEIGHT = 500;
+const SNAP_THRESHOLD = 6;
+
+function getShapeIdAtPointer(
+  doc: CanvasDocument,
+  stage: Konva.Stage | null,
+  pos: { x: number; y: number } | null
+): string | null {
+  if (!stage || !pos) return null;
+  const node = stage.getIntersection(pos);
+  const id = node?.id();
+  if (!id) return null;
+  const shape = doc.shapes.find((s) => s.id === id);
+  if (!shape || shape.type === "arrow" || shape.type === "line") return null;
+  return shape.id;
+}
 
 const FIXTURE_DOCUMENT: CanvasDocument = {
   version: 1,
@@ -92,13 +122,15 @@ function renderShape(
   isSelected: boolean,
   onShapeClick?: (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => void,
   onShapeDragStart?: (shapeId: string, x: number, y: number) => void,
-  onShapeDragMove?: (shapeId: string, x: number, y: number) => void,
+  onShapeDragMove?: (e: Konva.KonvaEventObject<DragEvent>, shapeId: string, x: number, y: number) => void,
   onShapeDragEnd?: (shapeId: string) => void,
   readOnly?: boolean,
   onShapeDblClick?: (shapeId: string) => void,
-  editingShapeId?: string | null
+  editingShapeId?: string | null,
+  mode: ToolMode = "select"
 ): React.ReactNode {
   const isEditingThis = editingShapeId === shape.id;
+  const draggable = !readOnly && mode !== "arrow";
   const commonProps = {
     x: shape.x,
     y: shape.y,
@@ -109,19 +141,40 @@ function renderShape(
     opacity: shape.opacity ?? 1,
   };
 
-  // Skip rendering arrows for now as they need special handling
   if (shape.type === "arrow" || shape.type === "line") {
     const arrowShape = shape as ArrowShape;
-    const startPoint = resolveArrowEndpoint(doc, arrowShape.start);
-    const endPoint = resolveArrowEndpoint(doc, arrowShape.end);
+    const { start: startPoint, end: endPoint } = resolveArrowRenderEndpoints(doc, arrowShape);
+    const stroke = isSelected ? "#4f46e5" : commonProps.stroke;
+    const points = [startPoint.x, startPoint.y, endPoint.x, endPoint.y];
+
+    if (shape.type === "arrow") {
+      return (
+        <Arrow
+          key={shape.id}
+          id={shape.id}
+          points={points}
+          stroke={stroke}
+          fill={stroke}
+          strokeWidth={commonProps.strokeWidth}
+          opacity={commonProps.opacity}
+          pointerLength={10}
+          pointerWidth={10}
+          listening={!readOnly}
+          onClick={(e) => onShapeClick?.(e, shape.id)}
+        />
+      );
+    }
+
     return (
       <Line
         key={shape.id}
-        points={[startPoint.x, startPoint.y, endPoint.x, endPoint.y]}
-        stroke={commonProps.stroke}
+        id={shape.id}
+        points={points}
+        stroke={stroke}
         strokeWidth={commonProps.strokeWidth}
         opacity={commonProps.opacity}
-        listening={false}
+        listening={!readOnly}
+        onClick={(e) => onShapeClick?.(e, shape.id)}
       />
     );
   }
@@ -139,11 +192,11 @@ function renderShape(
             width={shape.width}
             height={shape.height}
             cornerRadius={shape.type === "rectangle" && "cornerRadius" in shape ? shape.cornerRadius : undefined}
-            draggable={!readOnly}
+            draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
-            onDragMove={(e) => onShapeDragMove?.(shape.id, e.target.x(), e.target.y())}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
         );
@@ -162,14 +215,14 @@ function renderShape(
             stroke={commonProps.stroke}
             strokeWidth={commonProps.strokeWidth}
             opacity={commonProps.opacity}
-            draggable={!readOnly}
+            draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => {
               const cx = e.target.x();
               const cy = e.target.y();
-              onShapeDragMove?.(shape.id, cx - shape.width / 2, cy - shape.height / 2);
+              onShapeDragMove?.(e, shape.id, cx - shape.width / 2, cy - shape.height / 2);
             }}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
@@ -183,11 +236,11 @@ function renderShape(
             {...commonProps}
             width={shape.width}
             height={shape.height}
-            draggable={!readOnly}
+            draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
-            onDragMove={(e) => onShapeDragMove?.(shape.id, e.target.x(), e.target.y())}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
         );
@@ -210,11 +263,11 @@ function renderShape(
             verticalAlign="top"
             rotation={commonProps.rotation}
             opacity={commonProps.opacity}
-            draggable={!readOnly}
+            draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
-            onDragMove={(e) => onShapeDragMove?.(shape.id, e.target.x(), e.target.y())}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
         );
@@ -299,12 +352,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const [dragState, setDragState] = useState<{
-    shapeId: string;
-    startX: number;
-    startY: number;
-    initialPositions: Map<string, { x: number; y: number }>;
-  } | null>(null);
+  const [mode, setMode] = useState<ToolMode>("select");
+  const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
+  const [snapGuides, setSnapGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null });
 
   const isApplyingRef = useRef(false);
   const lastSourceRef = useRef(source);
@@ -313,6 +363,31 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const transformerRef = useRef<Konva.Transformer>(null);
   const docRef = useRef(doc);
   docRef.current = doc;
+  const snapCandidatesRef = useRef<SnapCandidates>({ verticals: [], horizontals: [] });
+  const modeRef = useRef<ToolMode>(mode);
+  const dragDocRef = useRef<CanvasDocument | null>(null);
+  const suppressNextClickRef = useRef(false);
+
+  // Whole-gesture bookkeeping lives in refs, written synchronously in the
+  // handler that starts the gesture. Same-event-burst dragmove/mouseup/dragend
+  // calls can fire before React flushes a setState from the previous handler
+  // in the burst, so any handler that only reads the state copy can see a
+  // stale (often still-null) value and silently no-op — the class of bug that
+  // broke fast drags. `marquee`/`arrowDraft` React state still exists purely
+  // to drive the live overlay rendering; all gating/logic reads the ref.
+  const dragStateRef = useRef<{
+    shapeId: string;
+    startX: number;
+    startY: number;
+    initialPositions: Map<string, { x: number; y: number }>;
+  } | null>(null);
+  const marqueeRef = useRef<MarqueeState | null>(null);
+  const arrowDraftRef = useRef<ArrowDraft | null>(null);
+
+  const setModeSynced = (next: ToolMode) => {
+    modeRef.current = next;
+    setMode(next);
+  };
 
   // Sync external source prop to local state
   useEffect(() => {
@@ -350,7 +425,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   }, [editingShapeId]);
 
   const startEditing = (shapeId: string) => {
-    if (readOnly) return;
+    if (readOnly || modeRef.current === "arrow") return;
     const shape = doc.shapes.find((s) => s.id === shapeId);
     if (!shape || shape.type === "arrow" || shape.type === "line" || shape.locked) return;
     setSelectedIds(new Set());
@@ -459,8 +534,28 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [doc, selectedIds, readOnly, editingShapeId]);
 
-  const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
+  // Tool-mode shortcuts: v = select, a = arrow
+  useEffect(() => {
     if (readOnly) return;
+
+    const handleModeKeyDown = (e: KeyboardEvent) => {
+      if (editingShapeId) return;
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA") return;
+
+      if (e.key === "v" || e.key === "V") {
+        setModeSynced("select");
+      } else if (e.key === "a" || e.key === "A") {
+        setModeSynced("arrow");
+      }
+    };
+
+    window.addEventListener("keydown", handleModeKeyDown);
+    return () => window.removeEventListener("keydown", handleModeKeyDown);
+  }, [readOnly, editingShapeId]);
+
+  const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
+    if (readOnly || modeRef.current === "arrow") return;
     if (e.evt.shiftKey) {
       setSelectedIds((prev) => {
         const newSet = new Set(prev);
@@ -478,54 +573,133 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (readOnly) return;
+    if (suppressNextClickRef.current) {
+      suppressNextClickRef.current = false;
+      return;
+    }
+    if (modeRef.current === "arrow") return;
     if (e.target === e.target.getStage()) {
       setSelectedIds(new Set());
     }
   };
 
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (readOnly || marquee !== null) return;
+    if (readOnly) return;
+
+    if (modeRef.current === "arrow") {
+      const stage = e.target.getStage();
+      const pos = stage?.getPointerPosition() ?? null;
+      if (!pos) return;
+      const startBinding = getShapeIdAtPointer(docRef.current, stage, pos);
+      const draft: ArrowDraft = { startPoint: pos, startBinding, currentPoint: pos, hoverShapeId: null };
+      arrowDraftRef.current = draft;
+      setArrowDraft(draft);
+      return;
+    }
+
+    if (marqueeRef.current !== null) return;
     if (e.target !== e.target.getStage()) return;
 
     const pos = e.target.getStage()!.getPointerPosition();
     if (!pos) return;
 
     marqueeStartRef.current = { x: pos.x, y: pos.y };
-    setMarquee({ x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y });
+    const draft: MarqueeState = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y };
+    marqueeRef.current = draft;
+    setMarquee(draft);
   };
 
   const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!marqueeStartRef.current || !marquee) return;
+    if (modeRef.current === "arrow") {
+      const current = arrowDraftRef.current;
+      if (!current) return;
+      const stage = e.target.getStage();
+      const pos = stage?.getPointerPosition() ?? null;
+      if (!pos) return;
+      const hoverShapeId = getShapeIdAtPointer(docRef.current, stage, pos);
+      const draft: ArrowDraft = { ...current, currentPoint: pos, hoverShapeId };
+      arrowDraftRef.current = draft;
+      setArrowDraft(draft);
+      return;
+    }
+
+    const current = marqueeRef.current;
+    if (!marqueeStartRef.current || !current) return;
 
     const pos = e.target.getStage()!.getPointerPosition();
     if (!pos) return;
 
-    setMarquee({ ...marquee, x1: pos.x, y1: pos.y });
+    const draft: MarqueeState = { ...current, x1: pos.x, y1: pos.y };
+    marqueeRef.current = draft;
+    setMarquee(draft);
   };
 
   const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    if (!marquee || !marqueeStartRef.current) {
+    if (modeRef.current === "arrow") {
+      const draft = arrowDraftRef.current;
+      if (!draft) return;
+      const stage = e.target.getStage();
+      const pos = stage?.getPointerPosition() ?? draft.currentPoint;
+      const endBinding = getShapeIdAtPointer(docRef.current, stage, pos);
+      const dist = Math.hypot(pos.x - draft.startPoint.x, pos.y - draft.startPoint.y);
+
+      arrowDraftRef.current = null;
+      setArrowDraft(null);
+      setModeSynced("select");
+      suppressNextClickRef.current = true;
+
+      if (dist < 8 && !draft.startBinding && !endBinding) return;
+
+      const sameShape = !!draft.startBinding && !!endBinding && draft.startBinding === endBinding;
+      const start = draft.startBinding
+        ? { shapeId: draft.startBinding, anchor: "auto" as const }
+        : { x: draft.startPoint.x, y: draft.startPoint.y };
+      const end = endBinding && !sameShape ? { shapeId: endBinding, anchor: "auto" as const } : { x: pos.x, y: pos.y };
+
+      const newArrow: ArrowShape = {
+        id: generateShapeId("a"),
+        type: "arrow",
+        x: 0,
+        y: 0,
+        start,
+        end,
+        stroke: "#64748b",
+        strokeWidth: 2,
+      };
+      const baseDoc = docRef.current;
+      const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, newArrow] };
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      setSelectedIds(new Set([newArrow.id]));
+      return;
+    }
+
+    const finalMarquee = marqueeRef.current;
+    if (!finalMarquee || !marqueeStartRef.current) {
       marqueeStartRef.current = null;
+      marqueeRef.current = null;
       return;
     }
 
     const marqueeRect = {
-      x: Math.min(marquee.x0, marquee.x1),
-      y: Math.min(marquee.y0, marquee.y1),
-      width: Math.abs(marquee.x1 - marquee.x0),
-      height: Math.abs(marquee.y1 - marquee.y0),
+      x: Math.min(finalMarquee.x0, finalMarquee.x1),
+      y: Math.min(finalMarquee.y0, finalMarquee.y1),
+      width: Math.abs(finalMarquee.x1 - finalMarquee.x0),
+      height: Math.abs(finalMarquee.y1 - finalMarquee.y0),
     };
 
+    const baseDoc = docRef.current;
     const selected = new Set<string>();
-    for (const shape of doc.shapes) {
+    for (const shape of baseDoc.shapes) {
       if (shape.type === "arrow" || shape.type === "line") continue;
-      const bounds = getShapeBounds(doc, shape);
+      const bounds = getShapeBounds(baseDoc, shape);
       if (aabbOverlap(marqueeRect, bounds)) {
         selected.add(shape.id);
       }
     }
 
     setSelectedIds(selected);
+    marqueeRef.current = null;
     setMarquee(null);
     marqueeStartRef.current = null;
   };
@@ -547,21 +721,86 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       setSelectedIds(new Set([shapeId]));
     }
 
-    setDragState({
+    dragStateRef.current = {
       shapeId,
       startX: x,
       startY: y,
       initialPositions,
-    });
+    };
+    dragDocRef.current = docRef.current;
+
+    const verticals: number[] = [];
+    const horizontals: number[] = [];
+    for (const s of docRef.current.shapes) {
+      if (s.type === "arrow" || s.type === "line") continue;
+      if (initialPositions.has(s.id)) continue;
+      const b = getShapeBounds(docRef.current, s);
+      verticals.push(b.x, b.x + b.width / 2, b.x + b.width);
+      horizontals.push(b.y, b.y + b.height / 2, b.y + b.height);
+    }
+    snapCandidatesRef.current = { verticals, horizontals };
   };
 
-  const handleShapeDragMove = (shapeId: string, x: number, y: number) => {
+  const handleShapeDragMove = (e: Konva.KonvaEventObject<DragEvent>, shapeId: string, x: number, y: number) => {
+    const dragState = dragStateRef.current;
     if (!dragState) return;
+    const baseDoc = dragDocRef.current ?? docRef.current;
 
-    const dx = x - dragState.startX;
-    const dy = y - dragState.startY;
+    let dx = x - dragState.startX;
+    let dy = y - dragState.startY;
 
-    const newShapes = doc.shapes.map((s) => {
+    let selLeft = Infinity;
+    let selRight = -Infinity;
+    let selTop = Infinity;
+    let selBottom = -Infinity;
+    for (const [id, initial] of dragState.initialPositions) {
+      const shape = baseDoc.shapes.find((s) => s.id === id);
+      if (!shape || shape.type === "arrow" || shape.type === "line") continue;
+      const w = "width" in shape ? shape.width : 0;
+      const h = "height" in shape ? shape.height : 0;
+      const nx = initial.x + dx;
+      const ny = initial.y + dy;
+      selLeft = Math.min(selLeft, nx);
+      selRight = Math.max(selRight, nx + w);
+      selTop = Math.min(selTop, ny);
+      selBottom = Math.max(selBottom, ny + h);
+    }
+    const selCenterX = (selLeft + selRight) / 2;
+    const selCenterY = (selTop + selBottom) / 2;
+
+    let bestVDiff = SNAP_THRESHOLD;
+    let snapDx = 0;
+    let vLine: number | null = null;
+    for (const v of snapCandidatesRef.current.verticals) {
+      for (const edge of [selLeft, selCenterX, selRight]) {
+        const diff = Math.abs(edge - v);
+        if (diff < bestVDiff) {
+          bestVDiff = diff;
+          snapDx = v - edge;
+          vLine = v;
+        }
+      }
+    }
+
+    let bestHDiff = SNAP_THRESHOLD;
+    let snapDy = 0;
+    let hLine: number | null = null;
+    for (const h of snapCandidatesRef.current.horizontals) {
+      for (const edge of [selTop, selCenterY, selBottom]) {
+        const diff = Math.abs(edge - h);
+        if (diff < bestHDiff) {
+          bestHDiff = diff;
+          snapDy = h - edge;
+          hLine = h;
+        }
+      }
+    }
+
+    dx += snapDx;
+    dy += snapDy;
+    setSnapGuides({ v: vLine, h: hLine });
+
+    const newShapes = baseDoc.shapes.map((s) => {
       const initial = dragState.initialPositions.get(s.id);
       if (initial) {
         return { ...s, x: initial.x + dx, y: initial.y + dy };
@@ -569,15 +808,31 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       return s;
     });
 
-    setDoc({ ...doc, shapes: newShapes });
+    const newDoc = { ...baseDoc, shapes: newShapes };
+    dragDocRef.current = newDoc;
+    setDoc(newDoc);
+
+    const updatedShape = newShapes.find((s) => s.id === shapeId);
+    if (updatedShape && "width" in updatedShape && "height" in updatedShape) {
+      const nodeX = updatedShape.type === "ellipse" ? updatedShape.x + updatedShape.width / 2 : updatedShape.x;
+      const nodeY = updatedShape.type === "ellipse" ? updatedShape.y + updatedShape.height / 2 : updatedShape.y;
+      e.target.position({ x: nodeX, y: nodeY });
+    }
   };
 
   const handleShapeDragEnd = () => {
-    if (!dragState) return;
+    if (!dragStateRef.current) return;
 
-    // Commit the final position
-    commitChanges(doc);
-    setDragState(null);
+    // Commit the final (possibly snapped) position exactly once, from the
+    // ref updated synchronously in handleShapeDragMove — not from `doc` state,
+    // which may not have caught up to the last dragmove yet (same-event-burst
+    // gestures can fire dragmove/dragend before React flushes in between).
+    const finalDoc = dragDocRef.current ?? docRef.current;
+    commitChanges(finalDoc);
+    if (finalDoc !== docRef.current) setDoc(finalDoc);
+    dragDocRef.current = null;
+    dragStateRef.current = null;
+    setSnapGuides({ v: null, h: null });
   };
 
   useEffect(() => {
@@ -653,13 +908,42 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const editingShape = editingShapeId ? doc.shapes.find((s) => s.id === editingShapeId) : null;
   const editingRect = editingShape ? getShapeBounds(doc, editingShape) : null;
   const stageContainerRect = editingShape ? stageRef.current?.container().getBoundingClientRect() : null;
+  const hoverShape = arrowDraft?.hoverShapeId ? doc.shapes.find((s) => s.id === arrowDraft.hoverShapeId) : null;
+  const hoverBounds = hoverShape ? getShapeBounds(doc, hoverShape) : null;
 
   return (
-    <div className="w-full h-full">
+    <div className="w-full h-full relative">
+      {!readOnly && (
+        <div className="absolute top-2 left-2 z-10 flex gap-1 rounded-md border border-slate-200 bg-white/95 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
+          <button
+            type="button"
+            onClick={() => setModeSynced("select")}
+            className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+              mode === "select"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            Select
+          </button>
+          <button
+            type="button"
+            onClick={() => setModeSynced("arrow")}
+            className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+              mode === "arrow"
+                ? "bg-indigo-600 text-white"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            }`}
+          >
+            Arrow
+          </button>
+        </div>
+      )}
+
       <Stage
         ref={stageRef}
-        width={800}
-        height={500}
+        width={STAGE_WIDTH}
+        height={STAGE_HEIGHT}
         onClick={handleStageClick}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
@@ -677,7 +961,8 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
               handleShapeDragEnd,
               readOnly,
               startEditing,
-              editingShapeId
+              editingShapeId,
+              mode
             )
           )}
 
@@ -690,6 +975,25 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
               fill="rgba(79,70,229,0.1)"
               stroke="#4f46e5"
               strokeWidth={1}
+              listening={false}
+            />
+          )}
+
+          {snapGuides.v !== null && (
+            <Line
+              points={[snapGuides.v, 0, snapGuides.v, STAGE_HEIGHT]}
+              stroke="#f59e0b"
+              strokeWidth={1}
+              dash={[4, 4]}
+              listening={false}
+            />
+          )}
+          {snapGuides.h !== null && (
+            <Line
+              points={[0, snapGuides.h, STAGE_WIDTH, snapGuides.h]}
+              stroke="#f59e0b"
+              strokeWidth={1}
+              dash={[4, 4]}
               listening={false}
             />
           )}
@@ -708,6 +1012,44 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
               onTransformEnd={handleTransformEnd}
             />
           )}
+        </Layer>
+
+        <Layer listening={false}>
+          {arrowDraft && (
+            <Line
+              points={[
+                arrowDraft.startPoint.x,
+                arrowDraft.startPoint.y,
+                arrowDraft.currentPoint.x,
+                arrowDraft.currentPoint.y,
+              ]}
+              stroke="#6366f1"
+              strokeWidth={2}
+              dash={[6, 4]}
+            />
+          )}
+          {hoverBounds &&
+            (hoverShape?.type === "ellipse" ? (
+              <Ellipse
+                x={hoverBounds.x + hoverBounds.width / 2}
+                y={hoverBounds.y + hoverBounds.height / 2}
+                radiusX={hoverBounds.width / 2 + 3}
+                radiusY={hoverBounds.height / 2 + 3}
+                stroke="#6366f1"
+                strokeWidth={2}
+                dash={[4, 4]}
+              />
+            ) : (
+              <Rect
+                x={hoverBounds.x - 3}
+                y={hoverBounds.y - 3}
+                width={hoverBounds.width + 6}
+                height={hoverBounds.height + 6}
+                stroke="#6366f1"
+                strokeWidth={2}
+                dash={[4, 4]}
+              />
+            ))}
         </Layer>
       </Stage>
 
