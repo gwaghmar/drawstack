@@ -46,6 +46,8 @@ import { DiagramTypeIcon } from "@/components/diagram-icon";
 import { highlightSource } from "@/lib/source-highlight";
 import { applyPatch, isValidJson } from "@/lib/agent-tools";
 import { downloadSource, sourceFileExtension } from "@/lib/diagrams/source-export";
+import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
+import { parseFreeformSource, getShapeBounds, type FrameShape } from "@/lib/diagrams/freeform-canvas";
 import { usePresence, presenceColor } from "@/lib/use-presence";
 import { saveProject, createProject, listRevisions, restoreRevision } from "@/app/actions/project";
 import { getBrandKit } from "@/app/actions/brand-kit";
@@ -191,6 +193,8 @@ export function EditorClient({
   const [diagramType] = useState<DiagramType>(initialDiagramType);
   const [useCaseId, setUseCaseId] = useState<UseCaseId>("custom");
   const [pngScale, setPngScale] = useState<1 | 2 | 3>(2);
+  const [svgTransparentBg, setSvgTransparentBg] = useState(false);
+  const [svgExportFrameId, setSvgExportFrameId] = useState<string>("");
   const [showGrid, setShowGrid] = useState(Boolean(parsedInitial.ui.showGrid));
   const [fontId, setFontId] = useState(parsedInitial.ui.fontId ?? "geist");
   const [paletteId, setPaletteId] = useState(parsedInitial.ui.paletteId ?? "default");
@@ -700,6 +704,15 @@ export function EditorClient({
   }, [initialPrompt, initialWelcome, sendChatMessage, router, showToast]);
 
   const typeMeta = useMemo(() => getDiagramTypeMeta(diagramType), [diagramType]);
+  const freeformFrames = useMemo<FrameShape[]>(() => {
+    if (diagramType !== "freeform") return [];
+    try {
+      const { doc } = parseFreeformSource(source);
+      return doc.shapes.filter((s): s is FrameShape => s.type === "frame");
+    } catch {
+      return [];
+    }
+  }, [diagramType, source]);
   const theme = useMemo(() => THEMES.find((t) => t.id === themeId) ?? THEMES[0], [themeId]);
   const bgColor = paletteId === "default" ? (theme.themeVariables.background ?? "#f8fafc") : customBackground;
   const uiState = useMemo(() => ({ showGrid, fontId, paletteId, customBackground, customAccent, backgroundPattern }), [showGrid, fontId, paletteId, customBackground, customAccent, backgroundPattern]);
@@ -965,6 +978,38 @@ export function EditorClient({
     return await toPng(node, { pixelRatio: pngScale, filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
   }, [pngScale]);
 
+  // Patches the viewBox/width/height of a freeformToSvg() result to crop it to a
+  // sub-region (a single frame's bounds) without re-rendering — arrow endpoints
+  // outside the crop still resolved correctly because the full doc was rendered.
+  const cropSvgViewBox = (svg: string, bounds: { x: number; y: number; width: number; height: number }) => {
+    const vx = Math.round(bounds.x);
+    const vy = Math.round(bounds.y);
+    const vw = Math.max(1, Math.round(bounds.width));
+    const vh = Math.max(1, Math.round(bounds.height));
+    const tagMatch = svg.match(/^<svg[^>]*>/);
+    if (!tagMatch) return svg;
+    let tag = tagMatch[0];
+    tag = tag.replace(/viewBox="[^"]*"/, `viewBox="${vx} ${vy} ${vw} ${vh}"`);
+    // freeformToSvg emits width="100%" height="auto" on the non-bare (has
+    // background) path, not numeric px — match either so the declared size
+    // always reflects the crop, not just the viewBox.
+    tag = tag.replace(/width="[^"]*"/, `width="${vw}"`);
+    tag = tag.replace(/height="[^"]*"/, `height="${vh}"`);
+    return tag + svg.slice(tagMatch[0].length);
+  };
+
+  // True vector SVG export for the freeform canvas — routes through freeformToSvg
+  // (the same exporter the canvas toolbar's own Export button uses) instead of
+  // html-to-image's toSvg, which only wraps a rasterized screenshot in an <svg> tag.
+  const buildFreeformVectorSvg = useCallback((frameId?: string): string => {
+    const { doc } = parseFreeformSource(source);
+    const svg = freeformToSvg(doc, { bare: svgTransparentBg });
+    if (!frameId) return svg;
+    const frame = doc.shapes.find((s): s is FrameShape => s.type === "frame" && s.id === frameId);
+    if (!frame) return svg;
+    return cropSvgViewBox(svg, getShapeBounds(doc, frame));
+  }, [source, svgTransparentBg]);
+
   const handleExport = useCallback(async (format: "png" | "svg" | "pdf") => {
     setIsExporting(true);
     try {
@@ -988,6 +1033,11 @@ export function EditorClient({
         downloadBlob(pdf.output("blob"), `${fn}.pdf`);
         return;
       }
+      if (format === "svg" && diagramType === "freeform") {
+        const svgString = buildFreeformVectorSvg();
+        downloadBlob(new Blob([svgString], { type: "image/svg+xml" }), `${fn}.svg`);
+        return;
+      }
       const node = frameRef.current;
       if (!node) return;
       if (format === "png") {
@@ -1000,7 +1050,20 @@ export function EditorClient({
     } finally {
       setIsExporting(false);
     }
-  }, [title, pngScale, capturePngDataUrl]);
+  }, [title, pngScale, capturePngDataUrl, diagramType, buildFreeformVectorSvg]);
+
+  const handleExportFrameSvg = useCallback(() => {
+    if (!svgExportFrameId) return;
+    setIsExporting(true);
+    try {
+      const frame = freeformFrames.find((f) => f.id === svgExportFrameId);
+      const fn = `${title || "diagram"}-${frame?.name || "frame"}`.replace(/\s+/g, "-");
+      const svgString = buildFreeformVectorSvg(svgExportFrameId);
+      downloadBlob(new Blob([svgString], { type: "image/svg+xml" }), `${fn}.svg`);
+    } finally {
+      setIsExporting(false);
+    }
+  }, [svgExportFrameId, freeformFrames, title, buildFreeformVectorSvg]);
 
   const handleCopyImage = useCallback(async () => {
     setIsExporting(true);
@@ -1979,7 +2042,38 @@ export function EditorClient({
                       </select>
                     </div>
                   </div>
-                  <p className="mt-2 text-[10px] leading-snug text-slate-400">Native canvas export — custom sizes don&apos;t apply.</p>
+                  {diagramType === "freeform" && (
+                    <>
+                      <label className="mt-3 flex items-center gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-300">
+                        <input type="checkbox" checked={svgTransparentBg} onChange={(e) => setSvgTransparentBg(e.target.checked)} className="rounded border-slate-300 dark:border-slate-600" />
+                        Transparent background (vector SVG only)
+                      </label>
+                      {freeformFrames.length > 0 && (
+                        <div className="mt-2 flex items-center gap-1.5">
+                          <select
+                            aria-label="Frame to export"
+                            value={svgExportFrameId}
+                            onChange={(e) => setSvgExportFrameId(e.target.value)}
+                            className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 text-xs"
+                          >
+                            <option value="">Select frame…</option>
+                            {freeformFrames.map((f) => (
+                              <option key={f.id} value={f.id}>{f.name || f.id}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            disabled={!svgExportFrameId}
+                            onClick={handleExportFrameSvg}
+                            className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-1.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            Export frame
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <p className="mt-2 text-[10px] leading-snug text-slate-400">{diagramType === "freeform" ? "SVG is true vector export. PNG/PDF are native canvas captures — custom sizes don't apply." : "Native canvas export — custom sizes don't apply."}</p>
                 </div>
               )}
             </div>
