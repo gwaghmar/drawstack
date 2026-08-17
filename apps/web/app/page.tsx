@@ -4,14 +4,13 @@ import { Logo } from "@/components/logo";
 import { LandingDemoSection } from "@/components/landing-demo-section";
 import { LandingHeader } from "@/components/landing-header";
 
-const DIAGRAM_TYPES = [
-  "Flowchart", "Sequence", "ER diagram", "Gantt", "Mindmap",
-  "Class diagram", "BPMN", "Cloud arch", "Org chart", "Timeline",
-  "Vs. comparison", "2×2 matrix", "Funnel", "Tier list", "Iceberg",
-  "Venn", "Excalidraw", "ECharts", "Nivo charts", "Freeform canvas", "Budget", "Bracket",
+const CAPABILITIES = [
+  "Flowcharts", "Org charts", "Dashboards", "Mindmaps", "Timelines",
+  "Treemaps", "Network diagrams", "System architecture", "Financial cards",
+  "Process maps", "Icon posters", "Terminal art",
 ];
 
-const FEATURED = new Set(["Flowchart", "Sequence", "Cloud arch"]);
+const FEATURED = new Set(["Flowcharts", "Dashboards", "Org charts"]);
 
 export default async function HomePage() {
   const session = await auth();
@@ -46,7 +45,7 @@ export default async function HomePage() {
             <br />in seconds.
           </h1>
           <p style={{ fontFamily: "var(--font-sans-fs)", fontSize: 20, fontWeight: 300, lineHeight: 1.6, color: "var(--charcoal-light)", maxWidth: 560, margin: "0 auto 40px" }}>
-            Describe what you need. drawxyz picks the right diagram type and generates it instantly — flowcharts, timelines, org charts, and 19 more.
+            Describe what you need and watch it build itself on one visual canvas — flowcharts, dashboards, timelines, org charts, and more, all live and editable together.
           </p>
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 16 }}>
             {isLoggedIn ? (
@@ -78,8 +77,8 @@ export default async function HomePage() {
 
         {/* TRUST STRIP */}
         <div style={{ background: "var(--charcoal)", padding: "20px 40px", display: "flex", alignItems: "center", justifyContent: "center", gap: 32, flexWrap: "wrap" }}>
-          <span style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>Supports</span>
-          {["Mermaid", "Excalidraw", "ReactFlow", "ECharts", "BPMN", "Freeform", "+ 16 more"].map((t) => (
+          <span style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>One canvas</span>
+          {["Flowcharts", "Dashboards", "Org charts", "Timelines", "Network maps", "System diagrams"].map((t) => (
             <span key={t} style={{ fontFamily: "var(--font-mono-fs)", fontSize: 12, color: "#aaa", letterSpacing: "0.04em" }}>{t}</span>
           ))}
         </div>
@@ -97,7 +96,7 @@ export default async function HomePage() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, maxWidth: 860, margin: "0 auto" }}>
             {[
-              { icon: "✦", title: "AI picks the type", desc: "Describe what you need — AI selects from 22 diagram types and generates clean source instantly." },
+              { icon: "✦", title: "AI builds it live", desc: "Describe what you need — AI places real, editable shapes directly on the canvas, instantly." },
               { icon: "⌨", title: "Edit with source or canvas", desc: "Tweak the AI output in the source editor or drag nodes directly. Every change is live-previewed." },
               { icon: "↗", title: "Export anywhere", desc: "PNG, SVG, PDF, or ZIP at any size. Sized for LinkedIn posts, pitch decks, docs, or presentations." },
             ].map(({ icon, title, desc }) => (
@@ -110,14 +109,14 @@ export default async function HomePage() {
           </div>
         </div>
 
-        {/* 22 TYPES CHIP CLOUD */}
+        {/* CAPABILITIES CHIP CLOUD */}
         <div style={{ background: "var(--cream-dark)", padding: "56px 40px" }}>
-          <p style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fs-indigo)", textAlign: "center", marginBottom: 16 }}>22 diagram types</p>
+          <p style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--fs-indigo)", textAlign: "center", marginBottom: 16 }}>One canvas, built for AI</p>
           <h2 style={{ fontFamily: "var(--font-mono-fs)", fontSize: "clamp(24px,4vw,40px)", fontWeight: 400, textTransform: "uppercase", color: "var(--charcoal)", textAlign: "center", marginBottom: 32, lineHeight: 1.1 }}>
             One tool. Every diagram.
           </h2>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 8, maxWidth: 760, margin: "0 auto", justifyContent: "center" }}>
-            {DIAGRAM_TYPES.map((t) => (
+            {CAPABILITIES.map((t) => (
               <span
                 key={t}
                 style={{
