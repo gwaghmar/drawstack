@@ -202,6 +202,9 @@ const FreeformCanvasEnvelopeSchema = z.object({
   version: z.literal(1),
   renderMode: z.enum(["clean", "sketchy"]).optional(),
   shapes: z.array(z.unknown()).min(1, "Freeform canvas must have at least one shape"),
+  // The AI never authors comments -- opaque cargo here, just carried through
+  // so an edit to a commented project doesn't silently delete the comments.
+  comments: z.array(z.unknown()).optional(),
 });
 
 // Normalizes obviously-recoverable AI mistakes in place before Zod validation,
@@ -297,7 +300,12 @@ export async function validateAndRepairOutput(
     return { ok: false, reason: "Freeform canvas structure invalid: no shapes survived reference cleanup" };
   }
 
-  const doc = { version: envelope.data.version, renderMode: envelope.data.renderMode, shapes: finalShapes };
+  const doc = {
+    version: envelope.data.version,
+    renderMode: envelope.data.renderMode,
+    shapes: finalShapes,
+    comments: envelope.data.comments,
+  };
 
   const refErrors = validateFreeformRefs(doc as CanvasDocument);
   if (refErrors.length > 0) {

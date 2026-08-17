@@ -1,8 +1,21 @@
+export type CanvasComment = {
+  id: string;
+  x: number;
+  y: number;
+  text: string;
+  author?: string;
+  authorColor?: string;
+  createdAt: number;
+  resolved?: boolean;
+};
+
 export type CanvasDocument = {
   version: 1;
   renderMode?: "clean" | "sketchy";
   presentationMode?: boolean;
   shapes: CanvasShape[];
+  /** Pinned canvas annotations — never rendered in SVG/PNG/PDF export, never authored by AI generation. */
+  comments?: CanvasComment[];
 };
 
 export type BaseShape = {

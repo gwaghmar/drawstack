@@ -67,6 +67,9 @@ import {
   Search,
   X,
   Layers,
+  MessageSquare,
+  CheckCircle2,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 
@@ -87,6 +90,7 @@ import {
   generateShapeId,
   resolveColor,
   type CanvasDocument,
+  type CanvasComment,
   type CanvasShape,
   type ArrowShape,
   type ArrowEndpoint,
@@ -140,7 +144,7 @@ type MarqueeState = {
   y1: number;
 };
 
-type ToolMode = "select" | "draw" | "arrow" | "place";
+type ToolMode = "select" | "draw" | "arrow" | "place" | "comment";
 
 type ShapeKind =
   | "rectangle"
@@ -336,6 +340,18 @@ function RichTextGroup({
 function stagePointFromEvent(stage: Konva.Stage | null): { x: number; y: number } | null {
   if (!stage) return null;
   return stage.getRelativePointerPosition();
+}
+
+function formatCommentTimestamp(createdAt: number): string {
+  const diffMs = Date.now() - createdAt;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(createdAt).toLocaleDateString();
 }
 
 // Midpoint measured along the drawn polyline, not the straight start→end chord.
@@ -1698,6 +1714,14 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   // redrawing it.
   const [hoveredArrowId, setHoveredArrowId] = useState<string | null>(null);
   const [arrowEditDraft, setArrowEditDraft] = useState<ArrowEditDraft | null>(null);
+  // Which comment pin (if any) has its edit popover open — deliberately its
+  // own state, not folded into selectedIds/editingShapeId, since comments
+  // aren't shapes and shouldn't interact with shape selection/editing at all.
+  const [openCommentId, setOpenCommentId] = useState<string | null>(null);
+  const [commentDraft, setCommentDraft] = useState("");
+  const commentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const openCommentIdRef = useRef<string | null>(null);
+  openCommentIdRef.current = openCommentId;
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
   // Present Mode frame-stepping position — ephemeral UI/viewport state only,
@@ -1872,6 +1896,11 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     el.select();
   }, [editingShapeId, editingTableCell]);
 
+  useEffect(() => {
+    if (!openCommentId) return;
+    commentTextareaRef.current?.focus();
+  }, [openCommentId]);
+
   const startEditing = (shapeId: string) => {
     if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
     const shape = doc.shapes.find((s) => s.id === shapeId);
@@ -1927,6 +1956,62 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       setEditingShapeId(id);
       setEditingValue("");
     }
+  };
+
+  const insertCommentAt = (cx: number, cy: number) => {
+    const baseDoc = docRef.current;
+    const id = generateShapeId("c");
+    const newComment: CanvasComment = {
+      id,
+      x: Math.round(cx),
+      y: Math.round(cy),
+      text: "",
+      author: presenceIdentity?.name,
+      authorColor: presenceIdentity?.color,
+      createdAt: Date.now(),
+    };
+    const newDoc = { ...baseDoc, comments: [...(baseDoc.comments ?? []), newComment] };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    setModeSynced("select");
+    setOpenCommentId(id);
+    setCommentDraft("");
+  };
+
+  const updateComment = (id: string, patch: Partial<CanvasComment>) => {
+    const baseDoc = docRef.current;
+    const comments = (baseDoc.comments ?? []).map((c) => (c.id === id ? { ...c, ...patch } : c));
+    const newDoc = { ...baseDoc, comments };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
+  const deleteComment = (id: string) => {
+    const baseDoc = docRef.current;
+    const comments = (baseDoc.comments ?? []).filter((c) => c.id !== id);
+    const newDoc = { ...baseDoc, comments };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    setOpenCommentId(null);
+  };
+
+  const commitCommentDraft = () => {
+    const id = openCommentIdRef.current;
+    if (!id) return;
+    const existing = (docRef.current.comments ?? []).find((c) => c.id === id);
+    if (!existing || existing.text === commentDraft) return;
+    updateComment(id, { text: commentDraft });
+  };
+
+  const toggleCommentPopover = (comment: CanvasComment) => {
+    if (openCommentId === comment.id) {
+      commitCommentDraft();
+      setOpenCommentId(null);
+      return;
+    }
+    commitCommentDraft();
+    setOpenCommentId(comment.id);
+    setCommentDraft(comment.text);
   };
 
   const insertImageAt = (src: string, naturalWidth: number, naturalHeight: number, cx: number, cy: number) => {
@@ -2592,8 +2677,17 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       return;
     }
 
+    if (modeRef.current === "comment") {
+      const pos = stagePointFromEvent(stageRef.current);
+      if (pos) {
+        insertCommentAt(pos.x, pos.y);
+      }
+      return;
+    }
+
     if (e.target === stageRef.current) {
       setSelectedIds(new Set());
+      setOpenCommentId(null);
     }
   };
 
@@ -3256,6 +3350,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         })()
       : null;
   const editingRect = editingTableCellRect ?? (editingShape ? getShapeBounds(doc, editingShape) : null);
+  const openComment = openCommentId ? doc.comments?.find((c) => c.id === openCommentId) ?? null : null;
   const stageContainerRect = stageRef.current?.container().getBoundingClientRect();
   const presentationFrames = doc.presentationMode
     ? doc.shapes.filter((s): s is FrameShape => s.type === "frame")
@@ -3417,6 +3512,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           {toolbarButton(<MousePointer2 className="h-4 w-4" />, mode === "select", () => setModeSynced("select"), "Select (V)")}
           {toolbarButton(<Pencil className="h-4 w-4" />, mode === "draw", () => setModeSynced("draw"), "Pen (P)")}
           {toolbarButton(<MoveUpRight className="h-4 w-4" />, mode === "arrow", () => setModeSynced("arrow"), "Arrow (A)")}
+          {toolbarButton(<MessageSquare className="h-4 w-4" />, mode === "comment", () => setModeSynced("comment"), "Add comment")}
 
           {toolbarDivider}
 
@@ -4133,6 +4229,56 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
             })}
           </Layer>
         )}
+
+        {/* Comment Pins — deliberately not part of the shapes layer: comments
+            aren't CanvasShapes, never go through the Transformer/marquee
+            selection system, and never render in SVG/PNG/PDF export. */}
+        {!readOnly && (doc.comments?.length ?? 0) > 0 && (
+          <Layer>
+            {doc.comments!.map((comment) => {
+              const color = comment.authorColor || "#4f46e5";
+              const opacity = comment.resolved ? 0.45 : 1;
+              return (
+                <Group
+                  key={comment.id}
+                  x={comment.x}
+                  y={comment.y}
+                  opacity={opacity}
+                  onClick={(e) => {
+                    e.cancelBubble = true;
+                    toggleCommentPopover(comment);
+                  }}
+                  onMouseDown={(e) => {
+                    e.cancelBubble = true;
+                  }}
+                  onMouseEnter={(e) => {
+                    const container = e.target.getStage()?.container();
+                    if (container) container.style.cursor = "pointer";
+                  }}
+                  onMouseLeave={(e) => {
+                    const container = e.target.getStage()?.container();
+                    if (container) container.style.cursor = "";
+                  }}
+                >
+                  <KonvaCircle radius={12} fill={color} stroke="#ffffff" strokeWidth={2} shadowColor="rgba(0,0,0,0.3)" shadowBlur={4} shadowOffsetY={1} />
+                  <Text
+                    text={(comment.author?.trim()?.[0] ?? "?").toUpperCase()}
+                    fontSize={11}
+                    fontStyle="bold"
+                    fill="#ffffff"
+                    width={24}
+                    height={24}
+                    offsetX={12}
+                    offsetY={12}
+                    align="center"
+                    verticalAlign="middle"
+                    listening={false}
+                  />
+                </Group>
+              );
+            })}
+          </Layer>
+        )}
       </Stage>
 
       {/* ─── Multiplayer Peer Cursors ────────────────────────────────────── */}
@@ -4241,6 +4387,76 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
             zIndex: 50,
           }}
         />
+      )}
+
+      {/* ─── Comment Edit Popover ────────────────────────────────────────── */}
+      {!readOnly && openComment && (
+        <div
+          className="absolute z-40 w-64 rounded-xl border border-white/50 bg-white/95 p-3 shadow-xl shadow-slate-900/10 backdrop-blur-xl dark:border-white/10 dark:bg-slate-900/95"
+          style={{
+            left: Math.max(12, viewport.x + openComment.x * viewport.scale + 16),
+            top: Math.max(12, viewport.y + openComment.y * viewport.scale - 8),
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <span
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white"
+                style={{ backgroundColor: openComment.authorColor || "#4f46e5" }}
+              >
+                {(openComment.author?.trim()?.[0] ?? "?").toUpperCase()}
+              </span>
+              <span className="truncate text-xs font-medium text-slate-700 dark:text-slate-200">
+                {openComment.author || "Anonymous"}
+              </span>
+            </div>
+            <span className="shrink-0 text-[10px] text-slate-400 dark:text-slate-500">
+              {formatCommentTimestamp(openComment.createdAt)}
+            </span>
+          </div>
+
+          <textarea
+            ref={commentTextareaRef}
+            value={commentDraft}
+            onChange={(e) => setCommentDraft(e.target.value)}
+            onBlur={commitCommentDraft}
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                e.preventDefault();
+                commitCommentDraft();
+                setOpenCommentId(null);
+              }
+              e.stopPropagation();
+            }}
+            placeholder="Add a comment…"
+            rows={3}
+            className="w-full resize-none rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+          />
+
+          <div className="mt-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => updateComment(openComment.id, { resolved: !openComment.resolved })}
+              className={`flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium transition-colors ${
+                openComment.resolved
+                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-900/40 dark:text-emerald-300"
+                  : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+              }`}
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              {openComment.resolved ? "Reopen" : "Resolve"}
+            </button>
+            <button
+              type="button"
+              onClick={() => deleteComment(openComment.id)}
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-[11px] font-medium text-red-600 transition-colors hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
