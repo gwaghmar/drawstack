@@ -78,7 +78,10 @@ SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, 
    - "table": { "type": "table", "tableName": "users", "columns": [{"name":"id","type":"uuid","isPk":true}, {"name":"email","type":"varchar"}] }
    - "image": { "type": "image", "src": "data:image/..." | "https://...", "width": 200, "height": 150 }
    - "rectangle" | "ellipse" | "diamond" | "cylinder" | "cloud" | "sticky" | "frame"
+   - any shape: "shadow": false renders it flat (no drop shadow) — use across a whole diagram for a crisp technical/UML look, e.g. { "type": "rectangle", "width": 120, "height": 40, "shadow": false }
    - "arrow" | "line": { "start": {"shapeId":"id1","anchor":"auto"}, "end": {"shapeId":"id2","anchor":"auto"}, "routing": "orthogonal" | "curved" | "straight", "label": "...", "waypoints": [{"x":300,"y":150}], "showJunctions": true } — waypoints bend the connector through intermediate points; showJunctions draws small ring markers at each point — use for routed/dense diagrams with visible junctions.
+     Head style (either end): "arrowHeadEnd" / "arrowHeadStart": "arrow" (default filled pointer) | "triangle-open" (hollow triangle — UML inheritance/"is a") | "diamond" (filled — UML composition/"owns") | "diamond-open" (hollow — UML aggregation/"has a") | "none". Example: { "type": "line", "start": {"shapeId":"subclass"}, "end": {"shapeId":"baseclass"}, "arrowHeadEnd": "triangle-open" }
+     Label style: "labelStyle": "plain" drops the pill border/shadow and prints the label as bare text over a background knockout — use for classic flowchart/UML edge labels; omit (default "pill") for product/architecture diagrams.
    - "mesh_connector": { "type": "mesh_connector", "width": 400, "height": 200, "fromCount": 6, "toCount": 8, "orientation": "horizontal" } — dense many-to-many crosshatch of thin lines fanning between two groups of points, with dots at each point. Use for "all X connect to all Y" visualizations, network-density motifs, decorative connection fans in system/process maps. Not for real semantic connections (those are separate arrows) — this is a visual density/relationship-field motif.
 
 RULES:

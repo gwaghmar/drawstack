@@ -118,6 +118,7 @@ const FreeformBaseSchema = z.object({
   opacity: z.number().optional(),
   frameId: z.string().nullable().optional(),
   locked: z.boolean().optional(),
+  shadow: z.boolean().optional(),
   text: FreeformTextSchema.optional(),
 });
 
@@ -178,6 +179,8 @@ const FreeformEndpointSchema = z.union([
   }),
 ]);
 
+const FreeformArrowHeadSchema = z.enum(["arrow", "triangle-open", "diamond", "diamond-open", "none"]);
+
 const FreeformArrowShapeSchema = FreeformBaseSchema.passthrough().extend({
   type: z.enum(["arrow", "line"]),
   start: FreeformEndpointSchema,
@@ -186,6 +189,9 @@ const FreeformArrowShapeSchema = FreeformBaseSchema.passthrough().extend({
   routing: z.enum(["straight", "curved", "orthogonal"]).optional(),
   arrowStart: z.boolean().optional(),
   arrowEnd: z.boolean().optional(),
+  arrowHeadStart: FreeformArrowHeadSchema.optional(),
+  arrowHeadEnd: FreeformArrowHeadSchema.optional(),
+  labelStyle: z.enum(["pill", "plain"]).optional(),
   waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
   showJunctions: z.boolean().optional(),
 });

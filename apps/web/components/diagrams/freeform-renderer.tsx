@@ -87,6 +87,9 @@ import {
   serializeFreeformDocument,
   resolveArrowRenderEndpoints,
   getShapeBounds,
+  resolveArrowHeadStyle,
+  computeArrowHeadGeometry,
+  fitTextFontSize,
   generateShapeId,
   resolveColor,
   type CanvasDocument,
@@ -949,6 +952,49 @@ function renderShape(
 
     const { x: midX, y: midY } = polylineMidpoint(points);
 
+    const routePoints: { x: number; y: number }[] = [];
+    for (let i = 0; i < points.length; i += 2) routePoints.push({ x: points[i], y: points[i + 1] });
+    const headStartStyle = resolveArrowHeadStyle(arrowShape, "start");
+    const headEndStyle = resolveArrowHeadStyle(arrowShape, "end");
+    const startHead = computeArrowHeadGeometry(
+      routePoints[0],
+      routePoints[1] ?? routePoints[0],
+      headStartStyle,
+      commonProps.strokeWidth
+    );
+    const endHead = computeArrowHeadGeometry(
+      routePoints[routePoints.length - 1],
+      routePoints[routePoints.length - 2] ?? routePoints[routePoints.length - 1],
+      headEndStyle,
+      commonProps.strokeWidth
+    );
+
+    // Stop the line inside a styled head so an open head isn't skewered by its own line.
+    if (startHead) {
+      points[0] = startHead.lineEnd.x;
+      points[1] = startHead.lineEnd.y;
+    }
+    if (endHead) {
+      points[points.length - 2] = endHead.lineEnd.x;
+      points[points.length - 1] = endHead.lineEnd.y;
+    }
+
+    const headNodes = [startHead, endHead].map((geom, i) =>
+      geom ? (
+        <Line
+          key={`${shape.id}-head-${i}`}
+          points={geom.points.flatMap((p) => [p.x, p.y])}
+          closed
+          fill={geom.filled ? stroke : "#ffffff"}
+          stroke={stroke}
+          strokeWidth={commonProps.strokeWidth}
+          lineJoin="round"
+          opacity={commonProps.opacity}
+          listening={false}
+        />
+      ) : null
+    );
+
     const junctionNodes = arrowShape.showJunctions
       ? fullPoints.map((p, i) => (
           <KonvaCircle
@@ -978,8 +1024,8 @@ function renderShape(
           opacity={commonProps.opacity}
           pointerLength={10}
           pointerWidth={10}
-          pointerAtBeginning={arrowShape.arrowStart ?? false}
-          pointerAtEnding={arrowShape.arrowEnd !== false}
+          pointerAtBeginning={headStartStyle === "arrow"}
+          pointerAtEnding={headEndStyle === "arrow"}
           listening={!readOnly}
           onClick={(e) => onShapeClick?.(e, shape.id)}
           onDblClick={() => onShapeDblClick?.(shape.id)}
@@ -1016,19 +1062,19 @@ function renderShape(
             width={labelWidth}
             height={20}
             fill="#ffffff"
-            cornerRadius={4}
-            stroke="#cbd5e1"
-            strokeWidth={1}
-            opacity={0.9}
+            cornerRadius={arrowShape.labelStyle === "plain" ? 0 : 4}
+            stroke={arrowShape.labelStyle === "plain" ? undefined : "#cbd5e1"}
+            strokeWidth={arrowShape.labelStyle === "plain" ? 0 : 1}
+            opacity={arrowShape.labelStyle === "plain" ? 1 : 0.9}
           />
           <Text
             x={-halfWidth}
             y={2}
             width={labelWidth}
             text={arrowShape.label}
-            fontSize={11}
+            fontSize={arrowShape.labelStyle === "plain" ? 12 : 11}
             fontFamily="Inter, Arial, sans-serif"
-            fill="#475569"
+            fill={arrowShape.labelStyle === "plain" ? "#1e293b" : "#475569"}
             align="center"
             wrap="none"
             ellipsis
@@ -1040,6 +1086,7 @@ function renderShape(
     return (
       <Fragment key={shape.id}>
         {arrowNode}
+        {headNodes}
         {junctionNodes}
         {labelNode}
       </Fragment>
@@ -1613,6 +1660,14 @@ function renderShape(
   if (!isEditingThis && shape.type !== "text" && !laysOutOwnText && shape.text?.content) {
     const labelBounds = getShapeBounds(doc, shape);
     const labelWrap = shape.text.wrap !== false;
+    const labelFontSize = fitTextFontSize({
+      content: shape.text.content,
+      width: labelBounds.width,
+      height: labelBounds.height,
+      fontSize: shape.text.fontSize ?? 13,
+      bold: shape.text.bold,
+      wrap: shape.text.wrap,
+    });
     if (labelWrap && hasRichTextMarkers(shape.text.content)) {
       nodes.push(
         <RichTextGroup
@@ -1622,7 +1677,7 @@ function renderShape(
           width={Math.max(20, labelBounds.width - 16)}
           height={Math.max(20, labelBounds.height - 16)}
           content={shape.text.content}
-          fontSize={shape.text.fontSize ?? 13}
+          fontSize={labelFontSize}
           fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
           align={shape.text.align ?? "center"}
           verticalAlign="middle"
@@ -1641,7 +1696,7 @@ function renderShape(
           width={Math.max(20, labelBounds.width - 16)}
           height={Math.max(20, labelBounds.height - 16)}
           text={shape.text.content}
-          fontSize={shape.text.fontSize ?? 13}
+          fontSize={labelFontSize}
           fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
           wrap={shape.text.wrap === false ? "none" : "word"}
           fill={shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#1e293b")}

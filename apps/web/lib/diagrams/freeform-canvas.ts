@@ -34,6 +34,8 @@ export type BaseShape = {
   parentId?: string | null;
   locked?: boolean;
   onClickNavigateToFrameId?: string;
+  /** false = flat, no drop shadow in SVG export (Konva has never drawn one) */
+  shadow?: boolean;
   text?: {
     content: string;
     fontSize?: number;
@@ -323,14 +325,21 @@ export type ArrowEndpoint =
   | { x: number; y: number }
   | { shapeId: string; anchor?: "top" | "right" | "bottom" | "left" | "center" | "auto" };
 
+export type ArrowHeadStyle = "arrow" | "triangle-open" | "diamond" | "diamond-open" | "none";
+
 export type ArrowShape = BaseShape & {
   type: "arrow" | "line";
   start: ArrowEndpoint;
   end: ArrowEndpoint;
   label?: string;
+  /** "plain" drops the pill border/shadow, keeping only a knockout behind the text */
+  labelStyle?: "pill" | "plain";
   routing?: "straight" | "curved" | "orthogonal";
   arrowStart?: boolean;
   arrowEnd?: boolean;
+  /** UML-style heads; when set they win over the arrowStart/arrowEnd booleans */
+  arrowHeadStart?: ArrowHeadStyle;
+  arrowHeadEnd?: ArrowHeadStyle;
   /** intermediate points, in order, between resolved start and end */
   waypoints?: { x: number; y: number }[];
   /** draw small hollow circles at start, each waypoint, and end */
@@ -677,4 +686,90 @@ export function resolveColor(value: string | undefined, theme: "light" | "dark" 
   if (value === undefined) return undefined;
   const paletteEntry = CANVAS_PALETTE[value];
   return paletteEntry ? paletteEntry[theme] : value;
+}
+
+export function resolveArrowHeadStyle(arrow: ArrowShape, end: "start" | "end"): ArrowHeadStyle {
+  const explicit = end === "start" ? arrow.arrowHeadStart : arrow.arrowHeadEnd;
+  if (explicit) return explicit;
+  if (arrow.type === "line") return "none";
+  const on = end === "start" ? arrow.arrowStart === true : arrow.arrowEnd !== false;
+  return on ? "arrow" : "none";
+}
+
+/** Head polygon + the point the line must stop at so it never pokes through an open head. */
+export function computeArrowHeadGeometry(
+  tip: { x: number; y: number },
+  from: { x: number; y: number },
+  style: ArrowHeadStyle,
+  strokeWidth = 2
+): { points: { x: number; y: number }[]; filled: boolean; lineEnd: { x: number; y: number } } | null {
+  if (style === "none" || style === "arrow") return null;
+
+  const dx = tip.x - from.x;
+  const dy = tip.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const ux = dx / len;
+  const uy = dy / len;
+  const nx = -uy;
+  const ny = ux;
+
+  const scale = Math.max(1, strokeWidth / 1.5);
+  const depth = (style === "diamond" || style === "diamond-open" ? 18 : 13) * scale;
+  const half = 5.5 * scale;
+
+  const at = (along: number, across: number) => ({
+    x: tip.x - ux * along + nx * across,
+    y: tip.y - uy * along + ny * across,
+  });
+
+  const points =
+    style === "triangle-open"
+      ? [tip, at(depth, half), at(depth, -half)]
+      : [tip, at(depth / 2, half), at(depth, 0), at(depth / 2, -half)];
+
+  return { points, filled: style === "diamond", lineEnd: at(depth, 0) };
+}
+
+export function wrapTextLines(content: string, maxChars: number): string[] {
+  return content.split("\n").flatMap((raw) => {
+    if (raw.length <= maxChars) return [raw];
+    const out: string[] = [];
+    let cur = "";
+    for (const word of raw.split(" ")) {
+      const candidate = cur ? `${cur} ${word}` : word;
+      if (candidate.length > maxChars && cur) {
+        out.push(cur);
+        cur = word;
+      } else {
+        cur = candidate;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  });
+}
+
+const TEXT_LINE_HEIGHT = 1.35;
+
+/** Shrinks (never grows) the font so wrapped copy stays inside the shape instead of spilling past it. */
+export function fitTextFontSize(opts: {
+  content: string;
+  width: number;
+  height: number;
+  fontSize: number;
+  bold?: boolean;
+  wrap?: boolean;
+}): number {
+  if (opts.wrap === false) return opts.fontSize;
+  const availW = Math.max(24, opts.width - 24);
+  const availH = Math.max(12, opts.height - 4);
+  const floor = Math.max(8, opts.fontSize * 0.6);
+
+  for (let size = opts.fontSize; size >= floor; size -= 0.5) {
+    const maxChars = Math.max(4, Math.floor(availW / (size * (opts.bold ? 0.58 : 0.55))));
+    const lines = wrapTextLines(opts.content, maxChars).length;
+    // Leading only sits between lines; a single line needs glyph height, not a full line box.
+    if ((lines - 1) * size * TEXT_LINE_HEIGHT + size * 1.15 <= availH) return size;
+  }
+  return floor;
 }

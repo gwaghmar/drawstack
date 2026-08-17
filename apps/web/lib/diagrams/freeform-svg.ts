@@ -28,6 +28,10 @@ import {
   getShapeBounds,
   resolveColor,
   isBoundEndpoint,
+  resolveArrowHeadStyle,
+  computeArrowHeadGeometry,
+  wrapTextLines,
+  fitTextFontSize,
 } from "./freeform-canvas.ts";
 import { getStroke } from "perfect-freehand";
 import {
@@ -616,7 +620,14 @@ export function freeformToSvg(
           ? 'stroke-dasharray="3,4"'
           : "";
 
-    const shadowFilter = shape.type === "sticky" ? 'filter="url(#soft-card-shadow)"' : shape.type !== "frame" && shape.type !== "dashboard" ? 'filter="url(#soft-card-shadow)"' : "";
+    const shadowFilter =
+      shape.shadow === false
+        ? ""
+        : shape.type === "sticky"
+          ? 'filter="url(#soft-card-shadow)"'
+          : shape.type !== "frame" && shape.type !== "dashboard"
+            ? 'filter="url(#soft-card-shadow)"'
+            : "";
 
     // ─── Freehand Path ────────────────────────────────────────────────────────
     if (shape.type === "path") {
@@ -636,31 +647,50 @@ export function freeformToSvg(
     if (shape.type === "arrow" || shape.type === "line") {
       const arrow = shape as ArrowShape;
       const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
-      const markerEnd = shape.type === "arrow" && arrow.arrowEnd !== false ? 'marker-end="url(#arrowhead)"' : "";
-      const markerStart = shape.type === "arrow" && arrow.arrowStart ? 'marker-start="url(#arrowhead-start)"' : "";
+      const headStart = resolveArrowHeadStyle(arrow, "start");
+      const headEnd = resolveArrowHeadStyle(arrow, "end");
+      const markerEnd = headEnd === "arrow" ? 'marker-end="url(#arrowhead)"' : "";
+      const markerStart = headStart === "arrow" ? 'marker-start="url(#arrowhead-start)"' : "";
 
       const startAnchor = isBoundEndpoint(arrow.start) ? arrow.start.anchor : undefined;
       const endAnchor = isBoundEndpoint(arrow.end) ? arrow.end.anchor : undefined;
       const fullPoints = [start, ...(arrow.waypoints ?? []), end];
 
-      let pathD: string;
-      let waypoints: { x: number; y: number }[] = [];
+      const buildRoute = (pts: { x: number; y: number }[]): { pathD: string; waypoints: { x: number; y: number }[] } => {
+        if (arrow.routing === "orthogonal") {
+          const res = computeObstacleAwarePathMulti(pts, startAnchor, endAnchor, 8);
+          return { pathD: res.pathD, waypoints: res.waypoints };
+        }
+        if (arrow.routing === "curved") return { pathD: computeCatmullRomPathD(pts), waypoints: pts };
+        return { pathD: pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "), waypoints: pts };
+      };
 
-      if (arrow.routing === "orthogonal") {
-        const res = computeObstacleAwarePathMulti(fullPoints, startAnchor, endAnchor, 8);
-        pathD = res.pathD;
-        waypoints = res.waypoints;
-      } else if (arrow.routing === "curved") {
-        pathD = computeCatmullRomPathD(fullPoints);
-        waypoints = fullPoints;
-      } else {
-        pathD = fullPoints.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ");
-        waypoints = fullPoints;
-      }
+      // Route once to learn the real last-segment direction (orthogonal bends it),
+      // then re-route against the trimmed endpoints so an open head isn't skewered.
+      const probe = buildRoute(fullPoints).waypoints;
+      const startGeom = computeArrowHeadGeometry(probe[0], probe[1] ?? probe[0], headStart, strokeWidth);
+      const endGeom = computeArrowHeadGeometry(
+        probe[probe.length - 1],
+        probe[probe.length - 2] ?? probe[probe.length - 1],
+        headEnd,
+        strokeWidth
+      );
+
+      const routePoints = [...fullPoints];
+      if (startGeom) routePoints[0] = startGeom.lineEnd;
+      if (endGeom) routePoints[routePoints.length - 1] = endGeom.lineEnd;
+      const { pathD, waypoints } = buildRoute(routePoints);
 
       elements.push(
         `<path d="${pathD}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linecap="round" stroke-linejoin="round" ${strokeDash} fill="none" ${markerStart} ${markerEnd} ${opacity} />`
       );
+
+      for (const geom of [startGeom, endGeom]) {
+        if (!geom) continue;
+        elements.push(
+          `<polygon points="${geom.points.map((p) => `${p.x},${p.y}`).join(" ")}" fill="${geom.filled ? stroke : cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round" ${opacity} />`
+        );
+      }
 
       if (arrow.showJunctions) {
         for (const p of fullPoints) {
@@ -695,10 +725,15 @@ export function freeformToSvg(
         const labelX = bestPos.x + normX * 14;
         const labelY = bestPos.y + normY * 14;
 
+        const plain = arrow.labelStyle === "plain";
+        const labelBg = plain
+          ? `<rect x="-${labelWidth / 2}" y="-9" width="${labelWidth}" height="18" fill="${cardBg}" />`
+          : `<rect x="-${labelWidth / 2}" y="-11" width="${labelWidth}" height="22" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1.2" filter="url(#pill-shadow)" />`;
+
         elements.push(
           `<g transform="translate(${labelX}, ${labelY})">
-            <rect x="-${labelWidth / 2}" y="-11" width="${labelWidth}" height="22" rx="6" fill="${cardBg}" stroke="${cardBorder}" stroke-width="1.2" filter="url(#pill-shadow)" />
-            <text x="0" y="4" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(arrow.label)}</text>
+            ${labelBg}
+            <text x="0" y="4" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="${plain ? 12 : 11}" font-weight="${plain ? "500" : "600"}" fill="${plain ? textColorPrimary : textColorMuted}">${escapeXml(arrow.label)}</text>
           </g>`
         );
       }
@@ -2000,7 +2035,18 @@ export function freeformToSvg(
 
     if (shape.text?.content) {
       const textColor = shape.text.color ?? (shape.type === "sticky" ? "#713f12" : textColorPrimary);
-      const fontSize = shape.text.fontSize ?? 13;
+      // A bare text shape has no box to spill out of; only container shapes fit.
+      const fontSize =
+        shape.type === "text"
+          ? shape.text.fontSize ?? 13
+          : fitTextFontSize({
+              content: shape.text.content,
+              width: w,
+              height: h,
+              fontSize: shape.text.fontSize ?? 13,
+              bold: shape.text.bold,
+              wrap: shape.text.wrap,
+            });
       const fontWeight = shape.text.bold ? "700" : "500";
       // Konva honors text.fontFamily; the exporter must too or WYSIWYG breaks.
       const fontFamily = shape.text.fontFamily ?? "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
@@ -2050,23 +2096,7 @@ export function freeformToSvg(
           `<text xml:space="preserve" font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" fill="${textColor}" text-anchor="start">${tspans}</text>`
         );
       } else {
-        const lines = shape.text.content.split("\n").flatMap((raw) => {
-          if (noWrap || raw.length <= maxChars) return [raw];
-          const words = raw.split(" ");
-          const out: string[] = [];
-          let cur = "";
-          for (const word of words) {
-            const candidate = cur ? `${cur} ${word}` : word;
-            if (candidate.length > maxChars && cur) {
-              out.push(cur);
-              cur = word;
-            } else {
-              cur = candidate;
-            }
-          }
-          if (cur) out.push(cur);
-          return out;
-        });
+        const lines = noWrap ? shape.text.content.split("\n") : wrapTextLines(shape.text.content, maxChars);
         const lineHeight = fontSize * 1.35;
         const totalTextHeight = lines.length * lineHeight;
         const yOffset = shape.type === "cylinder" ? h * 0.1 : 0;

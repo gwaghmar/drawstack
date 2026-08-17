@@ -4,6 +4,7 @@ import {
   type CanvasShape,
   type ArrowShape,
   type ArrowEndpoint,
+  type ArrowHeadStyle,
   generateShapeId,
   getShapeBounds,
   resolveArrowEndpoint,
@@ -12,6 +13,8 @@ import {
 
 // Shared between the in-app Agent Mode tool and the external MCP endpoint —
 // one schema, so the two surfaces can't drift on what a valid op looks like.
+const ArrowHeadStyleSchema = z.enum(["arrow", "triangle-open", "diamond", "diamond-open", "none"]);
+
 export const CanvasOpSchema = z.union([
   z.object({
     op: z.literal("add"),
@@ -69,6 +72,9 @@ export const CanvasOpSchema = z.union([
     id: z.string().optional(),
     name: z.string().optional(),
     kind: z.enum(["arrow", "line"]).optional(),
+    arrowHeadStart: ArrowHeadStyleSchema.optional(),
+    arrowHeadEnd: ArrowHeadStyleSchema.optional(),
+    labelStyle: z.enum(["pill", "plain"]).optional(),
   }),
   z.object({
     op: z.literal("place"),
@@ -110,6 +116,9 @@ export type CanvasOp =
       routing?: "straight" | "curved" | "orthogonal";
       arrowStart?: boolean;
       arrowEnd?: boolean;
+      arrowHeadStart?: ArrowHeadStyle;
+      arrowHeadEnd?: ArrowHeadStyle;
+      labelStyle?: "pill" | "plain";
     }
   | {
       op: "place";
@@ -293,6 +302,9 @@ function applyConnect(
     routing?: "straight" | "curved" | "orthogonal";
     arrowStart?: boolean;
     arrowEnd?: boolean;
+    arrowHeadStart?: ArrowHeadStyle;
+    arrowHeadEnd?: ArrowHeadStyle;
+    labelStyle?: "pill" | "plain";
   }
 ): CanvasShape {
   if (from.type === "arrow" || from.type === "line") throw new OpError(`connect "from" cannot be an arrow/line: ${from.id}`);
@@ -313,6 +325,9 @@ function applyConnect(
     ...(op.routing ? { routing: op.routing } : {}),
     ...(op.arrowStart !== undefined ? { arrowStart: op.arrowStart } : {}),
     ...(op.arrowEnd !== undefined ? { arrowEnd: op.arrowEnd } : {}),
+    ...(op.arrowHeadStart ? { arrowHeadStart: op.arrowHeadStart } : {}),
+    ...(op.arrowHeadEnd ? { arrowHeadEnd: op.arrowHeadEnd } : {}),
+    ...(op.labelStyle ? { labelStyle: op.labelStyle } : {}),
   };
   return arrow;
 }
