@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer } from "react-konva";
 import Konva from "konva";
 import {
@@ -27,7 +27,9 @@ type MarqueeState = {
   y1: number;
 };
 
-type ToolMode = "select" | "arrow";
+type ToolMode = "select" | "arrow" | "place";
+
+type ShapeKind = "rectangle" | "ellipse" | "diamond" | "sticky" | "text" | "frame";
 
 type ArrowDraft = {
   startPoint: { x: number; y: number };
@@ -38,22 +40,75 @@ type ArrowDraft = {
 
 type SnapCandidates = { verticals: number[]; horizontals: number[] };
 
+type Viewport = { scale: number; x: number; y: number };
+
 const STAGE_WIDTH = 800;
 const STAGE_HEIGHT = 500;
 const SNAP_THRESHOLD = 6;
+const MIN_SCALE = 0.25;
+const MAX_SCALE = 4;
+const ZOOM_FACTOR = 1.05;
 
-function getShapeIdAtPointer(
-  doc: CanvasDocument,
-  stage: Konva.Stage | null,
-  pos: { x: number; y: number } | null
-): string | null {
-  if (!stage || !pos) return null;
+function stagePointFromEvent(stage: Konva.Stage | null): { x: number; y: number } | null {
+  if (!stage) return null;
+  return stage.getRelativePointerPosition();
+}
+
+function getShapeIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): string | null {
+  if (!stage) return null;
+  const pos = stage.getPointerPosition();
+  if (!pos) return null;
   const node = stage.getIntersection(pos);
   const id = node?.id();
   if (!id) return null;
   const shape = doc.shapes.find((s) => s.id === id);
   if (!shape || shape.type === "arrow" || shape.type === "line") return null;
   return shape.id;
+}
+
+function defaultFill(shape: CanvasShape): string {
+  if (shape.fill) return shape.fill;
+  if (shape.type === "sticky") return "#fef08a";
+  if (shape.type === "frame") return "transparent";
+  return "#ffffff";
+}
+
+function defaultStroke(shape: CanvasShape): string {
+  if (shape.stroke) return shape.stroke;
+  if (shape.type === "frame") return "#94a3b8";
+  return "#000000";
+}
+
+function defaultSizeFor(kind: ShapeKind): { width: number; height: number } {
+  switch (kind) {
+    case "sticky":
+      return { width: 180, height: 180 };
+    case "text":
+      return { width: 120, height: 30 };
+    case "frame":
+      return { width: 400, height: 300 };
+    default:
+      return { width: 160, height: 80 };
+  }
+}
+
+function nextFrameName(doc: CanvasDocument): string {
+  let max = 0;
+  for (const s of doc.shapes) {
+    if (s.type !== "frame") continue;
+    const m = /^Frame (\d+)$/.exec(s.name ?? "");
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `Frame ${max + 1}`;
+}
+
+function frameContaining(doc: CanvasDocument, x: number, y: number): string | null {
+  for (let i = doc.shapes.length - 1; i >= 0; i--) {
+    const s = doc.shapes[i];
+    if (s.type !== "frame") continue;
+    if (x >= s.x && x <= s.x + s.width && y >= s.y && y <= s.y + s.height) return s.id;
+  }
+  return null;
 }
 
 const FIXTURE_DOCUMENT: CanvasDocument = {
@@ -130,13 +185,13 @@ function renderShape(
   mode: ToolMode = "select"
 ): React.ReactNode {
   const isEditingThis = editingShapeId === shape.id;
-  const draggable = !readOnly && mode !== "arrow";
+  const draggable = !readOnly && mode !== "arrow" && mode !== "place";
   const commonProps = {
     x: shape.x,
     y: shape.y,
     rotation: shape.rotation ?? 0,
-    fill: shape.fill ?? "#ffffff",
-    stroke: shape.stroke ?? "#000000",
+    fill: defaultFill(shape),
+    stroke: defaultStroke(shape),
     strokeWidth: shape.strokeWidth ?? 1,
     opacity: shape.opacity ?? 1,
   };
@@ -183,7 +238,6 @@ function renderShape(
     switch (shape.type) {
       case "rectangle":
       case "sticky":
-      case "frame":
         return (
           <Rect
             key={shape.id}
@@ -191,7 +245,7 @@ function renderShape(
             {...commonProps}
             width={shape.width}
             height={shape.height}
-            cornerRadius={shape.type === "rectangle" && "cornerRadius" in shape ? shape.cornerRadius : undefined}
+            cornerRadius={shape.type === "sticky" ? 4 : "cornerRadius" in shape ? shape.cornerRadius : undefined}
             draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
@@ -199,6 +253,34 @@ function renderShape(
             onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
+        );
+
+      case "frame":
+        return (
+          <Fragment key={shape.id}>
+            <Rect
+              key={shape.id}
+              id={shape.id}
+              {...commonProps}
+              width={shape.width}
+              height={shape.height}
+              draggable={draggable}
+              onClick={(e) => onShapeClick?.(e, shape.id)}
+              onDblClick={() => onShapeDblClick?.(shape.id)}
+              onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+              onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+              onDragEnd={() => onShapeDragEnd?.(shape.id)}
+            />
+            <Text
+              key={`${shape.id}-name`}
+              x={shape.x}
+              y={shape.y - 18}
+              text={shape.name ?? ""}
+              fontSize={12}
+              fill="#64748b"
+              listening={false}
+            />
+          </Fragment>
         );
 
       case "ellipse":
@@ -355,6 +437,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const [mode, setMode] = useState<ToolMode>("select");
   const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null });
+  const [placeKind, setPlaceKind] = useState<ShapeKind | null>(null);
+  const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
+  const [isSpaceHeld, setIsSpaceHeld] = useState(false);
 
   const isApplyingRef = useRef(false);
   const lastSourceRef = useRef(source);
@@ -365,8 +450,13 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   docRef.current = doc;
   const snapCandidatesRef = useRef<SnapCandidates>({ verticals: [], horizontals: [] });
   const modeRef = useRef<ToolMode>(mode);
+  const placeKindRef = useRef<ShapeKind | null>(null);
   const dragDocRef = useRef<CanvasDocument | null>(null);
   const suppressNextClickRef = useRef(false);
+  const spaceHeldRef = useRef(false);
+  const panRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const viewportRef = useRef(viewport);
+  viewportRef.current = viewport;
 
   // Whole-gesture bookkeeping lives in refs, written synchronously in the
   // handler that starts the gesture. Same-event-burst dragmove/mouseup/dragend
@@ -380,6 +470,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     startX: number;
     startY: number;
     initialPositions: Map<string, { x: number; y: number }>;
+    directIds: Set<string>;
   } | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   const arrowDraftRef = useRef<ArrowDraft | null>(null);
@@ -387,6 +478,16 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const setModeSynced = (next: ToolMode) => {
     modeRef.current = next;
     setMode(next);
+    if (next !== "place") {
+      placeKindRef.current = null;
+      setPlaceKind(null);
+    }
+  };
+
+  const enterPlaceMode = (kind: ShapeKind) => {
+    placeKindRef.current = kind;
+    setPlaceKind(kind);
+    setModeSynced("place");
   };
 
   // Sync external source prop to local state
@@ -431,6 +532,32 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     setSelectedIds(new Set());
     setEditingShapeId(shapeId);
     setEditingValue(shape.text?.content ?? "");
+  };
+
+  const insertShapeAt = (kind: ShapeKind, cx: number, cy: number) => {
+    const { width, height } = defaultSizeFor(kind);
+    const x = Math.round(cx - width / 2);
+    const y = Math.round(cy - height / 2);
+    const baseDoc = docRef.current;
+    const id = generateShapeId(kind === "frame" ? "f" : kind.slice(0, 1));
+
+    const newShape: CanvasShape =
+      kind === "frame"
+        ? { id, type: "frame", x, y, width, height, name: nextFrameName(baseDoc) }
+        : kind === "text"
+          ? { id, type: "text", x, y, width, height, text: { content: "", fontSize: 14, align: "left" } }
+          : { id, type: kind, x, y, width, height, stroke: "#334155", strokeWidth: 2 };
+
+    const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, newShape] };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    setSelectedIds(new Set([id]));
+    setModeSynced("select");
+
+    if (kind === "text") {
+      setEditingShapeId(id);
+      setEditingValue("");
+    }
   };
 
   const commitEditing = (cancel: boolean) => {
@@ -534,7 +661,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [doc, selectedIds, readOnly, editingShapeId]);
 
-  // Tool-mode shortcuts: v = select, a = arrow
+  // Tool-mode shortcuts: v = select, a = arrow, r/o/d/s/t/f = place shape, 0 = reset zoom
   useEffect(() => {
     if (readOnly) return;
 
@@ -543,15 +670,76 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       const activeElement = document.activeElement;
       if (activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA") return;
 
-      if (e.key === "v" || e.key === "V") {
-        setModeSynced("select");
-      } else if (e.key === "a" || e.key === "A") {
-        setModeSynced("arrow");
+      if (e.key === "Escape") {
+        if (modeRef.current !== "select") {
+          arrowDraftRef.current = null;
+          setArrowDraft(null);
+          setModeSynced("select");
+        }
+        return;
+      }
+
+      switch (e.key.toLowerCase()) {
+        case "v":
+          setModeSynced("select");
+          break;
+        case "a":
+          setModeSynced("arrow");
+          break;
+        case "r":
+          enterPlaceMode("rectangle");
+          break;
+        case "o":
+          enterPlaceMode("ellipse");
+          break;
+        case "d":
+          enterPlaceMode("diamond");
+          break;
+        case "s":
+          enterPlaceMode("sticky");
+          break;
+        case "t":
+          enterPlaceMode("text");
+          break;
+        case "f":
+          enterPlaceMode("frame");
+          break;
+        case "0":
+          setViewport({ scale: 1, x: 0, y: 0 });
+          break;
+        default:
+          break;
       }
     };
 
     window.addEventListener("keydown", handleModeKeyDown);
     return () => window.removeEventListener("keydown", handleModeKeyDown);
+  }, [readOnly, editingShapeId]);
+
+  // Space-hold enables pan-drag
+  useEffect(() => {
+    if (readOnly) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== "Space" || editingShapeId) return;
+      const activeElement = document.activeElement;
+      if (activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA") return;
+      e.preventDefault();
+      spaceHeldRef.current = true;
+      setIsSpaceHeld(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.code !== "Space") return;
+      spaceHeldRef.current = false;
+      setIsSpaceHeld(false);
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+    };
   }, [readOnly, editingShapeId]);
 
   const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
@@ -577,6 +765,18 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       suppressNextClickRef.current = false;
       return;
     }
+    if (modeRef.current === "place") {
+      const stage = e.target.getStage();
+      const pos = stagePointFromEvent(stage);
+      if (!pos) return;
+      const kind = placeKindRef.current;
+      if (!kind) {
+        setModeSynced("select");
+        return;
+      }
+      insertShapeAt(kind, pos.x, pos.y);
+      return;
+    }
     if (modeRef.current === "arrow") return;
     if (e.target === e.target.getStage()) {
       setSelectedIds(new Set());
@@ -586,11 +786,24 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (readOnly) return;
 
+    if (spaceHeldRef.current || e.evt.button === 1) {
+      e.evt.preventDefault();
+      panRef.current = {
+        startX: e.evt.clientX,
+        startY: e.evt.clientY,
+        originX: viewportRef.current.x,
+        originY: viewportRef.current.y,
+      };
+      return;
+    }
+
+    if (modeRef.current === "place") return;
+
     if (modeRef.current === "arrow") {
       const stage = e.target.getStage();
-      const pos = stage?.getPointerPosition() ?? null;
+      const pos = stagePointFromEvent(stage);
       if (!pos) return;
-      const startBinding = getShapeIdAtPointer(docRef.current, stage, pos);
+      const startBinding = getShapeIdAtPointer(docRef.current, stage);
       const draft: ArrowDraft = { startPoint: pos, startBinding, currentPoint: pos, hoverShapeId: null };
       arrowDraftRef.current = draft;
       setArrowDraft(draft);
@@ -600,7 +813,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     if (marqueeRef.current !== null) return;
     if (e.target !== e.target.getStage()) return;
 
-    const pos = e.target.getStage()!.getPointerPosition();
+    const pos = stagePointFromEvent(e.target.getStage());
     if (!pos) return;
 
     marqueeStartRef.current = { x: pos.x, y: pos.y };
@@ -610,13 +823,21 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   };
 
   const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (panRef.current) {
+      const pan = panRef.current;
+      const dx = e.evt.clientX - pan.startX;
+      const dy = e.evt.clientY - pan.startY;
+      setViewport((prev) => ({ ...prev, x: pan.originX + dx, y: pan.originY + dy }));
+      return;
+    }
+
     if (modeRef.current === "arrow") {
       const current = arrowDraftRef.current;
       if (!current) return;
       const stage = e.target.getStage();
-      const pos = stage?.getPointerPosition() ?? null;
+      const pos = stagePointFromEvent(stage);
       if (!pos) return;
-      const hoverShapeId = getShapeIdAtPointer(docRef.current, stage, pos);
+      const hoverShapeId = getShapeIdAtPointer(docRef.current, stage);
       const draft: ArrowDraft = { ...current, currentPoint: pos, hoverShapeId };
       arrowDraftRef.current = draft;
       setArrowDraft(draft);
@@ -626,7 +847,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     const current = marqueeRef.current;
     if (!marqueeStartRef.current || !current) return;
 
-    const pos = e.target.getStage()!.getPointerPosition();
+    const pos = stagePointFromEvent(e.target.getStage());
     if (!pos) return;
 
     const draft: MarqueeState = { ...current, x1: pos.x, y1: pos.y };
@@ -635,12 +856,17 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   };
 
   const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (panRef.current) {
+      panRef.current = null;
+      return;
+    }
+
     if (modeRef.current === "arrow") {
       const draft = arrowDraftRef.current;
       if (!draft) return;
       const stage = e.target.getStage();
-      const pos = stage?.getPointerPosition() ?? draft.currentPoint;
-      const endBinding = getShapeIdAtPointer(docRef.current, stage, pos);
+      const pos = stagePointFromEvent(stage) ?? draft.currentPoint;
+      const endBinding = getShapeIdAtPointer(docRef.current, stage);
       const dist = Math.hypot(pos.x - draft.startPoint.x, pos.y - draft.startPoint.y);
 
       arrowDraftRef.current = null;
@@ -706,19 +932,39 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
   const handleShapeDragStart = (shapeId: string, x: number, y: number) => {
     if (readOnly) return;
-    const initialPositions = new Map<string, { x: number; y: number }>();
+    const idsToMove = new Set<string>();
+    const directIds = new Set<string>();
 
     if (selectedIds.has(shapeId)) {
       // Move all selected shapes
       for (const shape of doc.shapes) {
         if (selectedIds.has(shape.id) && shape.type !== "arrow" && shape.type !== "line") {
-          initialPositions.set(shape.id, { x: shape.x, y: shape.y });
+          idsToMove.add(shape.id);
+          directIds.add(shape.id);
         }
       }
     } else {
       // Single shape drag
-      initialPositions.set(shapeId, { x, y });
+      idsToMove.add(shapeId);
+      directIds.add(shapeId);
       setSelectedIds(new Set([shapeId]));
+    }
+
+    // Dragging a frame moves its children with it
+    for (const id of Array.from(idsToMove)) {
+      const shape = doc.shapes.find((s) => s.id === id);
+      if (shape?.type !== "frame") continue;
+      for (const child of doc.shapes) {
+        if (child.frameId === id && child.type !== "arrow" && child.type !== "line") {
+          idsToMove.add(child.id);
+        }
+      }
+    }
+
+    const initialPositions = new Map<string, { x: number; y: number }>();
+    for (const id of idsToMove) {
+      const shape = doc.shapes.find((s) => s.id === id);
+      if (shape) initialPositions.set(id, { x: shape.x, y: shape.y });
     }
 
     dragStateRef.current = {
@@ -726,6 +972,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       startX: x,
       startY: y,
       initialPositions,
+      directIds,
     };
     dragDocRef.current = docRef.current;
 
@@ -821,13 +1068,36 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   };
 
   const handleShapeDragEnd = () => {
-    if (!dragStateRef.current) return;
+    const dragState = dragStateRef.current;
+    if (!dragState) return;
 
     // Commit the final (possibly snapped) position exactly once, from the
     // ref updated synchronously in handleShapeDragMove — not from `doc` state,
     // which may not have caught up to the last dragmove yet (same-event-burst
     // gestures can fire dragmove/dragend before React flushes in between).
-    const finalDoc = dragDocRef.current ?? docRef.current;
+    let finalDoc = dragDocRef.current ?? docRef.current;
+
+    // Directly-dragged (non-frame) shapes join/leave a frame based on where
+    // their center lands; children dragged along with a frame keep their
+    // membership as-is.
+    const reassignments = new Map<string, string | null>();
+    for (const id of dragState.directIds) {
+      const shape = finalDoc.shapes.find((s) => s.id === id);
+      if (!shape || shape.type === "frame" || shape.type === "arrow" || shape.type === "line") continue;
+      const bounds = getShapeBounds(finalDoc, shape);
+      const cx = bounds.x + bounds.width / 2;
+      const cy = bounds.y + bounds.height / 2;
+      const newFrameId = frameContaining(finalDoc, cx, cy);
+      const currentFrameId = shape.frameId ?? null;
+      if (newFrameId !== currentFrameId) reassignments.set(id, newFrameId);
+    }
+    if (reassignments.size > 0) {
+      const shapes = finalDoc.shapes.map((s) =>
+        reassignments.has(s.id) ? { ...s, frameId: reassignments.get(s.id) ?? null } : s
+      );
+      finalDoc = { ...finalDoc, shapes };
+    }
+
     commitChanges(finalDoc);
     if (finalDoc !== docRef.current) setDoc(finalDoc);
     dragDocRef.current = null;
@@ -896,6 +1166,32 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     commitChanges(newDoc);
   };
 
+  const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
+    e.evt.preventDefault();
+    const stage = stageRef.current;
+    if (!stage) return;
+
+    if (e.evt.ctrlKey) {
+      const pointer = stage.getPointerPosition();
+      if (!pointer) return;
+      setViewport((prev) => {
+        const mousePointTo = {
+          x: (pointer.x - prev.x) / prev.scale,
+          y: (pointer.y - prev.y) / prev.scale,
+        };
+        const rawScale = e.evt.deltaY > 0 ? prev.scale / ZOOM_FACTOR : prev.scale * ZOOM_FACTOR;
+        const newScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, rawScale));
+        return {
+          scale: newScale,
+          x: pointer.x - mousePointTo.x * newScale,
+          y: pointer.y - mousePointTo.y * newScale,
+        };
+      });
+    } else {
+      setViewport((prev) => ({ ...prev, x: prev.x - e.evt.deltaX, y: prev.y - e.evt.deltaY }));
+    }
+  };
+
   const marqueeRect = marquee
     ? {
         x: Math.min(marquee.x0, marquee.x1),
@@ -911,32 +1207,38 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const hoverShape = arrowDraft?.hoverShapeId ? doc.shapes.find((s) => s.id === arrowDraft.hoverShapeId) : null;
   const hoverBounds = hoverShape ? getShapeBounds(doc, hoverShape) : null;
 
+  const toolbarButton = (label: string, active: boolean, onClick: () => void) => (
+    <button
+      key={label}
+      type="button"
+      onClick={onClick}
+      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+        active
+          ? "bg-indigo-600 text-white"
+          : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+      }`}
+    >
+      {label}
+    </button>
+  );
+
+  const orderedShapes = [
+    ...doc.shapes.filter((s) => s.type === "frame"),
+    ...doc.shapes.filter((s) => s.type !== "frame"),
+  ];
+
   return (
     <div className="w-full h-full relative">
       {!readOnly && (
-        <div className="absolute top-2 left-2 z-10 flex gap-1 rounded-md border border-slate-200 bg-white/95 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/95">
-          <button
-            type="button"
-            onClick={() => setModeSynced("select")}
-            className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-              mode === "select"
-                ? "bg-indigo-600 text-white"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-            }`}
-          >
-            Select
-          </button>
-          <button
-            type="button"
-            onClick={() => setModeSynced("arrow")}
-            className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-              mode === "arrow"
-                ? "bg-indigo-600 text-white"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-            }`}
-          >
-            Arrow
-          </button>
+        <div className="absolute top-2 left-2 z-10 flex flex-wrap gap-1 rounded-md border border-slate-200 bg-white/95 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/95 max-w-[240px]">
+          {toolbarButton("Select", mode === "select", () => setModeSynced("select"))}
+          {toolbarButton("Arrow", mode === "arrow", () => setModeSynced("arrow"))}
+          {toolbarButton("Rectangle", mode === "place" && placeKind === "rectangle", () => enterPlaceMode("rectangle"))}
+          {toolbarButton("Ellipse", mode === "place" && placeKind === "ellipse", () => enterPlaceMode("ellipse"))}
+          {toolbarButton("Diamond", mode === "place" && placeKind === "diamond", () => enterPlaceMode("diamond"))}
+          {toolbarButton("Sticky", mode === "place" && placeKind === "sticky", () => enterPlaceMode("sticky"))}
+          {toolbarButton("Text", mode === "place" && placeKind === "text", () => enterPlaceMode("text"))}
+          {toolbarButton("Frame", mode === "place" && placeKind === "frame", () => enterPlaceMode("frame"))}
         </div>
       )}
 
@@ -944,13 +1246,19 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         ref={stageRef}
         width={STAGE_WIDTH}
         height={STAGE_HEIGHT}
+        scaleX={viewport.scale}
+        scaleY={viewport.scale}
+        x={viewport.x}
+        y={viewport.y}
+        style={{ cursor: isSpaceHeld ? "grab" : undefined }}
         onClick={handleStageClick}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
+        onWheel={handleWheel}
       >
         <Layer>
-          {doc.shapes.map((shape) =>
+          {orderedShapes.map((shape) =>
             renderShape(
               shape,
               doc,
@@ -1071,11 +1379,11 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           }}
           style={{
             position: "fixed",
-            left: (stageContainerRect?.left ?? 0) + editingRect.x,
-            top: (stageContainerRect?.top ?? 0) + editingRect.y,
-            width: editingRect.width,
-            height: editingRect.height,
-            fontSize: editingShape.text?.fontSize ?? 12,
+            left: (stageContainerRect?.left ?? 0) + viewport.x + editingRect.x * viewport.scale,
+            top: (stageContainerRect?.top ?? 0) + viewport.y + editingRect.y * viewport.scale,
+            width: editingRect.width * viewport.scale,
+            height: editingRect.height * viewport.scale,
+            fontSize: (editingShape.text?.fontSize ?? 12) * viewport.scale,
             fontFamily: editingShape.text?.fontFamily ?? "Arial",
             color: editingShape.text?.color ?? "#000000",
             textAlign: editingShape.text?.align ?? (editingShape.type === "text" ? "left" : "center"),
