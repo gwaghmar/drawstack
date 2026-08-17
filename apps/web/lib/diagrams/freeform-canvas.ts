@@ -73,6 +73,40 @@ export type ImageShape = BaseShape & {
   objectFit?: "cover" | "contain" | "fill";
 };
 
+export type MetricShape = BaseShape & {
+  type: "metric";
+  width: number;
+  height: number;
+  label: string;
+  value: string;
+  delta?: string;
+  deltaDirection?: "up" | "down" | "neutral";
+  sparkline?: number[];
+  icon?: string;
+  cornerRadius?: number;
+};
+
+export type ChartShape = BaseShape & {
+  type: "chart";
+  width: number;
+  height: number;
+  title: string;
+  chartType: "area" | "bar" | "donut" | "line";
+  data: { label: string; value: number; color?: string }[];
+  subtitle?: string;
+  cornerRadius?: number;
+};
+
+export type MockupShape = BaseShape & {
+  type: "mockup";
+  width: number;
+  height: number;
+  mockupType: "browser" | "macbook" | "mobile";
+  title?: string;
+  url?: string;
+  cornerRadius?: number;
+};
+
 export type PathShape = BaseShape & {
   type: "path";
   points: [number, number][];
@@ -107,6 +141,9 @@ export type CanvasShape =
   | CardShape
   | TableShape
   | ImageShape
+  | MetricShape
+  | ChartShape
+  | MockupShape
   | PathShape
   | ArrowShape;
 

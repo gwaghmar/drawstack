@@ -7,6 +7,9 @@ import {
   type CardShape,
   type TableShape,
   type ImageShape,
+  type MetricShape,
+  type ChartShape,
+  type MockupShape,
   resolveArrowRenderEndpoints,
   getShapeBounds,
   resolveColor,
@@ -41,7 +44,6 @@ function escapeXml(str: string): string {
 export function getSvgIcon(iconName: string, size = 16, color = "#6366f1"): string {
   const norm = iconName.toLowerCase().replace(/[^a-z0-9-]/g, "");
   switch (norm) {
-    // ─── Cloud & Infra ────────────────────────────────────────────────────────
     case "aws":
       return `<path d="M18.8 15.5c-2.4 1.8-5.8 2.7-8.8 2.7-4.2 0-8-1.5-10.9-4-.2-.2 0-.5.3-.3 3.1 1.8 6.9 2.8 10.7 2.8 2.7 0 5.6-.6 8.3-1.8.4-.2.7.2.4.6z" fill="#FF9900"/><path d="M19.8 14.3c-.3-.4-2-.2-3 0-.3.1-.3-.2 0-.4 1.8-1.3 4.7-.9 5-.4.3.4-.2 3.3-1.8 4.7-.3.2-.5.1-.4-.2.5-.9.4-3.3.2-3.7z" fill="#FF9900"/>`;
     case "lambda":
@@ -74,28 +76,11 @@ export function getSvgIcon(iconName: string, size = 16, color = "#6366f1"): stri
       return `<rect x="2" y="4" width="20" height="16" rx="4" fill="#635BFF"/><path d="M10.8 11.2c0-.6.5-.9 1.4-.9 1.2 0 2.5.4 3.4 1v-2.7c-1.1-.4-2.3-.6-3.4-.6-2.7 0-4.6 1.4-4.6 3.9 0 3.7 5.1 3.1 5.1 4.7 0 .8-.7 1-1.6 1-1.4 0-3-.6-4.1-1.3v2.8c1.3.6 2.7.8 4.1.8 2.8 0 4.8-1.4 4.8-4 0-4-5.1-3.3-5.1-4.7z" fill="#fff"/>`;
     case "openai":
       return `<path d="M12 2a4 4 0 0 1 3.8 2.7l.2.8.8-.2a4 4 0 0 1 4.7 2.7l.2.8.7.4a4 4 0 0 1 1.7 5l-.4.7.4.7a4 4 0 0 1-1.7 5l-.7.4-.2.8a4 4 0 0 1-4.7 2.7l-.8-.2-.2.8a4 4 0 0 1-7.6 0l-.2-.8-.8.2a4 4 0 0 1-4.7-2.7l-.2-.8-.7-.4a4 4 0 0 1-1.7-5l.4-.7-.4-.7a4 4 0 0 1 1.7-5l.7-.4.2-.8a4 4 0 0 1 4.7-2.7l.8.2.2-.8A4 4 0 0 1 12 2z" fill="none" stroke="#10A37F" stroke-width="1.8"/>`;
-    case "python":
-      return `<path d="M11.9 2C8.6 2 8.7 3.4 8.7 3.4l.01 1.5h3.3v.5H4.8S2 5.1 2 8.4s1.6 3.3 1.6 3.3h1v-1.5c0-1.7 1.4-3.1 3.1-3.1h4.8c1.4 0 2.5-1.1 2.5-2.5V3.8c0-1.8-1.5-1.8-3.1-1.8zm-2 1.2a.7.7 0 1 1 0 1.4.7.7 0 0 1 0-1.4z" fill="#3776AB"/><path d="M12.1 22c3.3 0 3.2-1.4 3.2-1.4l-.01-1.5h-3.3v-.5h7.2s2.8.3 2.8-3-1.6-3.3-1.6-3.3h-1v1.5c0 1.7-1.4 3.1-3.1 3.1H11.5c-1.4 0-2.5 1.1-2.5 2.5v4.3c0 1.8 1.5 1.8 3.1 1.8zm2-1.2a.7.7 0 1 1 0-1.4.7.7 0 0 1 0 1.4z" fill="#FFD438"/>`;
-    case "golang":
-    case "go":
-      return `<circle cx="12" cy="12" r="9" fill="#00ADD8"/><text x="12" y="16" text-anchor="middle" font-family="'JetBrains Mono', sans-serif" font-weight="900" font-size="11" fill="#fff">GO</text>`;
-    case "database":
-    case "db":
-    case "sql":
-      return `<path d="M4 6c0 1.66 3.58 3 8 3s8-1.34 8-3M4 6c0-1.66 3.58-3 8-3s8 1.34 8 3M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "server":
-    case "service":
-      return `<rect x="2" y="3" width="20" height="7" rx="2" fill="none" stroke="${color}" stroke-width="2"/><rect x="2" y="14" width="20" height="7" rx="2" fill="none" stroke="${color}" stroke-width="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="17.5" x2="6.01" y2="17.5" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
-    case "shield":
-    case "auth":
-    case "security":
-      return `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
     case "activity":
     case "analytics":
       return `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "globe":
-    case "web":
-      return `<circle cx="12" cy="12" r="10" fill="none" stroke="${color}" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke="${color}" stroke-width="2"/>`;
+    case "chart":
+      return `<line x1="18" y1="20" x2="18" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="4" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="20" x2="6" y2="14" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
     default:
       return `<path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
   }
@@ -210,6 +195,14 @@ export function freeformToSvg(doc: CanvasDocument): string {
     <filter id="pill-shadow" x="-15%" y="-15%" width="130%" height="130%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06" />
     </filter>
+    <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#6366f1" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="sparkline-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+    </linearGradient>
     <marker id="arrowhead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#64748b" />
     </marker>
@@ -233,7 +226,6 @@ export function freeformToSvg(doc: CanvasDocument): string {
           ? 'stroke-dasharray="3,4"'
           : "";
 
-    // ─── Freehand Path ────────────────────────────────────────────────────────
     if (shape.type === "path") {
       const pathShape = shape as PathShape;
       const strokePoints = getStroke(pathShape.points, {
@@ -247,7 +239,6 @@ export function freeformToSvg(doc: CanvasDocument): string {
       continue;
     }
 
-    // ─── Connectors (Arrows & Lines) with Smooth Fillet Rounded Turns ─────────
     if (shape.type === "arrow" || shape.type === "line") {
       const arrow = shape as ArrowShape;
       const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
@@ -306,7 +297,150 @@ export function freeformToSvg(doc: CanvasDocument): string {
       continue;
     }
 
-    // ─── 2. World-Class Architecture Card Shape (`type: "card"`) ──────────────
+    // ─── 2. Metric / KPI Stat Card (`type: "metric"`) ────────────────────────
+    if (shape.type === "metric") {
+      const m = shape as MetricShape;
+      const deltaColor = m.deltaDirection === "down" ? "#ef4444" : "#10b981";
+      const deltaBg = m.deltaDirection === "down" ? "#fee2e2" : "#d1fae5";
+      const iconName = m.icon ?? "activity";
+
+      // Sparkline generation
+      const pts = m.sparkline ?? [10, 25, 18, 30, 24, 42, 38, 55];
+      const sparkW = 80;
+      const sparkH = 30;
+      const minV = Math.min(...pts);
+      const maxV = Math.max(...pts);
+      const range = maxV - minV || 1;
+      const sparkX0 = x + w - sparkW - 16;
+      const sparkY0 = y + h - sparkH - 16;
+
+      const sparkPoints = pts.map((val, idx) => {
+        const px = sparkX0 + (idx / (pts.length - 1)) * sparkW;
+        const py = sparkY0 + sparkH - ((val - minV) / range) * sparkH;
+        return `${Math.round(px)},${Math.round(py)}`;
+      });
+
+      elements.push(
+        `<g ${shadowFilter} ${opacity}>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 10}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <!-- Header Icon & Label -->
+          <g transform="translate(${x + 14}, ${y + 14}) scale(0.66)">
+            ${getSvgIcon(iconName, 16, "#6366f1")}
+          </g>
+          <text x="${x + 36}" y="${y + 24}" font-family="Inter, -apple-system, sans-serif" font-size="11.5" font-weight="600" fill="#64748b">${escapeXml(m.label)}</text>
+          <!-- Big KPI Value -->
+          <text x="${x + 14}" y="${y + 62}" font-family="Inter, -apple-system, sans-serif" font-size="24" font-weight="800" fill="#0f172a">${escapeXml(m.value)}</text>
+          <!-- Delta Pill Badge -->
+          ${m.delta ? `
+          <g transform="translate(${x + 14}, ${y + 78})">
+            <rect x="0" y="0" width="${m.delta.length * 6.5 + 14}" height="18" rx="4" fill="${deltaBg}" />
+            <text x="${(m.delta.length * 6.5 + 14) / 2}" y="12.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="10" font-weight="700" fill="${deltaColor}">${escapeXml(m.delta)}</text>
+          </g>` : ""}
+          <!-- Sparkline Curve -->
+          <polyline points="${sparkPoints.join(" ")}" fill="none" stroke="${deltaColor}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 3. Vector Dashboard Chart (`type: "chart"`) ─────────────────────────
+    if (shape.type === "chart") {
+      const c = shape as ChartShape;
+      const chartType = c.chartType ?? "area";
+      const padX = 24;
+      const padTop = 60;
+      const padBottom = 30;
+      const innerW = w - padX * 2;
+      const innerH = h - padTop - padBottom;
+
+      const vals = c.data.map((d) => d.value);
+      const maxVal = Math.max(...vals, 1);
+
+      let chartBody = "";
+
+      if (chartType === "area" || chartType === "line") {
+        const coords = c.data.map((d, i) => ({
+          x: x + padX + (i / (c.data.length - 1)) * innerW,
+          y: y + padTop + innerH - (d.value / maxVal) * innerH,
+        }));
+
+        let linePath = `M ${coords[0].x} ${coords[0].y}`;
+        for (let i = 1; i < coords.length; i++) {
+          const cx = (coords[i - 1].x + coords[i].x) / 2;
+          linePath += ` C ${cx} ${coords[i - 1].y}, ${cx} ${coords[i].y}, ${coords[i].x} ${coords[i].y}`;
+        }
+
+        const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${y + padTop + innerH} L ${coords[0].x} ${y + padTop + innerH} Z`;
+
+        chartBody = `
+          <!-- Area Gradient Fill -->
+          <path d="${areaPath}" fill="url(#chart-area-grad)" />
+          <!-- Smooth Spline Stroke -->
+          <path d="${linePath}" fill="none" stroke="#6366f1" stroke-width="2.5" stroke-linecap="round" />
+          <!-- Data Points & Labels -->
+          ${coords.map((p, idx) => `
+            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#ffffff" stroke="#6366f1" stroke-width="2" />
+            <text x="${p.x}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="#94a3b8">${escapeXml(c.data[idx].label)}</text>
+          `).join("")}
+        `;
+      } else if (chartType === "bar") {
+        const barWidth = Math.max(12, (innerW / c.data.length) * 0.55);
+        const gap = innerW / c.data.length;
+
+        chartBody = c.data.map((d, i) => {
+          const barH = (d.value / maxVal) * innerH;
+          const bx = x + padX + i * gap + (gap - barWidth) / 2;
+          const by = y + padTop + innerH - barH;
+          const barColor = d.color ?? "#6366f1";
+          return `
+            <g>
+              <rect x="${bx}" y="${by}" width="${barWidth}" height="${barH}" rx="4" fill="${barColor}" />
+              <text x="${bx + barWidth / 2}" y="${by - 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="700" fill="#475569">${d.value}</text>
+              <text x="${bx + barWidth / 2}" y="${y + padTop + innerH + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="#94a3b8">${escapeXml(d.label)}</text>
+            </g>
+          `;
+        }).join("");
+      }
+
+      elements.push(
+        `<g ${shadowFilter} ${opacity}>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${c.cornerRadius ?? 10}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <!-- Chart Header -->
+          <text x="${x + 16}" y="${y + 26}" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#0f172a">${escapeXml(c.title)}</text>
+          ${c.subtitle ? `<text x="${x + 16}" y="${y + 44}" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="#64748b">${escapeXml(c.subtitle)}</text>` : ""}
+          <!-- Grid Line -->
+          <line x1="${x + padX}" y1="${y + padTop + innerH}" x2="${x + w - padX}" y2="${y + padTop + innerH}" stroke="#e2e8f0" stroke-width="1" />
+          ${chartBody}
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 4. Device / Browser Chrome Mockup (`type: "mockup"`) ─────────────────
+    if (shape.type === "mockup") {
+      const m = shape as MockupShape;
+      const urlText = m.url ?? "https://app.drawstack.io/analytics";
+      elements.push(
+        `<g ${shadowFilter} ${opacity}>
+          <!-- Outer Shell -->
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 12}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          <!-- Top Chrome Header -->
+          <rect x="${x}" y="${y}" width="${w}" height="38" rx="${m.cornerRadius ?? 12}" fill="#f1f5f9" />
+          <rect x="${x}" y="${y + 26}" width="${w}" height="12" fill="#f1f5f9" />
+          <line x1="${x}" y1="${y + 38}" x2="${x + w}" y2="${y + 38}" stroke="#e2e8f0" stroke-width="1" />
+          <!-- macOS Traffic Lights -->
+          <circle cx="${x + 18}" cy="${y + 19}" r="5" fill="#ff5f56" />
+          <circle cx="${x + 34}" cy="${y + 19}" r="5" fill="#ffbd2e" />
+          <circle cx="${x + 50}" cy="${y + 19}" r="5" fill="#27c93f" />
+          <!-- URL Pill Bar -->
+          <rect x="${x + 72}" y="${y + 8}" width="${Math.min(w - 144, 280)}" height="22" rx="6" fill="#ffffff" stroke="#cbd5e1" stroke-width="1" />
+          <text x="${x + 82}" y="${y + 23}" font-family="'JetBrains Mono', Inter, monospace" font-size="10" font-weight="500" fill="#64748b">${escapeXml(urlText)}</text>
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 5. World-Class Architecture Card Shape (`type: "card"`) ──────────────
     if (shape.type === "card") {
       const card = shape as CardShape;
       const iconName = card.icon ?? "server";
@@ -317,31 +451,24 @@ export function freeformToSvg(doc: CanvasDocument): string {
 
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <!-- Card Container -->
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${card.cornerRadius ?? 10}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Header Area -->
           <rect x="${x}" y="${y}" width="${w}" height="42" rx="${card.cornerRadius ?? 10}" fill="${fill === "none" ? "#f8fafc" : fill}" />
           <rect x="${x}" y="${y + 32}" width="${w}" height="10" fill="${fill === "none" ? "#f8fafc" : fill}" />
           <line x1="${x}" y1="${y + 42}" x2="${x + w}" y2="${y + 42}" stroke="#e2e8f0" stroke-width="1" />
-          <!-- Header Icon Circle -->
           <g transform="translate(${x + 10}, ${y + 9})">
             <rect x="0" y="0" width="24" height="24" rx="6" fill="#ffffff" stroke="#e2e8f0" stroke-width="1" />
             <g transform="translate(4, 4) scale(0.66)">
               ${getSvgIcon(iconName, 16, iconColor)}
             </g>
           </g>
-          <!-- Card Title -->
           <text x="${x + 40}" y="${y + 25}" font-family="Inter, -apple-system, sans-serif" font-size="13" font-weight="700" fill="#0f172a">${escapeXml(card.title)}</text>
-          <!-- Category Badge Pill -->
           ${badgeText ? `
           <g transform="translate(${x + w - 12}, ${y + 21})">
             <rect x="-${badgeText.length * 6 + 12}" y="-9" width="${badgeText.length * 6 + 12}" height="18" rx="4" fill="${badgeBg}" />
             <text x="-${(badgeText.length * 6 + 12) / 2}" y="3.5" text-anchor="middle" font-family="Inter, -apple-system, sans-serif" font-size="9.5" font-weight="700" fill="${badgeColor}">${escapeXml(badgeText)}</text>
           </g>` : ""}
-          <!-- Card Subtitle -->
           ${card.subtitle ? `
           <text x="${x + 12}" y="${y + 60}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="500" fill="#64748b">${escapeXml(card.subtitle)}</text>` : ""}
-          <!-- Metadata Rows -->
           ${(card.metadata ?? []).map((m, idx) => `
           <g transform="translate(${x + 12}, ${y + 78 + idx * 18})">
             <circle cx="3" cy="-3" r="2" fill="#94a3b8" />
@@ -353,24 +480,20 @@ export function freeformToSvg(doc: CanvasDocument): string {
       continue;
     }
 
-    // ─── 3. Database Schema / ERD Table Shape (`type: "table"`) ────────────────
+    // ─── 6. Database Schema / ERD Table Shape (`type: "table"`) ────────────────
     if (shape.type === "table") {
       const table = shape as TableShape;
       const headerBg = table.headerBg ? resolveColor(table.headerBg) ?? table.headerBg : "#f1f5f9";
       elements.push(
         `<g ${shadowFilter} ${opacity}>
-          <!-- Table Shell -->
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${table.cornerRadius ?? 8}" fill="#ffffff" stroke="${stroke}" stroke-width="${strokeWidth}" />
-          <!-- Header Bar -->
           <rect x="${x}" y="${y}" width="${w}" height="34" rx="${table.cornerRadius ?? 8}" fill="${headerBg}" />
           <rect x="${x}" y="${y + 24}" width="${w}" height="10" fill="${headerBg}" />
           <line x1="${x}" y1="${y + 34}" x2="${x + w}" y2="${y + 34}" stroke="#cbd5e1" stroke-width="1.2" />
-          <!-- Table Header Title -->
           <g transform="translate(${x + 10}, ${y + 9}) scale(0.66)">
             ${getSvgIcon("database", 16, "#334155")}
           </g>
           <text x="${x + 30}" y="${y + 22}" font-family="'JetBrains Mono', Inter, monospace" font-size="12" font-weight="700" fill="#0f172a">${escapeXml(table.tableName)}</text>
-          <!-- Table Columns -->
           ${table.columns.map((col, idx) => {
             const rowY = y + 54 + idx * 22;
             const badge = col.isPk ? `<rect x="${x + 8}" y="${rowY - 10}" width="20" height="14" rx="3" fill="#fef3c7"/><text x="${x + 18}" y="${rowY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" font-weight="800" fill="#b45309">PK</text>` : col.isFk ? `<rect x="${x + 8}" y="${rowY - 10}" width="20" height="14" rx="3" fill="#e0f2fe"/><text x="${x + 18}" y="${rowY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="8.5" font-weight="800" fill="#0369a1">FK</text>` : `<circle cx="${x + 18}" cy="${rowY - 3}" r="2" fill="#cbd5e1"/>`;
@@ -471,7 +594,6 @@ export function freeformToSvg(doc: CanvasDocument): string {
       }
     }
 
-    // ─── Multiline Text Layout ────────────────────────────────────────────────
     if (shape.text?.content) {
       const textColor = shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#0f172a");
       const fontSize = shape.text.fontSize ?? 13;
@@ -498,7 +620,6 @@ export function freeformToSvg(doc: CanvasDocument): string {
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" style="background:#f8fafc;border-radius:12px;box-shadow:inset 0 0 0 1px #e2e8f0">
   ${defs}
-  <!-- Figma Canvas Subtle Dot Grid -->
   <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
     <circle cx="2" cy="2" r="1" fill="#cbd5e1" />
   </pattern>

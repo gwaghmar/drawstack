@@ -60,6 +60,9 @@ const DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
   card: { width: 220, height: 120 },
   table: { width: 240, height: 160 },
   image: { width: 200, height: 150 },
+  metric: { width: 220, height: 110 },
+  chart: { width: 360, height: 220 },
+  mockup: { width: 640, height: 420 },
 };
 
 class OpError extends Error {}
