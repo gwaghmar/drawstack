@@ -192,24 +192,44 @@ const FreeformArrowShapeSchema = FreeformBaseSchema.passthrough().extend({
 
 const FreeformShapeSchema = z.union([FreeformSizedShapeSchema, FreeformPathShapeSchema, FreeformArrowShapeSchema]);
 
-const FreeformCanvasSchema = z.object({
+// Only checks the envelope; individual shapes are validated one at a time in
+// validateAndRepairOutput so a truncated trailing shape (hit maxOutputTokens
+// mid-object -- the single most common real failure, confirmed by testing
+// against live model output) drops just that shape instead of the AI's other
+// 10-20 perfectly valid ones. Same "keep-last-good" principle the client-side
+// parseFreeformSource already uses; the server-side validator didn't.
+const FreeformCanvasEnvelopeSchema = z.object({
   version: z.literal(1),
   renderMode: z.enum(["clean", "sketchy"]).optional(),
-  shapes: z.array(FreeformShapeSchema).min(1, "Freeform canvas must have at least one shape"),
+  shapes: z.array(z.unknown()).min(1, "Freeform canvas must have at least one shape"),
 });
 
-// The model frequently emits `text: "some string"` instead of the documented
-// `text: { content: "some string" }` -- an obviously-recoverable shorthand,
-// not malformed output. Rejecting the whole document over one shape's field
-// shape mismatch is worse than silently normalizing it. Mutates in place.
-function coerceStringTextBlocks(parsed: unknown): void {
+// Normalizes obviously-recoverable AI mistakes in place before Zod validation,
+// so one shape's harmless slip doesn't reject the whole document:
+// - `text: "some string"` instead of the documented `text: { content: ... }`.
+// - a missing x/y on a shape. Unlike width/height (real auto-sizing feature),
+//   the render layer has no fallback for an undefined anchor position -- but
+//   defaulting to the canvas origin is still far better than losing the whole
+//   document; the shape lands visible and the user can drag it into place.
+function normalizeShapesInPlace(parsed: unknown): void {
   if (!parsed || typeof parsed !== "object") return;
   const shapes = (parsed as { shapes?: unknown }).shapes;
   if (!Array.isArray(shapes)) return;
   for (const shape of shapes) {
-    if (shape && typeof shape === "object" && typeof (shape as { text?: unknown }).text === "string") {
-      (shape as { text: unknown }).text = { content: (shape as { text: string }).text };
+    if (!shape || typeof shape !== "object") continue;
+    // The model frequently emits `field: null` for an unset optional field
+    // (fill, strokeDash, etc.) instead of omitting the key. Zod's .optional()
+    // accepts undefined, not null, so this failed validation every time it
+    // happened. Confirmed live on two separate fields (fill, strokeDash) --
+    // null and "not provided" mean the same thing for every field on a shape,
+    // so strip nulls uniformly rather than special-case each field as found.
+    for (const key of Object.keys(shape)) {
+      if ((shape as Record<string, unknown>)[key] === null) delete (shape as Record<string, unknown>)[key];
     }
+    const s = shape as { text?: unknown; x?: unknown; y?: unknown };
+    if (typeof s.text === "string") s.text = { content: s.text };
+    if (typeof s.x !== "number") s.x = 0;
+    if (typeof s.y !== "number") s.y = 0;
   }
 }
 
@@ -229,14 +249,57 @@ export async function validateAndRepairOutput(
     return { ok: false, reason: "Could not parse freeform canvas JSON after repair" };
   }
 
-  coerceStringTextBlocks(parsed);
+  normalizeShapesInPlace(parsed);
 
-  const result = FreeformCanvasSchema.safeParse(parsed);
-  if (!result.success) {
-    return { ok: false, reason: `Freeform canvas structure invalid: ${result.error.issues[0]?.message}` };
+  const envelope = FreeformCanvasEnvelopeSchema.safeParse(parsed);
+  if (!envelope.success) {
+    return { ok: false, reason: `Freeform canvas structure invalid: ${envelope.error.issues[0]?.message}` };
   }
 
-  const refErrors = validateFreeformRefs(result.data as CanvasDocument);
+  const validShapes: unknown[] = [];
+  let firstShapeError: string | undefined;
+  for (const shape of envelope.data.shapes) {
+    const shapeResult = FreeformShapeSchema.safeParse(shape);
+    if (shapeResult.success) {
+      validShapes.push(shapeResult.data);
+    } else {
+      firstShapeError ??= shapeResult.error.issues[0]?.message;
+    }
+  }
+
+  if (validShapes.length === 0) {
+    return { ok: false, reason: `Freeform canvas structure invalid: ${firstShapeError ?? "no valid shapes"}` };
+  }
+
+  // Dropping an individually-invalid shape (above) can orphan whatever pointed
+  // at it -- a child's frameId, an arrow's endpoint. Found live: a truncated
+  // frame got dropped, and its two children (which validated fine on their
+  // own) then failed the whole document on "frameId is not a frame". Same
+  // keep-last-good principle, one level up: ungroup orphaned children instead
+  // of losing them, drop only the arrows that are now unrenderable.
+  const survivingIds = new Set(validShapes.map((s) => (s as { id: string }).id));
+  const frameIds = new Set(
+    validShapes.filter((s) => (s as { type: string }).type === "frame").map((s) => (s as { id: string }).id)
+  );
+  for (const shape of validShapes) {
+    const s = shape as { frameId?: string | null };
+    if (s.frameId && !frameIds.has(s.frameId)) s.frameId = null;
+  }
+  const isDanglingArrow = (shape: unknown): boolean => {
+    const s = shape as { type: string; start?: { shapeId?: string }; end?: { shapeId?: string } };
+    if (s.type !== "arrow" && s.type !== "line") return false;
+    const refs = [s.start?.shapeId, s.end?.shapeId].filter((id): id is string => typeof id === "string");
+    return refs.some((id) => !survivingIds.has(id));
+  };
+  const finalShapes = validShapes.filter((s) => !isDanglingArrow(s));
+
+  if (finalShapes.length === 0) {
+    return { ok: false, reason: "Freeform canvas structure invalid: no shapes survived reference cleanup" };
+  }
+
+  const doc = { version: envelope.data.version, renderMode: envelope.data.renderMode, shapes: finalShapes };
+
+  const refErrors = validateFreeformRefs(doc as CanvasDocument);
   if (refErrors.length > 0) {
     return { ok: false, reason: `Freeform canvas has broken references: ${refErrors.join("; ")}` };
   }
@@ -244,5 +307,5 @@ export async function validateAndRepairOutput(
   // Serialize the validated (and possibly coerced, e.g. text: "str" -> {content})
   // data, not the raw repaired string -- otherwise a shape we silently fixed to
   // pass validation would still reach the client in its original broken shape.
-  return { ok: true, source: JSON.stringify(result.data) };
+  return { ok: true, source: JSON.stringify(doc) };
 }
