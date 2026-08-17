@@ -1208,6 +1208,24 @@ export function EditorClient({
       r.readAsDataURL(b);
     });
 
+  const pngDataUrlToJpeg = (pngDataUrl: string, quality: number, backgroundColor: string): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { reject(new Error("2d context unavailable")); return; }
+        ctx.fillStyle = backgroundColor;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        resolve(canvas.toDataURL("image/jpeg", quality));
+      };
+      img.onerror = () => reject(new Error("image load failed"));
+      img.src = pngDataUrl;
+    });
+
   const capturePngDataUrl = useCallback(async (): Promise<string | null> => {
     if (diagramType === "mermaid") {
       const svg = innerRef.current?.querySelector("svg");
@@ -1235,13 +1253,19 @@ export function EditorClient({
       if (format === "pdf") {
         const du = await capturePngDataUrl();
         if (!du) return;
+        // Embedding the raw lossless PNG made PDFs ~10MB at scale 2. JPEG-encode
+        // instead — visually indistinguishable at 0.85 quality, a fraction of
+        // the size. JPEG has no alpha channel, so flatten transparent PNGs onto
+        // the diagram's own background color first (otherwise transparent areas
+        // render solid black).
+        const jpegDu = await pngDataUrlToJpeg(du, 0.85, bgColor || "#ffffff");
         const { jsPDF } = await import("jspdf");
         const img = new Image();
-        await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error("image load failed")); img.src = du; });
+        await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error("image load failed")); img.src = jpegDu; });
         const w = img.naturalWidth || 1920;
         const h = img.naturalHeight || 1080;
         const pdf = new jsPDF({ orientation: w >= h ? "landscape" : "portrait", unit: "px", format: [w, h] });
-        pdf.addImage(du, "PNG", 0, 0, w, h);
+        pdf.addImage(jpegDu, "JPEG", 0, 0, w, h);
         downloadBlob(pdf.output("blob"), `${fn}.pdf`);
         return;
       }
