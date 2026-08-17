@@ -25,7 +25,14 @@
       "Bash(powershell -Command \"cd 'C:\\\\Users\\\\govin\\\\New folder\\\\apps\\\\web'; npx tsc --noEmit 2>&1\")",
       "Bash(powershell -Command \"Set-Location 'C:\\\\Users\\\\govin\\\\New folder\\\\apps\\\\web'; & 'C:\\\\Program Files\\\\nodejs\\\\npx.cmd' tsc --noEmit 2>&1\")",
       "Bash(powershell -Command \"Set-Location 'C:\\\\Users\\\\govin\\\\New folder\\\\apps\\\\web'; & 'node_modules\\\\.bin\\\\tsc' --noEmit 2>&1\")",
-      "Bash(powershell:*)"
+      "Bash(powershell:*)",
+      "Bash(pnpm --filter @flowchart/web exec tsc --noEmit)",
+      "Bash(grep -r \"sql\\\\`\\\\|execute\\\\|query\" /Users/redforman/FLOWSTUDIO/apps/web/app --include=\"*.ts\" --include=\"*.tsx\")",
+      "Bash(pnpm --filter @flowchart/web test:unit)",
+      "Bash(pnpm test:unit)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }

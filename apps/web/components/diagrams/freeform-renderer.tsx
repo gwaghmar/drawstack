@@ -80,6 +80,7 @@ import {
   type CanvasDocument,
   type CanvasShape,
   type ArrowShape,
+  type ArrowEndpoint,
   type PathShape,
   type RectShape,
   type DiamondShape,
@@ -99,14 +100,22 @@ import {
 import { freeformToSvg, getSvgIcon } from "@/lib/diagrams/freeform-svg";
 import { SHAPE_CATEGORIES, catalogByCategory, type ShapeCatalogEntry } from "@/lib/diagrams/freeform-shape-catalog";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
-import { YjsCanvasStore } from "@/lib/diagrams/yjs-store";
+import { YjsCanvasStore, type PeerInfo } from "@/lib/diagrams/yjs-store";
 
 type Props = {
   source: string;
   onChange?: (source: string) => void;
+  // Remote Yjs edits land here when provided, so the host can apply them without
+  // recording an undo step (undo should only ever unwind the local user's own edits).
+  onRemoteChange?: (source: string) => void;
   readOnly?: boolean;
   roomId?: string;
+  presenceIdentity?: { name: string; color: string };
 };
+
+// Publishing every pointermove would flood awareness broadcasts; peers only need
+// position updates a few times a second to look live.
+const CURSOR_BROADCAST_INTERVAL_MS = 50;
 
 type MarqueeState = {
   x0: number;
@@ -135,6 +144,16 @@ type ArrowDraft = {
   startBinding: string | null;
   startAnchor?: "top" | "right" | "bottom" | "left";
   currentPoint: { x: number; y: number };
+  hoverShapeId: string | null;
+};
+
+// Dragging one endpoint of an EXISTING arrow to rebind it — distinct from
+// ArrowDraft, which draws a brand new arrow. Arrows were previously
+// delete-and-redraw only; there was no way to grab an end and move it.
+type ArrowEditDraft = {
+  arrowId: string;
+  end: "start" | "end";
+  point: { x: number; y: number };
   hoverShapeId: string | null;
 };
 
@@ -249,6 +268,18 @@ function getShapeIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): st
   if (!id) return null;
   const shape = doc.shapes.find((s) => s.id === id);
   if (!shape || shape.type === "arrow" || shape.type === "line") return null;
+  return shape.id;
+}
+
+function getArrowIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): string | null {
+  if (!stage) return null;
+  const pos = stage.getPointerPosition();
+  if (!pos) return null;
+  const node = stage.getIntersection(pos);
+  const id = node?.id();
+  if (!id) return null;
+  const shape = doc.shapes.find((s) => s.id === id);
+  if (!shape || (shape.type !== "arrow" && shape.type !== "line")) return null;
   return shape.id;
 }
 
@@ -1295,7 +1326,7 @@ function renderShape(
   return nodes;
 }
 
-export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) {
+export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, roomId, presenceIdentity }: Props) {
   const [doc, setDoc] = useState<CanvasDocument>(() => {
     const { doc: parsed, errors } = parseFreeformSource(source);
     if (errors.length > 0) return parsed;
@@ -1318,6 +1349,11 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   // connection dots — lets a user start an arrow straight from a shape's edge
   // without switching to the Arrow tool first.
   const [hoveredShapeId, setHoveredShapeId] = useState<string | null>(null);
+  // Same idea, for arrows/lines — hovering one shows two grab dots at its
+  // endpoints so an existing connection can be rebound without deleting and
+  // redrawing it.
+  const [hoveredArrowId, setHoveredArrowId] = useState<string | null>(null);
+  const [arrowEditDraft, setArrowEditDraft] = useState<ArrowEditDraft | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
 
@@ -1333,6 +1369,8 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   const docRef = useRef(doc);
   docRef.current = doc;
   const yjsStoreRef = useRef<YjsCanvasStore | null>(null);
+  const [peers, setPeers] = useState<PeerInfo[]>([]);
+  const lastCursorBroadcastRef = useRef(0);
   const snapCandidatesRef = useRef<SnapCandidates>({ verticals: [], horizontals: [] });
   const modeRef = useRef<ToolMode>(mode);
   const placeKindRef = useRef<ShapeKind | null>(null);
@@ -1352,6 +1390,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   } | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   const arrowDraftRef = useRef<ArrowDraft | null>(null);
+  const arrowEditDraftRef = useRef<ArrowEditDraft | null>(null);
   const dotDragActiveRef = useRef(false);
   const drawDraftRef = useRef<DrawDraft | null>(null);
   const clipboardRef = useRef<CanvasShape[]>([]);
@@ -1389,32 +1428,50 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     setArrowDraft(draft);
   };
 
+  // Starts a rebind drag from one endpoint of an already-existing arrow.
+  // Deliberately NOT routed through modeRef/setModeSynced like
+  // startConnectionDrag — this is a self-contained gesture, checked directly
+  // via arrowEditDraftRef in the stage move/up handlers, so it can't be
+  // confused with (or clobber) whatever tool the user currently has active.
+  const startArrowEndpointDrag = (arrowId: string, end: "start" | "end", point: { x: number; y: number }) => {
+    const draft: ArrowEditDraft = { arrowId, end, point, hoverShapeId: null };
+    arrowEditDraftRef.current = draft;
+    setArrowEditDraft(draft);
+  };
+
   // Setup Yjs multiplayer collaboration if roomId is provided
   useEffect(() => {
     if (!roomId) return;
-    const store = new YjsCanvasStore(roomId, docRef.current);
+    const store = new YjsCanvasStore(roomId, docRef.current, presenceIdentity);
     yjsStoreRef.current = store;
 
     const unsubscribe = store.subscribe((remoteShapes) => {
       setDoc((prev) => {
         const nextDoc = { ...prev, shapes: remoteShapes };
-        if (!readOnly && onChange) {
+        // Remote edits go through onRemoteChange (no recordUndo) when the host
+        // provides it; local gesture commits keep going through onChange below.
+        const notify = onRemoteChange ?? onChange;
+        if (!readOnly && notify) {
           const serialized = serializeFreeformDocument(nextDoc);
           if (serialized !== lastSourceRef.current) {
             lastSourceRef.current = serialized;
-            onChange(serialized);
+            notify(serialized);
           }
         }
         return nextDoc;
       });
     });
 
+    const unsubscribePeers = store.onPeersChange(setPeers);
+
     return () => {
       unsubscribe();
+      unsubscribePeers();
       store.destroy();
       yjsStoreRef.current = null;
+      setPeers([]);
     };
-  }, [roomId, readOnly, onChange]);
+  }, [roomId, readOnly, onChange, onRemoteChange]);
 
   // Sync external source prop to local state
   useEffect(() => {
@@ -1460,7 +1517,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     if (!shape || shape.type === "arrow" || shape.type === "line" || shape.type === "path" || shape.locked) return;
     setSelectedIds(new Set());
     setEditingShapeId(shapeId);
-    setEditingValue(shape.text?.content ?? "");
+    setEditingValue(shape.type === "frame" ? shape.name ?? "" : shape.text?.content ?? "");
   };
 
   const insertShapeAt = (kind: ShapeKind, cx: number, cy: number) => {
@@ -1570,6 +1627,15 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     if (!shape) return;
     const content = editingValue;
 
+    if (shape.type === "frame") {
+      const name = content.trim() === "" ? shape.name : content;
+      const newShapes = doc.shapes.map((s) => (s.id === shapeId ? { ...s, name } : s));
+      const newDoc = { ...doc, shapes: newShapes };
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      return;
+    }
+
     if (content === "") {
       if (shape.type === "text") {
         const newShapes = doc.shapes.filter((s) => s.id !== shapeId);
@@ -1616,7 +1682,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
 
   // Keyboard handlers
   useEffect(() => {
-    if (readOnly || selectedIds.size === 0 || editingShapeId) return;
+    if (readOnly || editingShapeId) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
@@ -1624,27 +1690,10 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
         return;
       }
 
-      if (e.key === "Delete" || e.key === "Backspace") {
-        e.preventDefault();
-        const newShapes = doc.shapes.filter((s) => !selectedIds.has(s.id));
-        const newDoc = { ...doc, shapes: newShapes };
-        setDoc(newDoc);
-        setSelectedIds(new Set());
-        commitChanges(newDoc);
-        return;
-      }
-
-      // Copy (Ctrl+C / Cmd+C)
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
-        e.preventDefault();
-        clipboardRef.current = doc.shapes.filter((s) => selectedIds.has(s.id));
-        return;
-      }
-
-      // Paste (Ctrl+V / Cmd+V)
+      // Paste (Ctrl+V / Cmd+V) — works with no live selection, unlike the ops below.
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
-        e.preventDefault();
         if (clipboardRef.current.length === 0) return;
+        e.preventDefault();
         const newIds = new Set<string>();
         const pasted: CanvasShape[] = clipboardRef.current.map((s) => {
           const freshId = generateShapeId("copy");
@@ -1661,6 +1710,25 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
         setDoc(newDoc);
         setSelectedIds(newIds);
         commitChanges(newDoc);
+        return;
+      }
+
+      if (selectedIds.size === 0) return;
+
+      if (e.key === "Delete" || e.key === "Backspace") {
+        e.preventDefault();
+        const newShapes = doc.shapes.filter((s) => !selectedIds.has(s.id));
+        const newDoc = { ...doc, shapes: newShapes };
+        setDoc(newDoc);
+        setSelectedIds(new Set());
+        commitChanges(newDoc);
+        return;
+      }
+
+      // Copy (Ctrl+C / Cmd+C)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        clipboardRef.current = doc.shapes.filter((s) => selectedIds.has(s.id));
         return;
       }
 
@@ -1720,8 +1788,22 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
 
     const handleModeKeyDown = (e: KeyboardEvent) => {
       if (editingShapeId) return;
-      const activeElement = document.activeElement;
-      if (activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA") return;
+      // ⌘0/⌃0 reset-zoom must fire before the modifier bail below (added for ⌘D —
+      // see the file's other keydown handler) or the shortcut goes dead.
+      if ((e.metaKey || e.ctrlKey) && e.key === "0") {
+        e.preventDefault();
+        resetZoom();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.isContentEditable
+      ) {
+        return;
+      }
 
       if (e.key === "Escape") {
         if (modeRef.current !== "select") {
@@ -1917,6 +1999,24 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     const pos = stagePointFromEvent(stageRef.current);
     if (!pos) return;
 
+    if (yjsStoreRef.current) {
+      const now = Date.now();
+      if (now - lastCursorBroadcastRef.current >= CURSOR_BROADCAST_INTERVAL_MS) {
+        lastCursorBroadcastRef.current = now;
+        yjsStoreRef.current.setLocalCursor(pos);
+      }
+    }
+
+    // Arrow endpoint rebind in progress — checked independent of `mode` since
+    // this gesture isn't a tool switch (see startArrowEndpointDrag).
+    if (arrowEditDraftRef.current) {
+      const targetShapeId = getShapeIdAtPointer(docRef.current, stageRef.current);
+      const nextDraft: ArrowEditDraft = { ...arrowEditDraftRef.current, point: pos, hoverShapeId: targetShapeId };
+      arrowEditDraftRef.current = nextDraft;
+      setArrowEditDraft(nextDraft);
+      return;
+    }
+
     // Freehand drawing live points
     if (modeRef.current === "draw" && drawDraftRef.current) {
       const updated: DrawDraft = {
@@ -1955,16 +2055,48 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     // Hover connection dots: only worth computing when nothing else is
     // already in progress (a shape drag, a marquee, panning) — checked via
     // the same refs those flows already write to, per this file's rule that
-    // gesture bookkeeping lives in refs, not state.
+    // gesture bookkeeping lives in refs, not state. A hit tests as either a
+    // shape or an arrow, never both, so the arrow lookup only runs when the
+    // shape one comes back empty.
     if (modeRef.current === "select" && !dragStateRef.current && !readOnly) {
       const id = getShapeIdAtPointer(docRef.current, stageRef.current);
       setHoveredShapeId((prev) => (prev === id ? prev : id));
+      const arrowId = id ? null : getArrowIdAtPointer(docRef.current, stageRef.current);
+      setHoveredArrowId((prev) => (prev === arrowId ? prev : arrowId));
     }
+  };
+
+  const handleStageMouseLeave = () => {
+    lastCursorBroadcastRef.current = 0;
+    yjsStoreRef.current?.setLocalCursor(null);
   };
 
   const handleStageMouseUp = () => {
     if (panRef.current) {
       panRef.current = null;
+      return;
+    }
+
+    if (arrowEditDraftRef.current) {
+      const draft = arrowEditDraftRef.current;
+      arrowEditDraftRef.current = null;
+      setArrowEditDraft(null);
+
+      const newEndpoint: ArrowEndpoint = draft.hoverShapeId
+        ? { shapeId: draft.hoverShapeId, anchor: "auto" }
+        : draft.point;
+
+      const newShapes = docRef.current.shapes.map((s) => {
+        if (s.id !== draft.arrowId || (s.type !== "arrow" && s.type !== "line")) return s;
+        const arrowShape = s as ArrowShape;
+        return draft.end === "start"
+          ? { ...arrowShape, start: newEndpoint }
+          : { ...arrowShape, end: newEndpoint };
+      });
+      const newDoc = { ...docRef.current, shapes: newShapes };
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      setSelectedIds(new Set([draft.arrowId]));
       return;
     }
 
@@ -2422,7 +2554,11 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   const editingShape = editingShapeId ? doc.shapes.find((s) => s.id === editingShapeId) : null;
   const editingRect = editingShape ? getShapeBounds(doc, editingShape) : null;
   const stageContainerRect = stageRef.current?.container().getBoundingClientRect();
-  const hoverShape = arrowDraft?.hoverShapeId ? doc.shapes.find((s) => s.id === arrowDraft.hoverShapeId) : null;
+  // Rebind-target highlight is shared between drawing a brand new arrow
+  // (arrowDraft) and dragging an existing one's endpoint (arrowEditDraft) —
+  // same visual meaning either way: "release here to bind to this shape."
+  const rebindTargetId = arrowDraft?.hoverShapeId ?? arrowEditDraft?.hoverShapeId;
+  const hoverShape = rebindTargetId ? doc.shapes.find((s) => s.id === rebindTargetId) : null;
   const hoverBounds = hoverShape ? getShapeBounds(doc, hoverShape) : null;
 
   // Connection dots only make sense when idle in select mode — hidden the
@@ -2433,6 +2569,24 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
       ? doc.shapes.find((s) => s.id === hoveredShapeId && !s.locked)
       : null;
   const connectDotsBounds = connectDotsShape ? getShapeBounds(doc, connectDotsShape) : null;
+
+  // Same gating for the hovered arrow's own endpoint-grab dots.
+  const hoveredArrowShape =
+    !readOnly && mode === "select" && !arrowDraft && !arrowEditDraft && hoveredArrowId
+      ? (doc.shapes.find((s) => s.id === hoveredArrowId && !s.locked) as ArrowShape | undefined)
+      : undefined;
+  const hoveredArrowPoints = hoveredArrowShape ? resolveArrowRenderEndpoints(doc, hoveredArrowShape) : null;
+
+  // While actively dragging an endpoint, the OTHER end stays fixed — read
+  // straight from the live doc (not the drag point) so the preview line
+  // anchors to the arrow's real, unmoved end.
+  const arrowEditFixedPoint = (() => {
+    if (!arrowEditDraft) return null;
+    const shape = doc.shapes.find((s) => s.id === arrowEditDraft.arrowId) as ArrowShape | undefined;
+    if (!shape) return null;
+    const resolved = resolveArrowRenderEndpoints(doc, shape);
+    return arrowEditDraft.end === "start" ? resolved.end : resolved.start;
+  })();
 
   // Selected bounding box for floating toolbar
   let selBounds: { x: number; y: number; width: number; height: number } | null = null;
@@ -2824,6 +2978,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
         onMouseUp={handleStageMouseUp}
+        onMouseLeave={handleStageMouseLeave}
         onWheel={handleWheel}
       >
         <Layer>
@@ -2925,6 +3080,14 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
               dash={[6, 4]}
             />
           )}
+          {arrowEditDraft && arrowEditFixedPoint && (
+            <Line
+              points={[arrowEditFixedPoint.x, arrowEditFixedPoint.y, arrowEditDraft.point.x, arrowEditDraft.point.y]}
+              stroke="#6366f1"
+              strokeWidth={2}
+              dash={[6, 4]}
+            />
+          )}
           {hoverBounds &&
             (hoverShape?.type === "ellipse" ? (
               <Ellipse
@@ -2979,7 +3142,74 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
             ))}
           </Layer>
         )}
+
+        {/* Arrow Endpoint Grab Dots — hovering an existing arrow shows two
+            dots at its ends; dragging one rebinds that end to a new point or
+            shape. Previously an arrow's connections were fixed at creation —
+            fixing a wrong endpoint meant deleting the arrow and redrawing it. */}
+        {hoveredArrowPoints && (
+          <Layer>
+            {(["start", "end"] as const).map((end) => {
+              const p = hoveredArrowPoints[end];
+              return (
+                <KonvaCircle
+                  key={end}
+                  x={p.x}
+                  y={p.y}
+                  radius={5}
+                  fill="#ffffff"
+                  stroke="#6366f1"
+                  strokeWidth={1.5}
+                  onMouseDown={(e) => {
+                    e.cancelBubble = true;
+                    startArrowEndpointDrag(hoveredArrowShape!.id, end, p);
+                  }}
+                  onMouseEnter={(e) => {
+                    const container = e.target.getStage()?.container();
+                    if (container) container.style.cursor = "crosshair";
+                  }}
+                  onMouseLeave={(e) => {
+                    const container = e.target.getStage()?.container();
+                    if (container) container.style.cursor = "";
+                  }}
+                />
+              );
+            })}
+          </Layer>
+        )}
       </Stage>
+
+      {/* ─── Multiplayer Peer Cursors ────────────────────────────────────── */}
+      {/* DOM overlay, not Konva nodes — this file's rule that exactly one Konva
+          node per shape carries the shape id would make peer dots a special
+          case to exempt every time; a plain absolutely-positioned div is simpler
+          and never touches shape hit-testing. */}
+      {peers.length > 0 && (
+        <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden">
+          {peers
+            .filter((peer): peer is PeerInfo & { cursor: { x: number; y: number } } => peer.cursor !== null)
+            .map((peer) => (
+              <div
+                key={peer.clientId}
+                className="absolute flex items-center gap-1 transition-[left,top] duration-75 ease-linear"
+                style={{
+                  left: peer.cursor.x * viewport.scale + viewport.x,
+                  top: peer.cursor.y * viewport.scale + viewport.y,
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 18 18" style={{ filter: "drop-shadow(0 1px 1px rgba(0,0,0,0.25))" }}>
+                  <path d="M2 2 L15 8 L9 9.5 L7 15.5 Z" fill={peer.color} stroke="white" strokeWidth="1" strokeLinejoin="round" />
+                </svg>
+                <span
+                  className="whitespace-nowrap rounded px-1.5 py-0.5 text-[10px] font-medium text-white shadow"
+                  style={{ backgroundColor: peer.color }}
+                >
+                  {peer.name}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
 
       {/* ─── Inline Text Editing Overlay ─────────────────────────────────── */}
       {editingShape && editingRect && (

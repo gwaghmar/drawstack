@@ -252,6 +252,10 @@ export function EditorClient({
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [applyingBrand, setApplyingBrand] = useState(false);
   const presenceOthers = usePresence(currentProjectId, userEmail, userName);
+  const presenceIdentity = useMemo(
+    () => ({ name: userName, color: presenceColor(userEmail) }),
+    [userName, userEmail],
+  );
   const [input, setInput] = useState("");
   const [darkMode, setDarkMode] = useState(false);
   const [toolEffects, setToolEffects] = useState<Record<string, { status: "applied" | "noop" | "error"; label: string; detail?: string }>>({});
@@ -509,6 +513,20 @@ export function EditorClient({
     });
   }, []);
 
+  const handleFreeformChange = useCallback((next: string) => {
+    if (next === sourceRef.current) return;
+    recordUndo(sourceRef.current);
+    setSource(next);
+  }, [recordUndo]);
+
+  // Remote Yjs edits (another peer's changes arriving over the wire) update the
+  // canvas the same way, minus recordUndo — undo should only unwind this user's
+  // own edits, not a collaborator's.
+  const handleFreeformRemoteChange = useCallback((next: string) => {
+    if (next === sourceRef.current) return;
+    setSource(next);
+  }, []);
+
   const searchMatches = useMemo(() => {
     if (!searchQuery) return [] as number[];
     const hay = searchCaseSensitive ? source : source.toLowerCase();
@@ -604,6 +622,11 @@ export function EditorClient({
     const handler = (e: KeyboardEvent) => {
       const mod = e.metaKey || e.ctrlKey;
       if (!mod) return;
+      const target = e.target as HTMLElement | null;
+      const active = document.activeElement as HTMLElement | null;
+      const isEditable = (el: HTMLElement | null) =>
+        !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if (isEditable(target) || isEditable(active)) return;
       if (e.key === "z") {
         e.preventDefault();
         if (e.shiftKey) handleRedo(); else handleUndo();
@@ -1964,7 +1987,7 @@ export function EditorClient({
             {typeMeta.label}
           </div>
           <div ref={frameRef} className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}>
-            <FreeformRenderer source={source} onChange={setSource} roomId={currentProjectId ?? undefined} />
+            <FreeformRenderer source={source} onChange={handleFreeformChange} onRemoteChange={handleFreeformRemoteChange} roomId={currentProjectId ?? undefined} presenceIdentity={presenceIdentity} />
             {showWatermark && <div className="absolute bottom-3 right-4 text-[10px] opacity-30 text-slate-600 font-medium select-none pointer-events-none">Made with drawxyz</div>}
           </div>
         </div>
