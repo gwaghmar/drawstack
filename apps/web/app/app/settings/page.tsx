@@ -1,6 +1,7 @@
 import { auth } from "@/auth";
 import { redirect } from "next/navigation";
-import { createApiKey, deleteApiKey, listApiKeys, setPlan } from "@/app/actions/api-keys";
+import { createApiKey, deleteApiKey, listApiKeys } from "@/app/actions/api-keys";
+import { setPlan } from "@/app/actions/admin";
 import { getAiSettingsForUser } from "@/app/actions/ai-settings";
 import { getBrandKit } from "@/app/actions/brand-kit";
 import { updateHandle, getMyHandle } from "@/app/actions/profile";

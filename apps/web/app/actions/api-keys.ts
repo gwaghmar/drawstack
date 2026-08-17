@@ -50,12 +50,3 @@ export async function deleteApiKey(id: string) {
   );
 }
 
-/** Dev-only helper — lets the settings page toggle plan locally without admin panel. */
-export async function setPlan(email: string, plan: "free" | "pro") {
-  if (process.env.NODE_ENV === "production") return;
-  const { users } = await import("@/lib/db/schema");
-  const { eq: eqOp } = await import("drizzle-orm");
-  await db.update(users).set({ plan }).where(eqOp(users.email, email));
-}
-
-

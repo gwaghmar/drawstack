@@ -64,6 +64,6 @@ export async function adminSetPlan(userId: string, plan: "free" | "pro") {
 
 /** Dev-only helper — Stripe webhook sets plan in production. */
 export async function setPlan(email: string, plan: "free" | "pro") {
-  if (process.env.NODE_ENV === "production") return;
+  if (process.env.NODE_ENV !== "development") return;
   await db.update(users).set({ plan }).where(eq(users.email, email));
 }

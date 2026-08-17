@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { auth } from "@/auth";
+import { ensureUserAndWorkspace } from "@/lib/user-sync";
 import type { ApiError } from "@flowchart/core";
 
 const stripe = process.env.STRIPE_SECRET_KEY
@@ -26,6 +27,14 @@ export async function POST(req: Request) {
     const body: ApiError = { error: "Unauthorized", code: "UNAUTHORIZED" };
     return NextResponse.json(body, { status: 401 });
   }
+
+  try {
+    await ensureUserAndWorkspace(email);
+  } catch (err) {
+    const body: ApiError = { error: "Failed to initialize user", code: "INTERNAL_ERROR" };
+    return NextResponse.json(body, { status: 500 });
+  }
+
   if (!stripe) {
     const body: ApiError = {
       error: "Stripe not configured",

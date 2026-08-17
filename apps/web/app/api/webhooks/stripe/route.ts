@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 
@@ -33,11 +33,16 @@ export async function POST(req: Request) {
   if (event.type === "checkout.session.completed") {
     const s = event.data.object as Stripe.Checkout.Session;
     const email = s.customer_email ?? s.customer_details?.email;
-    if (email) {
-      await db
+    const customerId = s.customer as string | undefined;
+    if (email && customerId) {
+      const updated = await db
         .update(users)
-        .set({ plan: "pro", stripeCustomerId: s.customer as string })
-        .where(eq(users.email, email));
+        .set({ plan: "pro", stripeCustomerId: customerId })
+        .where(eq(users.email, email))
+        .returning({ id: users.id });
+      if (!updated.length) {
+        console.warn(`[stripe] checkout.session.completed: user not found for email ${email}, skipping update`);
+      }
     }
   }
 
