@@ -364,8 +364,8 @@ The rendering stack is now Konva, react-konva, roughjs, perfect-freehand, yjs/y-
 jsPDF — all MIT or Apache-2.0, fine for closed-source, paid commercial use with no
 user-facing attribution required. The `bpmn-js` (Camunda bpmn.io license) concern from
 the old multi-engine era no longer applies — BPMN was deleted along with everything
-else — but see "single-engine pivot" above: the `bpmn-js` npm package is still installed
-even though unused, worth pruning. Excalidraw-adapted code, if any exists in the canvas
+else, and the unused `bpmn-js` npm package itself was pruned 2026-08-17 (see "Known
+pending items"). Excalidraw-adapted code, if any exists in the canvas
 history, was meant to get an attribution header + `THIRD_PARTY_LICENSES.md` entry per
 the canvas plan's legal section — not verified as part of today's work.
 
@@ -447,10 +447,17 @@ If the user says "keep going" without specifying, propose new work from the road
 
 ## Known pending items
 
-- **Unused npm dependencies** — `mermaid`, `bpmn-js`, `d3`, `cytoscape`, `echarts`,
-  `fabric`, `pixi.js`, `vis-network` are still installed in `apps/web/package.json`
-  though nothing imports them since the single-engine pivot. Pure bundle-weight, not
-  urgent, but a real cleanup item.
+- **Unused npm dependencies — removed (2026-08-17).** `mermaid`, `bpmn-js` +
+  `bpmn-auto-layout` + `bpmn-moddle`, `d3`, `cytoscape`, `echarts` +
+  `echarts-for-react`, `fabric`, `pixi.js`, `vis-network`, plus
+  `@excalidraw/excalidraw`, `@mermaid-js/mermaid-cli`, `@xyflow/react`, the
+  `@nivo/*` chart family, and `@dagrejs/dagre` (the "Tidy Up" auto-layout is a
+  hand-rolled dagre-style algorithm, not the package) were pruned from
+  `apps/web/package.json` — 526 packages removed, `pnpm audit` dropped from
+  122 to 87 vulnerabilities. `next-auth`/`@auth/core`/`next`/`hono` (the last
+  via `@modelcontextprotocol/sdk`) still carry real vulnerabilities and need
+  version bumps with real testing — not done here, since those are actively
+  used.
 - **`apps/web/app/api/v1/validate` still validates Mermaid source** — the one place in
   the public API surface that wasn't reconciled with the single-engine pivot.
 - **`lib/diagrams/cloud-icons.ts` is an orphaned file** — nothing imports it, safe to delete.
