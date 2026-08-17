@@ -1092,6 +1092,11 @@ export function EditorClient({
           setSource(next);
           effects[id] = { status: "applied", label: `Replaced ${replaced} occurrence${replaced === 1 ? "" : "s"}` };
         }
+      } else if (toolName === "apply_ops" && diagramType === "freeform" && typeof result.sourceCode === "string") {
+        liveSource = result.sourceCode;
+        mutated = true;
+        setSource(result.sourceCode);
+        effects[id] = { status: "applied", label: `Applied ${result.applied} op${result.applied === 1 ? "" : "s"}` };
       } else if (toolName === "update_node" && diagramType === "reactflow") {
         try {
           const parsed = JSON.parse(liveSource);
@@ -1925,6 +1930,7 @@ export function EditorClient({
                       update_diagram: "Updating diagram…",
                       apply_patch: "Patching…",
                       update_node: "Updating node…",
+                      apply_ops: "Applying canvas ops…",
                       fetch_external_data: "Fetching data…",
                       set_title: "Renaming…",
                       set_theme: "Setting theme…",

@@ -14,7 +14,60 @@ import { THEME_IDS, MODE_PERSONAS, MODE_STRATEGY_HINTS, ANTI_GENERIC_DIRECTIVE }
 import { buildBrandDirective } from "@/lib/brand-directive";
 import { recordAiEvent } from "@/lib/ai-events";
 import { validateAndRepairOutput } from "@/lib/diagrams/validate-output";
-import { applyPatch } from "@/lib/agent-tools";
+import { applyPatch, applyOpsToSource } from "@/lib/agent-tools";
+import { parseFreeformSource } from "@/lib/diagrams/freeform-canvas";
+import { serializeForModel, MODEL_VIEW_GUIDE } from "@/lib/diagrams/freeform-model-view";
+import type { CanvasOp } from "@/lib/diagrams/freeform-ops";
+
+const CanvasOpSchema = z.union([
+  z.object({
+    op: z.literal("add"),
+    shape: z.looseObject({
+      type: z.enum(["rectangle", "ellipse", "diamond", "sticky", "text", "frame", "arrow", "line"]),
+    }).describe("Partial shape; type is required"),
+  }),
+  z.object({
+    op: z.literal("update"),
+    target: z.string().describe("Shape id or unique name"),
+    set: z.record(z.string(), z.unknown()).describe("Dotted-path property updates, e.g. \"text.content\""),
+  }),
+  z.object({
+    op: z.literal("delete"),
+    target: z.string(),
+  }),
+  z.object({
+    op: z.literal("connect"),
+    from: z.string(),
+    to: z.string(),
+    label: z.string().optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+    kind: z.enum(["arrow", "line"]).optional(),
+  }),
+  z.object({
+    op: z.literal("place"),
+    target: z.string(),
+    below: z.string().optional(),
+    above: z.string().optional(),
+    rightOf: z.string().optional(),
+    leftOf: z.string().optional(),
+    inside: z.string().optional(),
+    gap: z.number().optional(),
+    align: z.enum(["start", "center", "end"]).optional(),
+  }),
+  z.object({
+    op: z.literal("layout"),
+    targets: z.array(z.string()),
+    arrange: z.enum(["row", "column", "grid"]),
+    gap: z.number().optional(),
+    origin: z.object({ x: z.number(), y: z.number() }).optional(),
+  }),
+  z.object({
+    op: z.literal("reorder"),
+    target: z.string(),
+    to: z.enum(["front", "back", "forward", "backward"]),
+  }),
+]);
 
 export const maxDuration = 60;
 
@@ -246,16 +299,21 @@ ${brandDirective}
 ${MODE_PERSONAS[editorMode] ?? ""}
 ${ANTI_GENERIC_DIRECTIVE}
 
-Current source code:
+${diagramType === "freeform"
+  ? `Current canvas (model view — do NOT rewrite this text directly, express changes as apply_ops):
+${currentSource ? serializeForModel(parseFreeformSource(currentSource).doc) : "Empty canvas."}
+
+${MODEL_VIEW_GUIDE}`
+  : `Current source code:
 \`\`\`
 ${currentSource || "No source provided"}
-\`\`\`
+\`\`\``}
 
 TOOLS:
 - update_diagram: full rewrite of diagram source
-- apply_patch: surgical find-and-replace on existing source
+- apply_patch: surgical find-and-replace on existing source${diagramType === "freeform" ? " — NEVER use on freeform canvas, string patching corrupts the scene JSON" : ""}
 - update_node: React Flow only — update a node's label/style by ID
-- fetch_external_data: fetch JSON from a URL or generate contextual sample data by keyword
+${diagramType === "freeform" ? "- apply_ops: freeform canvas only — targeted scene-graph ops (add/update/delete/connect/place/layout/reorder), targeting shapes by id or unique name\n" : ""}- fetch_external_data: fetch JSON from a URL or generate contextual sample data by keyword
 - set_title: rename the diagram
 - set_theme: change the visual theme (only the listed theme ids)
 - set_palette: change the color palette
@@ -270,8 +328,26 @@ STRATEGY:
 5. Do not call 'apply_brand_kit' unless a brand kit is configured (see CURRENT STATE).
 6. update_diagram validates your output. If it returns an error, read the error and call update_diagram again with corrected output.
 7. Always briefly explain what you are doing before calling a tool.
-8. ${MODE_STRATEGY_HINTS[editorMode] ?? ""}`,
+${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targeted edits — target shapes by id or unique name, and use 'place'/'layout' for relative positioning instead of guessing raw x/y coordinates. Reach for 'update_diagram' only for a full rebuild of the canvas. Never use 'apply_patch' here.\n9. " : "8. "}${MODE_STRATEGY_HINTS[editorMode] ?? ""}`,
       tools: {
+        ...(diagramType === "freeform" ? {
+          apply_ops: tool({
+            description: "Freeform canvas only: apply targeted scene-graph operations (add/update/delete/connect/place/layout/reorder), targeting shapes by id or unique name.",
+            inputSchema: z.object({
+              ops: z.array(CanvasOpSchema).describe("Ordered list of ops to apply"),
+              explanation: z.string().describe("Brief explanation of the changes"),
+            }),
+            execute: async ({ ops, explanation }) => {
+              toolCallCount++;
+              const result = applyOpsToSource(workingSource, ops as CanvasOp[]);
+              if (result.source === null) {
+                return { success: false, explanation, error: `No ops applied. Errors: ${JSON.stringify(result.errors)}`, errors: result.errors };
+              }
+              workingSource = result.source;
+              return { success: true, explanation, sourceCode: result.source, applied: result.applied, errors: result.errors, canvas: result.canvas };
+            },
+          }),
+        } : {}),
         update_diagram: tool({
           description: "Update or create the diagram source code (Full rewrite).",
           inputSchema: z.object({
@@ -289,7 +365,7 @@ STRATEGY:
           },
         }),
         apply_patch: tool({
-          description: "Apply a targeted text replacement to the diagram source (Surgical edit).",
+          description: "Apply a targeted text replacement to the diagram source (Surgical edit). Do not use on the freeform canvas — string patching corrupts its scene JSON; use apply_ops there instead.",
           inputSchema: z.object({
             find: z.string().describe("The exact text or line to find"),
             replace: z.string().describe("The replacement text"),
