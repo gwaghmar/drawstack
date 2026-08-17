@@ -191,7 +191,22 @@ real polyline, `orthogonal` bends between every consecutive pair, `curved` got i
 real implementation, a Catmull-Rom-derived smooth path) and `showJunctions` (small ring
 markers at every point on the route). Note: the `connect` op in `freeform-ops.ts` does
 NOT yet expose `waypoints`/`showJunctions` — only reachable via `add` + `update` ops
-today; a known, deliberate gap, not an oversight.
+today; a known, deliberate gap, not an oversight. It *does* expose `arrowHeadStart` /
+`arrowHeadEnd` / `labelStyle`.
+
+**Arrowheads** are `arrowHeadStart` / `arrowHeadEnd`: `arrow` (default filled pointer),
+`triangle-open` (UML inheritance), `diamond` / `diamond-open` (UML composition /
+aggregation), and the five ERD crow's-foot cardinalities (`crowfoot-one`, `-many`,
+`-zero-one`, `-one-many`, `-zero-many`). The legacy `arrowStart`/`arrowEnd` booleans
+still apply when no style is set. Head geometry — including the trimmed line endpoint,
+so a line never pokes through an open head — comes from `computeArrowHeadGeometry` in
+`freeform-canvas.ts`, which returns a list of marks (polygon/polyline/ring) that BOTH
+renderers draw. New notation goes there, not in either renderer.
+
+**Text auto-fits its shape**: `fitTextFontSize` (same file) shrinks wrapped copy until
+it fits the shape height, floored at 60% of the authored size, skipped for `wrap: false`
+and for bare `text` shapes. Before this, copy that wrapped past the shape's height
+simply spilled out of it.
 
 ### Ops vocabulary (`applyCanvasOps`, 7 ops)
 `add` · `update` (target + set) · `delete` · `connect` (bound arrow between shapes) ·
@@ -212,7 +227,11 @@ partially apply, errors are reported per-index rather than throwing away the bat
 - `getShapeBounds` — real bounds incl. arrows; drives marquee, align, export crop
 - `validateFreeformRefs` — dead refs, duplicate names, bad frame links (client-side; a
   server-side analog now lives in `validate-output.ts`, see below)
-- `autoLayoutFreeformDocument` — the "Tidy Up" button (dagre-style, LR/TB)
+- `autoLayoutFreeformDocument` — the "Tidy Up" button (layered, LR/TB) AND the `layout`
+  op's `arrange: "graph"` mode, which is how an AI batch can add shapes at 0,0, connect
+  them, and let the engine derive all geometry. Reads `line` connections as well as
+  arrows (UML/ERD edges are lines), orders each layer by neighbour barycenter to cut
+  edge crossings, and centers layers against the widest one.
 - `serializeForModel` / `describeCanvas` — compact model-facing view (the 70% token saving)
 - `getSvgIcon` — icon registry used inside SVG macro shapes
 
@@ -467,6 +486,7 @@ If the user says "keep going" without specifying, propose new work from the road
 - PDF export embeds a high-res PNG (pixelRatio = pngScale) — files can be large (~10 MB at scale 2). Follow-up if size matters: JPEG-encode or cap the PDF pixelRatio.
 - `apply_patch` / `update_node` results are applied client-side and not server-validated (lower risk — surgical edits). Only `update_diagram` goes through `validateAndRepairOutput`.
 - The `connect` op in `freeform-ops.ts` doesn't expose `waypoints`/`showJunctions` (see "Shape vocabulary" above) — reachable via `add`/`update` only.
+- **Two long-standing Konva/SVG default mismatches were fixed on 2026-08-17** — the exporter drew a drop shadow on every non-frame shape (Konva only ever drew one for sticky/card/table) and fell back to a pale border for a stroke-less shape (Konva uses `#1e293b`). Both now follow Konva. This *does* change how pre-existing projects export: primitives lose a shadow the canvas never showed, and unstroked shapes/connectors gain the outline the canvas always had. `shadow: true` restores a shadow per shape.
 - The repo root is littered with `*.png` audit/verification screenshots from past browser click-testing sessions. Don't add more at root; write new ones to a scratch dir.
 
 ## Supabase / database situation (as of 2026-08-17)
