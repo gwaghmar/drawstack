@@ -94,8 +94,11 @@ function renderShape(
   onShapeDragStart?: (shapeId: string, x: number, y: number) => void,
   onShapeDragMove?: (shapeId: string, x: number, y: number) => void,
   onShapeDragEnd?: (shapeId: string) => void,
-  readOnly?: boolean
+  readOnly?: boolean,
+  onShapeDblClick?: (shapeId: string) => void,
+  editingShapeId?: string | null
 ): React.ReactNode {
+  const isEditingThis = editingShapeId === shape.id;
   const commonProps = {
     x: shape.x,
     y: shape.y,
@@ -138,6 +141,7 @@ function renderShape(
             cornerRadius={shape.type === "rectangle" && "cornerRadius" in shape ? shape.cornerRadius : undefined}
             draggable={!readOnly}
             onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => onShapeDragMove?.(shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
@@ -160,6 +164,7 @@ function renderShape(
             opacity={commonProps.opacity}
             draggable={!readOnly}
             onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => {
               const cx = e.target.x();
@@ -180,6 +185,7 @@ function renderShape(
             height={shape.height}
             draggable={!readOnly}
             onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => onShapeDragMove?.(shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
@@ -187,6 +193,7 @@ function renderShape(
         );
 
       case "text":
+        if (isEditingThis) return null;
         return (
           <Text
             key={shape.id}
@@ -205,6 +212,7 @@ function renderShape(
             opacity={commonProps.opacity}
             draggable={!readOnly}
             onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => onShapeDragMove?.(shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
@@ -218,40 +226,65 @@ function renderShape(
 
   if (!shapeNode) return null;
 
-  // Render selection outline if selected (arrows/lines already handled above)
-  if (isSelected) {
-    const bounds = getShapeBounds(doc, shape);
-    const outlineNode =
-      shape.type === "ellipse" ? (
-        <Ellipse
-          key={`${shape.id}-select`}
-          x={bounds.x + bounds.width / 2}
-          y={bounds.y + bounds.height / 2}
-          radiusX={bounds.width / 2 + 3}
-          radiusY={bounds.height / 2 + 3}
-          stroke="#4f46e5"
-          strokeWidth={2}
-          dash={[4, 4]}
-          listening={false}
-        />
-      ) : (
-        <Rect
-          key={`${shape.id}-select`}
-          x={bounds.x - 2}
-          y={bounds.y - 2}
-          width={bounds.width + 4}
-          height={bounds.height + 4}
-          stroke="#4f46e5"
-          strokeWidth={2}
-          dash={[4, 4]}
-          listening={false}
-        />
-      );
+  const nodes: React.ReactNode[] = [shapeNode];
 
-    return [shapeNode, outlineNode];
+  if (!isEditingThis && shape.type !== "text" && shape.text?.content) {
+    const labelBounds = getShapeBounds(doc, shape);
+    nodes.push(
+      <Text
+        key={`${shape.id}-label`}
+        x={labelBounds.x}
+        y={labelBounds.y}
+        width={labelBounds.width}
+        height={labelBounds.height}
+        text={shape.text.content}
+        fontSize={shape.text.fontSize ?? 12}
+        fontFamily={shape.text.fontFamily ?? "Arial"}
+        fill={shape.text.color ?? "#000000"}
+        align={shape.text.align ?? "center"}
+        verticalAlign="middle"
+        fontStyle={shape.text.bold ? "bold" : "normal"}
+        rotation={commonProps.rotation}
+        listening={false}
+      />
+    );
   }
 
-  return shapeNode;
+  if (isSelected) {
+    const attachedToTransformer = !readOnly && !shape.locked;
+    if (!attachedToTransformer) {
+      const bounds = getShapeBounds(doc, shape);
+      const outlineNode =
+        shape.type === "ellipse" ? (
+          <Ellipse
+            key={`${shape.id}-select`}
+            x={bounds.x + bounds.width / 2}
+            y={bounds.y + bounds.height / 2}
+            radiusX={bounds.width / 2 + 3}
+            radiusY={bounds.height / 2 + 3}
+            stroke="#4f46e5"
+            strokeWidth={2}
+            dash={[4, 4]}
+            listening={false}
+          />
+        ) : (
+          <Rect
+            key={`${shape.id}-select`}
+            x={bounds.x - 2}
+            y={bounds.y - 2}
+            width={bounds.width + 4}
+            height={bounds.height + 4}
+            stroke="#4f46e5"
+            strokeWidth={2}
+            dash={[4, 4]}
+            listening={false}
+          />
+        );
+      nodes.push(outlineNode);
+    }
+  }
+
+  return nodes;
 }
 
 export function FreeformRenderer({ source, onChange, readOnly }: Props) {
@@ -263,6 +296,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
+  const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
+  const [editingValue, setEditingValue] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [dragState, setDragState] = useState<{
     shapeId: string;
     startX: number;
@@ -305,9 +341,80 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     }
   };
 
+  useEffect(() => {
+    if (!editingShapeId) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+  }, [editingShapeId]);
+
+  const startEditing = (shapeId: string) => {
+    if (readOnly) return;
+    const shape = doc.shapes.find((s) => s.id === shapeId);
+    if (!shape || shape.type === "arrow" || shape.type === "line" || shape.locked) return;
+    setSelectedIds(new Set());
+    setEditingShapeId(shapeId);
+    setEditingValue(shape.text?.content ?? "");
+  };
+
+  const commitEditing = (cancel: boolean) => {
+    const shapeId = editingShapeId;
+    if (!shapeId) return;
+    setEditingShapeId(null);
+    if (cancel) return;
+
+    const shape = doc.shapes.find((s) => s.id === shapeId);
+    if (!shape) return;
+    const content = editingValue;
+
+    if (content === "") {
+      if (shape.type === "text") {
+        const newShapes = doc.shapes.filter((s) => s.id !== shapeId);
+        const newDoc = { ...doc, shapes: newShapes };
+        setDoc(newDoc);
+        setSelectedIds((prev) => {
+          const next = new Set(prev);
+          next.delete(shapeId);
+          return next;
+        });
+        commitChanges(newDoc);
+        return;
+      }
+
+      const newShapes = doc.shapes.map((s) => {
+        if (s.id !== shapeId) return s;
+        const { text: _text, ...rest } = s;
+        return rest as CanvasShape;
+      });
+      const newDoc = { ...doc, shapes: newShapes };
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      return;
+    }
+
+    const newShapes = doc.shapes.map((s) => {
+      if (s.id !== shapeId) return s;
+      const textBlock = { ...(s.text ?? { content: "" }), content };
+      const updated = { ...s, text: textBlock };
+      if (s.type === "text") {
+        const lines = content.split("\n");
+        const fontSize = textBlock.fontSize ?? 12;
+        const longest = Math.max(...lines.map((l) => l.length));
+        const width = Math.max(40, Math.round(longest * fontSize * 0.6 * 1.15));
+        const height = Math.round(lines.length * fontSize * 1.4);
+        return { ...updated, width, height };
+      }
+      return updated;
+    });
+    const newDoc = { ...doc, shapes: newShapes };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
   // Keyboard handlers
   useEffect(() => {
-    if (readOnly || selectedIds.size === 0) return;
+    if (readOnly || selectedIds.size === 0 || editingShapeId) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const activeElement = document.activeElement;
@@ -350,7 +457,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [doc, selectedIds, readOnly]);
+  }, [doc, selectedIds, readOnly, editingShapeId]);
 
   const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
     if (readOnly) return;
@@ -479,6 +586,12 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     const stage = stageRef.current;
     if (!tr || !stage) return;
 
+    if (editingShapeId) {
+      tr.nodes([]);
+      tr.getLayer()?.batchDraw();
+      return;
+    }
+
     const eligibleIds = Array.from(selectedIds).filter((id) => {
       const shape = docRef.current.shapes.find((s) => s.id === id);
       return !!shape && shape.type !== "arrow" && shape.type !== "line" && !shape.locked;
@@ -489,7 +602,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
     tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
-  }, [selectedIds, readOnly]);
+  }, [selectedIds, readOnly, editingShapeId]);
 
   const handleTransformEnd = () => {
     const tr = transformerRef.current;
@@ -537,6 +650,10 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       }
     : null;
 
+  const editingShape = editingShapeId ? doc.shapes.find((s) => s.id === editingShapeId) : null;
+  const editingRect = editingShape ? getShapeBounds(doc, editingShape) : null;
+  const stageContainerRect = editingShape ? stageRef.current?.container().getBoundingClientRect() : null;
+
   return (
     <div className="w-full h-full">
       <Stage
@@ -558,7 +675,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
               handleShapeDragStart,
               handleShapeDragMove,
               handleShapeDragEnd,
-              readOnly
+              readOnly,
+              startEditing,
+              editingShapeId
             )
           )}
 
@@ -591,6 +710,45 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           )}
         </Layer>
       </Stage>
+
+      {editingShape && editingRect && (
+        <textarea
+          ref={textareaRef}
+          value={editingValue}
+          onChange={(e) => setEditingValue(e.target.value)}
+          onBlur={() => commitEditing(false)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.preventDefault();
+              commitEditing(true);
+            } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+              e.preventDefault();
+              commitEditing(false);
+            }
+            e.stopPropagation();
+          }}
+          style={{
+            position: "fixed",
+            left: (stageContainerRect?.left ?? 0) + editingRect.x,
+            top: (stageContainerRect?.top ?? 0) + editingRect.y,
+            width: editingRect.width,
+            height: editingRect.height,
+            fontSize: editingShape.text?.fontSize ?? 12,
+            fontFamily: editingShape.text?.fontFamily ?? "Arial",
+            color: editingShape.text?.color ?? "#000000",
+            textAlign: editingShape.text?.align ?? (editingShape.type === "text" ? "left" : "center"),
+            fontWeight: editingShape.text?.bold ? "bold" : "normal",
+            background: "rgba(255,255,255,0.95)",
+            border: "1px solid #4f46e5",
+            outline: "none",
+            resize: "none",
+            padding: 2,
+            margin: 0,
+            boxSizing: "border-box",
+            zIndex: 50,
+          }}
+        />
+      )}
     </div>
   );
 }
