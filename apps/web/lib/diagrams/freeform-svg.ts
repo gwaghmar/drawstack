@@ -257,7 +257,10 @@ function findBestLabelPosition(
   return bestMid;
 }
 
-export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" | "dark" | "cyber" | "editorial" }): string {
+export function freeformToSvg(
+  doc: CanvasDocument,
+  options?: { theme?: "light" | "dark" | "cyber" | "editorial"; bare?: boolean }
+): string {
   if (doc.shapes.length === 0) {
     return `<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="auto" viewBox="0 0 400 300"><text x="200" y="150" text-anchor="middle" fill="#94a3b8" font-family="Inter, sans-serif" font-size="14">Empty Canvas</text></svg>`;
   }
@@ -284,11 +287,15 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
     }
   }
 
-  const padding = 60;
+  const padding = options?.bare ? 0 : 60;
   const vx = Math.round(minX - padding);
   const vy = Math.round(minY - padding);
-  const vw = Math.max(100, Math.round(maxX - minX + padding * 2));
-  const vh = Math.max(100, Math.round(maxY - minY + padding * 2));
+  const vw = options?.bare
+    ? Math.max(1, Math.round(maxX - minX))
+    : Math.max(100, Math.round(maxX - minX + padding * 2));
+  const vh = options?.bare
+    ? Math.max(1, Math.round(maxY - minY))
+    : Math.max(100, Math.round(maxY - minY + padding * 2));
 
   // McKinsey & Executive Consulting Palette System
   const canvasBg = isDark ? "#0b0f19" : isEditorial ? "#f5f2eb" : "#f8fafc";
@@ -650,11 +657,14 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
 
       // B. Donut Mix Chart (Centered Pie, Left Legend)
       else if (chartType === "donut" && c.donutData) {
-        // Move donut to center-right
-        const cx = x + (innerW / 2) + 60;
-        const cy = y + padTop + innerH / 2 - 10;
-        const radius = Math.min(innerH * 0.46, 75);
+        // Legend occupies a fixed left column; the donut gets whatever is left, so the
+        // arc can never grow into the legend text on a narrow card.
+        const legendW = Math.min(140, innerW * 0.45);
+        const donutSpace = innerW - legendW;
         const strokeW = 32;
+        const radius = Math.max(28, Math.min(donutSpace / 2 - strokeW / 2, innerH * 0.42, 75));
+        const cx = x + padLeft + legendW + donutSpace / 2;
+        const cy = y + padTop + innerH / 2 - 10;
         const circumference = 2 * Math.PI * radius;
 
         let accumulatedPercent = 0;
@@ -679,19 +689,15 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             </g>`;
         }).join("");
 
-        // Commentary Box
-        const commentary = c.centerLabel?.secondary ? `
-          <g transform="translate(${x + padLeft}, ${y + h - 50})">
-            <rect x="0" y="0" width="${innerW}" height="32" rx="4" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
-            <text x="12" y="20" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="${textColorMuted}">Note: ${escapeXml(c.centerLabel.secondary)}</text>
-          </g>
-        ` : "";
+        // centerLabel is the text in the donut hole — primary over secondary.
+        const hasSecondary = Boolean(c.centerLabel?.secondary);
+        const primaryY = hasSecondary ? cy + 1 : cy + 6;
 
         chartBody = `
           ${donutArcs}
-          <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="800" fill="${textColorPrimary}">${escapeXml(c.centerLabel?.primary ?? "")}</text>
+          <text x="${cx}" y="${primaryY}" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="800" fill="${textColorPrimary}">${escapeXml(c.centerLabel?.primary ?? "")}</text>
+          ${hasSecondary ? `<text x="${cx}" y="${cy + 16}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" letter-spacing="0.06em" fill="${textColorMuted}">${escapeXml(c.centerLabel!.secondary!)}</text>` : ""}
           ${legendItems}
-          ${commentary}
         `;
       }
 
@@ -700,16 +706,21 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         const rowH = innerH / c.data.length;
         const maxVal = Math.max(...c.data.map(d => d.value), 1);
 
+        // Reserve gutters for the label and the value so neither can overflow the card.
+        const labelGutter = Math.min(120, innerW * 0.36);
+        const valueGutter = 44;
+        const barTrack = Math.max(20, innerW - labelGutter - valueGutter);
+
         chartBody = c.data.map((d, idx) => {
           const ry = y + padTop + idx * rowH;
-          const barWidth = Math.max(20, (d.value / maxVal) * (innerW - 140));
+          const barWidth = Math.max(4, (d.value / maxVal) * barTrack);
           const barColor = d.color ?? "#4A85F6";
 
           return `
             <g transform="translate(${x + padLeft}, ${ry})">
               <text x="0" y="14" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(d.label)}</text>
-              <rect x="180" y="2" width="${barWidth}" height="16" rx="4" fill="${barColor}" />
-              <text x="${190 + barWidth}" y="14" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="${textColorPrimary}">${d.value}%</text>
+              <rect x="${labelGutter}" y="2" width="${barWidth}" height="16" rx="4" fill="${barColor}" />
+              <text x="${labelGutter + barWidth + 8}" y="14" font-family="Inter, sans-serif" font-size="10.5" font-weight="700" fill="${textColorPrimary}">${d.value}%</text>
             </g>`;
         }).join("");
       }
@@ -728,9 +739,18 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         }).join("");
       }
 
-      // E. Spline Area Chart with Y-Axis Gridlines
-      else if (c.data && c.data.length > 0) {
-        const chartData = c.data;
+      // E. Spline Area / Line / Bar with Y-Axis Gridlines.
+      // Accepts either `data` or `groupedData` — the AI prompt documents groupedData for
+      // every chart type, so gating this on `data` alone silently rendered an empty panel.
+      else if ((c.data && c.data.length > 0) || (c.groupedData && c.groupedData.length > 0)) {
+        const chartData =
+          c.data && c.data.length > 0
+            ? c.data
+            : (c.groupedData ?? []).map((cat) => ({
+                label: cat.category,
+                value: cat.series[0]?.value ?? 0,
+                color: cat.series[0]?.color,
+              }));
         const maxVal = Math.max(...chartData.map(v => v.value), 1);
         const niceCeil = Math.ceil(maxVal * 1.15);
 
@@ -756,16 +776,45 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         }
 
         const areaPath = `${linePath} L ${coords[coords.length - 1].x} ${y + padTop + innerH} L ${coords[0].x} ${y + padTop + innerH} Z`;
+        const accent = isDark ? "#60a5fa" : "#4A85F6";
 
-        chartBody = `
+        const xLabels = coords
+          .map(
+            (p, idx) =>
+              `<text x="${p.x}" y="${y + padTop + innerH + 18}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(chartData[idx].label)}</text>`
+          )
+          .join("");
+
+        if (chartType === "bar") {
+          const slot = innerW / chartData.length;
+          const barW = Math.min(46, slot * 0.6);
+          chartBody = `
           ${gridLinesSvg}
-          <path d="${areaPath}" fill="url(#chart-area-grad)" />
-          <path d="${linePath}" fill="none" stroke="${isDark ? "#60a5fa" : "#4A85F6"}" stroke-width="2.5" stroke-linecap="round" />
-          ${coords.map((p, idx) => `
-            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${isDark ? "#60a5fa" : "#4A85F6"}" stroke-width="2" />
-            <text x="${p.x}" y="${y + padTop + innerH + 18}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(chartData[idx].label)}</text>
-          `).join("")}
+          ${chartData
+            .map((d, i) => {
+              const bh = (d.value / niceCeil) * innerH;
+              const bx = x + padLeft + slot * i + (slot - barW) / 2;
+              const by = y + padTop + innerH - bh;
+              return `<rect x="${bx}" y="${by}" width="${barW}" height="${Math.max(0, bh)}" rx="4" fill="${d.color ?? accent}" />
+                <text x="${bx + barW / 2}" y="${by - 7}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="700" fill="${textColorPrimary}">${escapeXml(String(d.value))}</text>`;
+            })
+            .join("")}
+          ${xLabels}
         `;
+        } else {
+          chartBody = `
+          ${gridLinesSvg}
+          ${chartType === "line" ? "" : `<path d="${areaPath}" fill="url(#chart-area-grad)" />`}
+          <path d="${linePath}" fill="none" stroke="${accent}" stroke-width="2.5" stroke-linecap="round" />
+          ${coords
+            .map(
+              (p) =>
+                `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${accent}" stroke-width="2" />`
+            )
+            .join("")}
+          ${xLabels}
+        `;
+        }
       }
 
       elements.push(
@@ -1175,7 +1224,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       });
       
       // Render Connections
-      pm.connections.forEach(c => {
+      (pm.connections ?? []).forEach(c => {
         const from = nodeCoords[c.from];
         const to = nodeCoords[c.to];
         if (!from || !to) return;
@@ -1393,6 +1442,13 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         `<text font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
       );
     }
+  }
+
+  if (options?.bare) {
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="${vw}" height="${vh}" preserveAspectRatio="xMidYMid meet">
+  ${defs}
+  ${elements.join("\n  ")}
+</svg>`;
   }
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vx} ${vy} ${vw} ${vh}" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="background:${canvasBg};border-radius:14px;box-shadow:inset 0 0 0 1px ${isDark ? "rgba(255,255,255,0.08)" : isEditorial ? "#e2ded4" : "#e2e8f0"};max-width:100%;display:block;">

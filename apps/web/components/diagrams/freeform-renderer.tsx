@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group } from "react-konva";
+import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage } from "react-konva";
 import Konva from "konva";
 import rough from "roughjs";
 import { getStroke } from "perfect-freehand";
@@ -249,6 +249,116 @@ const FIXTURE_DOCUMENT: CanvasDocument = {
     },
   ],
 };
+
+const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
+  "dashboard",
+  "chart",
+  "mindmap",
+  "scurve_timeline",
+  "metric",
+  "mockup",
+  "isometric_block",
+  "tech_hud_panel",
+  "layered_process_map",
+  "venn_timeline",
+  "feed_table",
+]);
+
+type MacroShapeNodeProps = {
+  shape: CanvasShape;
+  renderMode: CanvasDocument["renderMode"];
+  bounds: { x: number; y: number; width: number; height: number };
+  draggable: boolean;
+  rotation: number;
+  opacity: number;
+  onShapeClick?: (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => void;
+  onShapeDblClick?: (shapeId: string) => void;
+  onShapeDragStart?: (shapeId: string, x: number, y: number) => void;
+  onShapeDragMove?: (e: Konva.KonvaEventObject<DragEvent>, shapeId: string, x: number, y: number) => void;
+  onShapeDragEnd?: (shapeId: string) => void;
+};
+
+/** Macro shapes are drawn by freeformToSvg and rasterized into Konva so canvas and export cannot drift. */
+function MacroShapeNode({
+  shape,
+  renderMode,
+  bounds,
+  draggable,
+  rotation,
+  opacity,
+  onShapeClick,
+  onShapeDblClick,
+  onShapeDragStart,
+  onShapeDragMove,
+  onShapeDragEnd,
+}: MacroShapeNodeProps) {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  const signature = JSON.stringify(shape);
+
+  useEffect(() => {
+    let cancelled = false;
+    let svg: string;
+    try {
+      svg = freeformToSvg({ version: 1, renderMode, shapes: [shape] }, { bare: true });
+    } catch {
+      // AI-emitted macro shapes can omit fields the renderer expects; keep the placeholder
+      // rather than letting one bad shape throw the whole canvas render.
+      setImage(null);
+      return;
+    }
+    const img = new window.Image();
+    img.onload = () => {
+      if (!cancelled) setImage(img);
+    };
+    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- signature is the serialized shape
+  }, [signature, renderMode]);
+
+  const handlers = {
+    draggable,
+    onClick: (e: Konva.KonvaEventObject<MouseEvent>) => onShapeClick?.(e, shape.id),
+    onDblClick: () => onShapeDblClick?.(shape.id),
+    onDragStart: () => onShapeDragStart?.(shape.id, shape.x, shape.y),
+    onDragMove: (e: Konva.KonvaEventObject<DragEvent>) =>
+      onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y()),
+    onDragEnd: () => onShapeDragEnd?.(shape.id),
+  };
+
+  if (!image) {
+    return (
+      <Rect
+        id={shape.id}
+        x={bounds.x}
+        y={bounds.y}
+        width={bounds.width}
+        height={bounds.height}
+        cornerRadius={8}
+        fill="#f1f5f9"
+        stroke="#cbd5e1"
+        strokeWidth={1}
+        dash={[6, 6]}
+        {...handlers}
+      />
+    );
+  }
+
+  return (
+    <KonvaImage
+      id={shape.id}
+      image={image}
+      x={bounds.x}
+      y={bounds.y}
+      width={bounds.width}
+      height={bounds.height}
+      rotation={rotation}
+      opacity={opacity}
+      {...handlers}
+    />
+  );
+}
 
 function renderShape(
   shape: CanvasShape,
@@ -831,6 +941,25 @@ function renderShape(
         );
 
       default:
+        if (MACRO_SHAPE_TYPES.has(shape.type)) {
+          const macroBounds = getShapeBounds(doc, shape);
+          return (
+            <MacroShapeNode
+              key={shape.id}
+              shape={shape}
+              renderMode={doc.renderMode}
+              bounds={macroBounds}
+              draggable={draggable}
+              rotation={commonProps.rotation}
+              opacity={commonProps.opacity}
+              onShapeClick={onShapeClick}
+              onShapeDblClick={onShapeDblClick}
+              onShapeDragStart={onShapeDragStart}
+              onShapeDragMove={onShapeDragMove}
+              onShapeDragEnd={onShapeDragEnd}
+            />
+          );
+        }
         return null;
     }
   })();
