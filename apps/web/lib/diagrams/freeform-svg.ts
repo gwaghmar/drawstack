@@ -1424,11 +1424,34 @@ export function freeformToSvg(
       const textColor = shape.text.color ?? (shape.type === "sticky" ? "#713f12" : textColorPrimary);
       const fontSize = shape.text.fontSize ?? 13;
       const fontWeight = shape.text.bold ? "700" : "500";
+      // Konva honors text.fontFamily; the exporter must too or WYSIWYG breaks.
+      const fontFamily = shape.text.fontFamily ?? "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
       const align = shape.text.align ?? (shape.type === "text" ? "left" : "center");
       const textAnchor = align === "center" ? "middle" : align === "right" ? "end" : "start";
       const tx = align === "center" ? x + w / 2 : align === "right" ? x + w - 12 : x + 12;
 
-      const lines = shape.text.content.split("\n");
+      // Konva wraps text to the shape width; mirror that here or copy overflows the
+      // shape in export. Approximate glyph width since string-built SVG can't measure.
+      const availW = Math.max(24, w - 24);
+      const approxCharW = fontSize * (shape.text.bold ? 0.58 : 0.55);
+      const maxChars = Math.max(4, Math.floor(availW / approxCharW));
+      const lines = shape.text.content.split("\n").flatMap((raw) => {
+        if (raw.length <= maxChars) return [raw];
+        const words = raw.split(" ");
+        const out: string[] = [];
+        let cur = "";
+        for (const word of words) {
+          const candidate = cur ? `${cur} ${word}` : word;
+          if (candidate.length > maxChars && cur) {
+            out.push(cur);
+            cur = word;
+          } else {
+            cur = candidate;
+          }
+        }
+        if (cur) out.push(cur);
+        return out;
+      });
       const lineHeight = fontSize * 1.35;
       const totalTextHeight = lines.length * lineHeight;
       const yOffset = shape.type === "cylinder" ? h * 0.1 : 0;
@@ -1439,7 +1462,7 @@ export function freeformToSvg(
         .join("");
 
       elements.push(
-        `<text font-family="Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
+        `<text font-family="${escapeXml(fontFamily)}" font-size="${fontSize}" font-weight="${fontWeight}" fill="${textColor}" text-anchor="${textAnchor}">${tspans}</text>`
       );
     }
   }
