@@ -1,0 +1,1 @@
+ALTER TABLE "project" ALTER COLUMN "diagram_type" SET DEFAULT 'freeform';
