@@ -9,6 +9,7 @@ import {
   resolveArrowRenderEndpoints,
   getShapeBounds,
   generateShapeId,
+  resolveColor,
   type CanvasDocument,
   type CanvasShape,
   type ArrowShape,
@@ -67,14 +68,14 @@ function getShapeIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): st
 }
 
 function defaultFill(shape: CanvasShape): string {
-  if (shape.fill) return shape.fill;
+  if (shape.fill) return resolveColor(shape.fill) ?? shape.fill;
   if (shape.type === "sticky") return "#fef08a";
   if (shape.type === "frame") return "transparent";
   return "#ffffff";
 }
 
 function defaultStroke(shape: CanvasShape): string {
-  if (shape.stroke) return shape.stroke;
+  if (shape.stroke) return resolveColor(shape.stroke) ?? shape.stroke;
   if (shape.type === "frame") return "#94a3b8";
   return "#000000";
 }
