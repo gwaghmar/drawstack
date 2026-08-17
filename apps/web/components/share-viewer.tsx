@@ -149,6 +149,11 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
     bingo: "Bingo Card",
     bracket: "Bracket",
     freeform: "Free Canvas",
+    d3: "D3 Visualization",
+    cytoscape: "Network Graph",
+    visnetwork: "Physics Network",
+    fabric: "Design Canvas",
+    pixi: "WebGL Canvas",
   };
 
   return (

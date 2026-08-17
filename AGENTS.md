@@ -23,8 +23,8 @@ Live: https://drawxyz.vercel.app · Repo: https://github.com/gwaghmar/drawstack
 - Stripe billing (checkout, portal, webhook)
 - pnpm monorepo: `apps/web` (Next app) + `packages/core` (shared types/prompts) +
   `packages/cli` + `packages/mcp-server`
-- Mermaid, Excalidraw, ReactFlow (@xyflow), ECharts, Nivo, bpmn-js, Konva (Freeform canvas) —
-  22 diagram types total, see `packages/core/src/diagram-types.ts`
+- Mermaid, Excalidraw, ReactFlow (@xyflow), ECharts, Nivo, bpmn-js, Konva (Freeform canvas), D3.js, Cytoscape.js, vis-network, Fabric.js, PixiJS —
+  27 diagram types total, see `packages/core/src/diagram-types.ts`
 
 ## Commands
 

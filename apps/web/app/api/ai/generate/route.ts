@@ -339,6 +339,11 @@ export async function POST(req: Request) {
       bingo:      "Extract: the theme and 25 bingo square phrases. All squares must relate to the theme.",
       bracket:    "Extract: the tournament subject, all competitors, which round they appear in, and any declared winners.",
       freeform:   "Extract: every distinct shape/note and its spatial relationship to the others (grouped in a frame, connected by an arrow, positioned near another element). Suggest a suggestedSubtype (sketch/spatial-map/sticky-board/mood-board).",
+      d3:         "Extract: all entities/nodes and their relationships. Identify if this is a force-directed network, hierarchy (tree), flow (sankey), part-to-whole (sunburst), or category-flow (chord). Extract node names, groups, and connection weights.",
+      cytoscape:  "Extract: all entities/nodes, their connections, and relationship labels. Identify the graph type: organic network (cose), directed pipeline (dagre), circular (circle), or layered tree (breadthfirst). Extract node categories and edge directions.",
+      visnetwork: "Extract: all entities as nodes with labels, tooltips, and relative sizes. Extract connections with directionality and labels. Identify if physics simulation should be spring (general), hierarchical (top-down), or cluster (dense).",
+      fabric:     "Extract: the design type (mockup, wireframe, poster, slide), all visual elements (shapes, text blocks, images), their approximate positions, colors, and content. For wireframes, simplify to gray fills only.",
+      pixi:       "Extract: all visual objects (circles, rects, text), their positions, sizes, colors, and any connecting lines. Identify if animated particles are needed. Prefer dark backgrounds and bright accent colors.",
     };
     const intentInstruction = `You are analyzing intent for a ${diagramType} diagram. ${typeHints[diagramType]}
 Return ONLY JSON matching this shape:

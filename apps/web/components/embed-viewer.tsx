@@ -135,6 +135,11 @@ export function EmbedViewer({ token }: { token: string }) {
     bingo: "Bingo Card",
     bracket: "Bracket",
     freeform: "Free Canvas",
+    d3: "D3 Visualization",
+    cytoscape: "Network Graph",
+    visnetwork: "Physics Network",
+    fabric: "Design Canvas",
+    pixi: "WebGL Canvas",
   };
   const bg = diagramType === "mermaid" ? (theme.themeVariables.background ?? "#fff") : "#fff";
 

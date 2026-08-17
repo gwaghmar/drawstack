@@ -123,6 +123,26 @@ const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => ({ default: m.FreeformRenderer })),
   { ssr: false, loading: () => <CanvasLoader label="Canvas" /> }
 );
+const D3Renderer = dynamic(
+  () => import("./diagrams/d3-renderer").then((m) => ({ default: m.D3Renderer })),
+  { ssr: false, loading: () => <CanvasLoader label="D3" /> }
+);
+const CytoscapeRenderer = dynamic(
+  () => import("./diagrams/cytoscape-renderer").then((m) => ({ default: m.CytoscapeRenderer })),
+  { ssr: false, loading: () => <CanvasLoader label="Network" /> }
+);
+const VisNetworkRenderer = dynamic(
+  () => import("./diagrams/visnetwork-renderer").then((m) => ({ default: m.VisNetworkRenderer })),
+  { ssr: false, loading: () => <CanvasLoader label="Physics Network" /> }
+);
+const FabricRenderer = dynamic(
+  () => import("./diagrams/fabric-renderer").then((m) => ({ default: m.FabricRenderer })),
+  { ssr: false, loading: () => <CanvasLoader label="Design Canvas" /> }
+);
+const PixiRenderer = dynamic(
+  () => import("./diagrams/pixi-renderer").then((m) => ({ default: m.PixiRenderer })),
+  { ssr: false, loading: () => <CanvasLoader label="WebGL" /> }
+);
 
 function CanvasLoader({ label }: { label: string }) {
   return (
@@ -231,6 +251,28 @@ function summarizeDiagramSource(diagramType: DiagramType, source: string): strin
       const parsedFreeform = parsed as { shapes?: unknown[] };
       const count = Array.isArray(parsedFreeform.shapes) ? parsedFreeform.shapes.length : 0;
       return `Freeform canvas with ${count} shapes.`;
+    }
+    if (diagramType === "d3") {
+      const p = parsed as { subtype?: string; nodes?: unknown[]; links?: unknown[] };
+      return `D3 ${p.subtype ?? "force"} chart with ${p.nodes?.length ?? 0} nodes and ${p.links?.length ?? 0} links.`;
+    }
+    if (diagramType === "cytoscape") {
+      const p = parsed as { elements?: { nodes?: unknown[]; edges?: unknown[] }; layout?: { name?: string } };
+      const nodeCount = p.elements?.nodes?.length ?? 0;
+      const edgeCount = p.elements?.edges?.length ?? 0;
+      return `Cytoscape ${p.layout?.name ?? "cose"} graph with ${nodeCount} nodes and ${edgeCount} edges.`;
+    }
+    if (diagramType === "visnetwork") {
+      const p = parsed as { nodes?: unknown[]; edges?: unknown[] };
+      return `vis-network with ${p.nodes?.length ?? 0} nodes and ${p.edges?.length ?? 0} edges.`;
+    }
+    if (diagramType === "fabric") {
+      const p = parsed as { objects?: unknown[] };
+      return `Fabric.js canvas with ${p.objects?.length ?? 0} objects.`;
+    }
+    if (diagramType === "pixi") {
+      const p = parsed as { stage?: unknown[] };
+      return `PixiJS stage with ${p.stage?.length ?? 0} objects.`;
     }
   } catch {
     return `${diagramType} source is present but not fully parseable.`;
@@ -2859,6 +2901,31 @@ export function EditorClient({
                   <BpmnRenderer source={source} onChange={setSource} />
                 </div>
               </div>
+            </div>
+          )}
+          {diagramType === "d3" && (
+            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white" style={{ minHeight: "500px" }}>
+              <D3Renderer source={source} onChange={setSource} />
+            </div>
+          )}
+          {diagramType === "cytoscape" && (
+            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white" style={{ minHeight: "500px" }}>
+              <CytoscapeRenderer source={source} onChange={setSource} />
+            </div>
+          )}
+          {diagramType === "visnetwork" && (
+            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white" style={{ minHeight: "500px" }}>
+              <VisNetworkRenderer source={source} onChange={setSource} />
+            </div>
+          )}
+          {diagramType === "fabric" && (
+            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl" style={{ minHeight: "500px" }}>
+              <FabricRenderer source={source} onChange={setSource} readOnly={false} />
+            </div>
+          )}
+          {diagramType === "pixi" && (
+            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-slate-950" style={{ minHeight: "500px" }}>
+              <PixiRenderer source={source} onChange={setSource} />
             </div>
           )}
         </div>

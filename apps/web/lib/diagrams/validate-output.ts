@@ -252,6 +252,44 @@ const FreeformCanvasSchema = z.object({
   shapes: z.array(FreeformShapeSchema).min(1, "Freeform canvas must have at least one shape"),
 });
 
+const D3Schema = z.object({
+  subtype: z.enum(["force", "tree", "chord", "sunburst", "sankey"]),
+  nodes: z.array(z.object({ id: z.string() })).min(1, { message: "D3 spec must have at least one node" }),
+  links: z.array(z.object({ source: z.string(), target: z.string() })).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
+  title: z.string().optional(),
+});
+
+const CytoscapeSchema = z.object({
+  elements: z.object({
+    nodes: z.array(z.object({ data: z.object({ id: z.string() }) })).min(1, { message: "Cytoscape must have at least one node" }),
+    edges: z.array(z.object({ data: z.object({ source: z.string(), target: z.string() }) })).optional(),
+  }),
+  layout: z.record(z.string(), z.unknown()).optional(),
+  style: z.array(z.unknown()).optional(),
+});
+
+const VisNetworkSchema = z.object({
+  nodes: z.array(z.object({ id: z.union([z.string(), z.number()]) })).min(1, { message: "vis-network must have at least one node" }),
+  edges: z.array(z.object({ from: z.union([z.string(), z.number()]), to: z.union([z.string(), z.number()]) })).optional(),
+  options: z.record(z.string(), z.unknown()).optional(),
+});
+
+const FabricSchema = z.object({
+  version: z.string(),
+  objects: z.array(z.unknown()),
+  background: z.string().optional(),
+});
+
+const PixiSchema = z.object({
+  config: z.object({
+    width: z.number().optional(),
+    height: z.number().optional(),
+    background: z.string().optional(),
+  }).optional(),
+  stage: z.array(z.object({ type: z.string() })).min(1, { message: "PixiJS spec must have at least one stage object" }),
+});
+
 function validateReactFlowEdgeRefs(parsed: { nodes: { id: string }[]; edges: { id: string; source: string; target: string }[] }): string | null {
   const nodeIds = new Set(parsed.nodes.map((n) => n.id));
   const dangling = parsed.edges.filter((e) => !nodeIds.has(e.source) || !nodeIds.has(e.target));
@@ -327,6 +365,35 @@ export async function validateAndRepairOutput(diagramType: DiagramType, raw: str
     if (!repaired) return { ok: false, reason: `Invalid JSON for ${diagramType}` };
     const v = validateGraphSource(repaired);
     if (!v.ok) return { ok: false, reason: `${diagramType} structure invalid: ${v.reason}` };
+    return { ok: true, source: repaired };
+  }
+
+  if (diagramType === "d3" || diagramType === "cytoscape" || diagramType === "visnetwork" || diagramType === "fabric" || diagramType === "pixi") {
+    const repaired = parsePossiblyBrokenJson(cleaned);
+    if (!repaired) return { ok: false, reason: `Invalid JSON for ${diagramType}` };
+    let parsed: unknown;
+    try { parsed = JSON.parse(repaired); } catch { return { ok: false, reason: `Could not parse ${diagramType} JSON after repair` }; }
+
+    if (diagramType === "d3") {
+      const result = D3Schema.safeParse(parsed);
+      if (!result.success) return { ok: false, reason: `D3 structure invalid: ${result.error.issues[0]?.message}` };
+    }
+    if (diagramType === "cytoscape") {
+      const result = CytoscapeSchema.safeParse(parsed);
+      if (!result.success) return { ok: false, reason: `Cytoscape structure invalid: ${result.error.issues[0]?.message}` };
+    }
+    if (diagramType === "visnetwork") {
+      const result = VisNetworkSchema.safeParse(parsed);
+      if (!result.success) return { ok: false, reason: `vis-network structure invalid: ${result.error.issues[0]?.message}` };
+    }
+    if (diagramType === "fabric") {
+      const result = FabricSchema.safeParse(parsed);
+      if (!result.success) return { ok: false, reason: `Fabric.js structure invalid: ${result.error.issues[0]?.message}` };
+    }
+    if (diagramType === "pixi") {
+      const result = PixiSchema.safeParse(parsed);
+      if (!result.success) return { ok: false, reason: `PixiJS structure invalid: ${result.error.issues[0]?.message}` };
+    }
     return { ok: true, source: repaired };
   }
 

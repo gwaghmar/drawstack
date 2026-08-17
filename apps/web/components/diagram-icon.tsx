@@ -23,6 +23,10 @@ import {
   Hash,
   Trophy,
   Shapes,
+  Share2,
+  Atom,
+  Layers,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import type { DiagramType } from "@flowchart/core";
@@ -52,6 +56,11 @@ export function DiagramTypeIcon({ type, className, size }: { type: DiagramType; 
     bingo: Hash,
     bracket: Trophy,
     freeform: Shapes,
+    d3: GitFork,
+    cytoscape: Share2,
+    visnetwork: Atom,
+    fabric: Layers,
+    pixi: Zap,
   };
   const Icon = iconMap[type] ?? GitFork;
   return <Icon size={size ?? 18} className={className} />;

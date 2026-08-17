@@ -22,7 +22,12 @@ export type DiagramType =
   | "habits"        // Monthly habit streak grid social cards
   | "bingo"         // 5x5 bingo card social cards
   | "bracket"       // Single-elimination tournament bracket social cards
-  | "freeform";     // Free-form whiteboard canvas — flat shape/arrow scene graph
+  | "freeform"      // Free-form whiteboard canvas — flat shape/arrow scene graph
+  | "d3"            // D3.js — force, tree, chord, sunburst data visualizations
+  | "cytoscape"     // Cytoscape.js — network/graph analysis with layout algorithms
+  | "visnetwork"    // vis-network — physics-simulated network graphs
+  | "fabric"        // Fabric.js — layered design canvas (mockups, frames, shapes)
+  | "pixi";         // PixiJS — WebGL high-performance canvas for large/animated diagrams
 
 export type DiagramCategory =
   | "whiteboard"
@@ -56,7 +61,7 @@ export type DiagramTypeMeta = {
   icon: string;
   color: string;
   subtypes?: string[];
-  aiOutputFormat: "mermaid" | "excalidraw-json" | "reactflow-json" | "echarts-json" | "nivo-json" | "bpmn-xml" | "cloud-json" | "erd-json" | "orgchart-json" | "social-json" | "freeform-json";
+  aiOutputFormat: "mermaid" | "excalidraw-json" | "reactflow-json" | "echarts-json" | "nivo-json" | "bpmn-xml" | "cloud-json" | "erd-json" | "orgchart-json" | "social-json" | "freeform-json" | "d3-json" | "cytoscape-json" | "visnetwork-json" | "fabric-json" | "pixi-json";
 };
 
 export const DIAGRAM_TYPE_META: DiagramTypeMeta[] = [
@@ -269,6 +274,56 @@ export const DIAGRAM_TYPE_META: DiagramTypeMeta[] = [
     color: "#14b8a6",
     subtypes: ["sketch", "spatial-map", "sticky-board", "mood-board"],
     aiOutputFormat: "freeform-json",
+  },
+  {
+    id: "d3",
+    label: "D3 Visualization",
+    description: "Force-directed, tree, chord, sunburst — custom data-driven SVG visualizations",
+    category: "data",
+    icon: "git-fork",
+    color: "#f97316",
+    subtypes: ["force", "tree", "chord", "sunburst", "sankey"],
+    aiOutputFormat: "d3-json",
+  },
+  {
+    id: "cytoscape",
+    label: "Network Graph",
+    description: "Graph analysis — biological networks, dependency graphs, social connections",
+    category: "data",
+    icon: "share-2",
+    color: "#06b6d4",
+    subtypes: ["cose", "dagre", "circle", "grid", "breadthfirst"],
+    aiOutputFormat: "cytoscape-json",
+  },
+  {
+    id: "visnetwork",
+    label: "Physics Network",
+    description: "Physics-simulated network graphs — nodes and edges that settle via spring forces",
+    category: "data",
+    icon: "atom",
+    color: "#a855f7",
+    subtypes: ["spring", "hierarchical", "cluster"],
+    aiOutputFormat: "visnetwork-json",
+  },
+  {
+    id: "fabric",
+    label: "Design Canvas",
+    description: "Layered design canvas — mockups, frames, shapes, text, and images",
+    category: "whiteboard",
+    icon: "layers",
+    color: "#ec4899",
+    subtypes: ["mockup", "wireframe", "poster", "slide"],
+    aiOutputFormat: "fabric-json",
+  },
+  {
+    id: "pixi",
+    label: "WebGL Canvas",
+    description: "High-performance WebGL canvas — animated particles, large-scale node renders",
+    category: "data",
+    icon: "zap",
+    color: "#22c55e",
+    subtypes: ["particles", "network", "flow", "custom"],
+    aiOutputFormat: "pixi-json",
   },
 ];
 
@@ -877,6 +932,170 @@ RULES:
 - Every shape needs a unique "id" (short, kebab-case, e.g. "rev_chart", "step1").
 - Connectors between shapes MUST bind via endpoints: {"shapeId": "node1", "anchor": "auto"}.
 - Use exact, rich domain values instead of generic placeholders.`,
+
+  d3: `You output ONLY a valid JSON object matching the D3 visualization spec. No markdown fences, no prose.
+
+SUBTYPE SELECTION — choose the best subtype for the user's intent:
+- "force" → networks, relationships, connected entities with no strict hierarchy
+- "tree" → hierarchies with a clear root (org charts, file trees, taxonomies)
+- "chord" → flows between categories (trade, migration, co-occurrence matrices)
+- "sunburst" → multi-level part-to-whole hierarchies (disk usage, revenue breakdown)
+- "sankey" → flow quantities through a process (energy, budget allocation)
+
+OUTPUT SCHEMA:
+{
+  "subtype": "force" | "tree" | "chord" | "sunburst" | "sankey",
+  "title": "optional chart title",
+  "nodes": [ { "id": "unique-id", "label": "Display Name", "group": 1, "value": 10 } ],
+  "links": [ { "source": "id-a", "target": "id-b", "value": 5, "label": "optional" } ],
+  "config": {
+    "width": 800, "height": 600,
+    "colorScheme": "tableau10" | "blues" | "oranges" | "spectral",
+    "chargeStrength": -300,
+    "linkDistance": 120
+  }
+}
+For "tree": use "nodes" with a "parentId" field (null for root) instead of "links".
+For "chord"/"sunburst": use "nodes" + "links" with numeric values.
+RULES:
+- Every node id must be unique, short, kebab-case.
+- Minimum 5 nodes for meaningful visualization.
+- Use real domain names, not placeholders.
+- "value" drives node size / link thickness — use meaningful relative numbers.`,
+
+  cytoscape: `You output ONLY a valid JSON object in Cytoscape.js elements format. No markdown fences, no prose.
+
+OUTPUT SCHEMA:
+{
+  "elements": {
+    "nodes": [
+      { "data": { "id": "n1", "label": "Node Name", "group": "optional-group", "weight": 1 } }
+    ],
+    "edges": [
+      { "data": { "id": "e1", "source": "n1", "target": "n2", "label": "optional", "weight": 1 } }
+    ]
+  },
+  "layout": {
+    "name": "cose" | "dagre" | "circle" | "grid" | "breadthfirst",
+    "animate": true,
+    "padding": 40
+  },
+  "style": [
+    { "selector": "node", "style": { "background-color": "#06b6d4", "label": "data(label)", "color": "#fff", "font-size": 12 } },
+    { "selector": "edge", "style": { "width": 2, "line-color": "#94a3b8", "target-arrow-color": "#94a3b8", "target-arrow-shape": "triangle", "curve-style": "bezier", "label": "data(label)", "font-size": 10 } },
+    { "selector": "node[group]", "style": { "background-color": "#3b82f6" } }
+  ]
+}
+SUBTYPE SELECTION:
+- "cose" → organic/biological networks, social graphs (spring-electric)
+- "dagre" → directed acyclic graphs, dependency trees, pipelines
+- "circle" → small graphs where circular layout aids symmetry
+- "breadthfirst" → trees from a root, BFS traversal order
+- "grid" → dense, uniform graphs
+RULES:
+- Node ids: short, kebab-case, unique.
+- Minimum 4 nodes.
+- Use real domain entity names, not placeholders.
+- Include meaningful edge labels for relationship context.`,
+
+  visnetwork: `You output ONLY a valid JSON object for vis-network. No markdown fences, no prose.
+
+OUTPUT SCHEMA:
+{
+  "nodes": [
+    { "id": 1, "label": "Node Name", "group": "optional", "value": 10, "title": "Tooltip text", "color": { "background": "#06b6d4", "border": "#0891b2" } }
+  ],
+  "edges": [
+    { "from": 1, "to": 2, "label": "optional", "arrows": "to", "width": 2, "color": { "color": "#94a3b8" } }
+  ],
+  "options": {
+    "physics": {
+      "enabled": true,
+      "solver": "forceAtlas2Based" | "barnesHut" | "repulsion",
+      "stabilization": { "iterations": 200 }
+    },
+    "layout": {
+      "improvedLayout": true,
+      "hierarchical": { "enabled": false, "direction": "UD", "sortMethod": "directed" }
+    },
+    "nodes": { "shape": "dot" | "box" | "ellipse" | "database", "font": { "size": 14 } },
+    "edges": { "smooth": { "type": "cubicBezier" } }
+  }
+}
+SUBTYPE SELECTION:
+- "spring" → general networks with physics (forceAtlas2Based)
+- "hierarchical" → set layout.hierarchical.enabled=true, direction "UD" or "LR"
+- "cluster" → dense networks, use barnesHut solver
+RULES:
+- Node ids: numeric integers (1, 2, 3...).
+- Minimum 5 nodes.
+- "value" controls node size — use relative meaningful numbers.
+- Use real domain names and relationships, not placeholders.`,
+
+  fabric: `You output ONLY a valid Fabric.js canvas JSON object. No markdown fences, no prose.
+
+OUTPUT SCHEMA:
+{
+  "version": "6.0.0",
+  "background": "#ffffff" | "#1e293b",
+  "objects": [
+    // Rect:
+    { "type": "Rect", "left": 100, "top": 80, "width": 200, "height": 80, "fill": "#e0f2fe", "stroke": "#0891b2", "strokeWidth": 2, "rx": 8, "ry": 8 },
+    // Text:
+    { "type": "IText", "left": 120, "top": 100, "text": "Label", "fontSize": 16, "fontFamily": "Inter, sans-serif", "fill": "#0f172a" },
+    // Circle:
+    { "type": "Circle", "left": 350, "top": 120, "radius": 40, "fill": "#fef3c7", "stroke": "#f59e0b", "strokeWidth": 2 },
+    // Line:
+    { "type": "Line", "x1": 200, "y1": 120, "x2": 350, "y2": 140, "stroke": "#64748b", "strokeWidth": 2 },
+    // Group:
+    { "type": "Group", "left": 50, "top": 200, "objects": [ ... ] }
+  ]
+}
+SUBTYPE SELECTION:
+- "mockup" → UI mockup with buttons, inputs, navbars, content blocks
+- "wireframe" → low-fidelity wireframe with gray fills and outlines only
+- "poster" → decorative composition with bold typography and shapes
+- "slide" → presentation slide layout (16:9 proportion)
+RULES:
+- All coordinates in pixels. Canvas is 800×600 by default.
+- Use readable, real-domain text labels — no "Lorem ipsum".
+- Group related elements where appropriate.
+- For wireframes: use "#e2e8f0" fills and "#94a3b8" strokes only.`,
+
+  pixi: `You output ONLY a valid JSON object for the PixiJS renderer spec. No markdown fences, no prose.
+
+OUTPUT SCHEMA:
+{
+  "config": {
+    "width": 800,
+    "height": 600,
+    "background": "#0f172a",
+    "antialias": true
+  },
+  "stage": [
+    // Circle node:
+    { "type": "circle", "id": "n1", "x": 200, "y": 300, "radius": 20, "fill": "#38bdf8", "alpha": 1, "label": "API" },
+    // Rectangle:
+    { "type": "rect", "id": "r1", "x": 100, "y": 100, "width": 120, "height": 60, "fill": "#818cf8", "cornerRadius": 8, "label": "Service" },
+    // Line/Edge:
+    { "type": "line", "from": "n1", "to": "n2", "color": "#475569", "width": 2 },
+    // Text:
+    { "type": "text", "x": 200, "y": 280, "content": "Label", "fontSize": 12, "fill": "#f1f5f9" },
+    // Animated particle:
+    { "type": "particle", "count": 80, "area": [0,0,800,600], "color": "#38bdf8", "speed": 0.5, "radius": 2, "alpha": 0.6 }
+  ]
+}
+SUBTYPE SELECTION:
+- "particles" → animated particle fields, data flows, background effects
+- "network" → nodes + lines, no physics, static positions
+- "flow" → directional flow with moving particles along edges
+- "custom" → freeform composition of shapes and text
+RULES:
+- Node ids: short, unique strings.
+- Lines reference nodes by their "id" fields.
+- Use dark backgrounds (#0f172a, #1e293b) by default — PixiJS renders best on dark.
+- Positions are in pixels within config.width × config.height.
+- Use real domain labels, not placeholders.`,
 };
 
 // ─── Anti-generic directive ──────────────────────────────────────────────────
@@ -900,6 +1119,7 @@ Avoid generic AI output — this is the most common failure mode, and it costs n
 
 export const GRAPH_STRUCTURED_TYPES: DiagramType[] = [
   "mermaid", "reactflow", "bpmn", "cloud", "erd", "orgchart",
+  "d3", "cytoscape", "visnetwork",
 ];
 
 export function buildComplexityDirective(
@@ -1564,6 +1784,104 @@ export const DIAGRAM_TYPE_DEFAULTS: Record<DiagramType, string> = {
       { id: "box2", type: "rectangle", name: "concept-b", x: 320, y: 120, width: 180, height: 90, fill: "4", frameId: "frame1", text: { content: "Concept B" } },
       { id: "arrow1", type: "arrow", start: { shapeId: "box1", anchor: "auto" }, end: { shapeId: "box2", anchor: "auto" }, label: "leads to" },
       { id: "note1", type: "sticky", name: "reminder", x: 80, y: 340, width: 200, height: 140, fill: "3", text: { content: "Add more notes here" } },
+    ],
+  }),
+
+  d3: JSON.stringify({
+    subtype: "force",
+    title: "Technology Ecosystem",
+    nodes: [
+      { id: "react", label: "React", group: 1, value: 30 },
+      { id: "next", label: "Next.js", group: 1, value: 20 },
+      { id: "ts", label: "TypeScript", group: 2, value: 25 },
+      { id: "node", label: "Node.js", group: 2, value: 22 },
+      { id: "postgres", label: "PostgreSQL", group: 3, value: 18 },
+      { id: "redis", label: "Redis", group: 3, value: 12 },
+      { id: "stripe", label: "Stripe", group: 4, value: 10 },
+    ],
+    links: [
+      { source: "react", target: "next", value: 8 },
+      { source: "next", target: "ts", value: 6 },
+      { source: "next", target: "node", value: 7 },
+      { source: "node", target: "postgres", value: 5 },
+      { source: "node", target: "redis", value: 4 },
+      { source: "node", target: "stripe", value: 3 },
+      { source: "ts", target: "react", value: 5 },
+    ],
+    config: { width: 800, height: 600, colorScheme: "tableau10", chargeStrength: -300, linkDistance: 120 },
+  }),
+
+  cytoscape: JSON.stringify({
+    elements: {
+      nodes: [
+        { data: { id: "frontend", label: "Frontend", group: "layer", weight: 3 } },
+        { data: { id: "api", label: "API Gateway", group: "layer", weight: 2 } },
+        { data: { id: "auth", label: "Auth Service", group: "service", weight: 1 } },
+        { data: { id: "db", label: "Database", group: "storage", weight: 2 } },
+        { data: { id: "cache", label: "Redis Cache", group: "storage", weight: 1 } },
+      ],
+      edges: [
+        { data: { id: "e1", source: "frontend", target: "api", label: "HTTP" } },
+        { data: { id: "e2", source: "api", target: "auth", label: "validates" } },
+        { data: { id: "e3", source: "api", target: "db", label: "reads/writes" } },
+        { data: { id: "e4", source: "api", target: "cache", label: "caches" } },
+      ],
+    },
+    layout: { name: "dagre", animate: true, padding: 40 },
+    style: [
+      { selector: "node", style: { "background-color": "#06b6d4", label: "data(label)", color: "#fff", "font-size": 13, "text-valign": "center", "text-halign": "center", width: 120, height: 44, shape: "roundrectangle" } },
+      { selector: "edge", style: { width: 2, "line-color": "#94a3b8", "target-arrow-color": "#94a3b8", "target-arrow-shape": "triangle", "curve-style": "bezier", label: "data(label)", "font-size": 10, "text-background-color": "#fff", "text-background-opacity": 1, "text-background-padding": 3 } },
+    ],
+  }),
+
+  visnetwork: JSON.stringify({
+    nodes: [
+      { id: 1, label: "User", group: "client", value: 20, title: "End user browser", color: { background: "#38bdf8", border: "#0891b2" } },
+      { id: 2, label: "Load Balancer", group: "infra", value: 15, title: "NGINX reverse proxy" },
+      { id: 3, label: "API Server", group: "app", value: 25, title: "Node.js Express" },
+      { id: 4, label: "Auth Service", group: "app", value: 18, title: "JWT / OAuth" },
+      { id: 5, label: "Database", group: "data", value: 30, title: "PostgreSQL primary" },
+    ],
+    edges: [
+      { from: 1, to: 2, label: "HTTPS", arrows: "to", width: 2 },
+      { from: 2, to: 3, label: "proxy", arrows: "to", width: 2 },
+      { from: 3, to: 4, label: "validates", arrows: "to", width: 1 },
+      { from: 3, to: 5, label: "SQL", arrows: "to", width: 3 },
+    ],
+    options: {
+      physics: { enabled: true, solver: "forceAtlas2Based", stabilization: { iterations: 200 } },
+      layout: { improvedLayout: true, hierarchical: { enabled: false } },
+      nodes: { shape: "dot", font: { size: 14, color: "#1e293b" } },
+      edges: { smooth: { type: "cubicBezier" } },
+    },
+  }),
+
+  fabric: JSON.stringify({
+    version: "6.0.0",
+    background: "#f8fafc",
+    objects: [
+      { type: "Rect", left: 40, top: 40, width: 720, height: 520, fill: "#ffffff", stroke: "#e2e8f0", strokeWidth: 1, rx: 12, ry: 12 },
+      { type: "Rect", left: 40, top: 40, width: 720, height: 56, fill: "#1e293b", rx: 12, ry: 12 },
+      { type: "IText", left: 60, top: 58, text: "Dashboard Mockup", fontSize: 18, fontWeight: "bold", fontFamily: "Inter, sans-serif", fill: "#f1f5f9" },
+      { type: "Rect", left: 60, top: 120, width: 200, height: 140, fill: "#eff6ff", stroke: "#bfdbfe", strokeWidth: 1.5, rx: 8, ry: 8 },
+      { type: "IText", left: 80, top: 145, text: "Total Revenue", fontSize: 13, fontFamily: "Inter, sans-serif", fill: "#64748b" },
+      { type: "IText", left: 80, top: 175, text: "$128,400", fontSize: 28, fontWeight: "bold", fontFamily: "Inter, sans-serif", fill: "#1e293b" },
+      { type: "Rect", left: 280, top: 120, width: 200, height: 140, fill: "#f0fdf4", stroke: "#bbf7d0", strokeWidth: 1.5, rx: 8, ry: 8 },
+      { type: "IText", left: 300, top: 145, text: "Active Users", fontSize: 13, fontFamily: "Inter, sans-serif", fill: "#64748b" },
+      { type: "IText", left: 300, top: 175, text: "3,847", fontSize: 28, fontWeight: "bold", fontFamily: "Inter, sans-serif", fill: "#1e293b" },
+    ],
+  }),
+
+  pixi: JSON.stringify({
+    config: { width: 800, height: 600, background: "#0f172a", antialias: true },
+    stage: [
+      { type: "particle", count: 60, area: [0, 0, 800, 600], color: "#38bdf8", speed: 0.3, radius: 1.5, alpha: 0.4 },
+      { type: "circle", id: "frontend", x: 200, y: 200, radius: 32, fill: "#38bdf8", alpha: 1, label: "Frontend" },
+      { type: "circle", id: "api", x: 400, y: 300, radius: 40, fill: "#818cf8", alpha: 1, label: "API" },
+      { type: "circle", id: "database", x: 600, y: 200, radius: 32, fill: "#34d399", alpha: 1, label: "Database" },
+      { type: "line", from: "frontend", to: "api", color: "#475569", width: 2 },
+      { type: "line", from: "api", to: "database", color: "#475569", width: 2 },
+      { type: "text", x: 400, y: 100, content: "System Architecture", fontSize: 20, fill: "#f1f5f9" },
     ],
   }),
 };
