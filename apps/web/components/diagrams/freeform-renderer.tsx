@@ -352,6 +352,8 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "venn_timeline",
   "dot_matrix",
   "feed_table",
+  "pictogram",
+  "pictogram_row",
 ]);
 
 type MacroShapeNodeProps = {
@@ -1122,10 +1124,12 @@ function renderShape(
 
   const nodes: React.ReactNode[] = [shapeNode];
 
-  // Overlay text label inside shape. Card and table lay out their own copy
-  // (title, subtitle, body, rows) at fixed offsets — adding the centered
-  // overlay on top of that printed two blocks of text over each other.
-  const laysOutOwnText = shape.type === "card" || shape.type === "table";
+  // Overlay text label inside shape. Card, table and frame lay out their own
+  // copy (title, subtitle, body, rows, frame name) at fixed offsets — adding the
+  // centered overlay on top of that printed two blocks of text over each other.
+  // For a frame it was worse than duplication: the overlay centers on the whole
+  // container, dropping its label across whatever the frame encloses.
+  const laysOutOwnText = shape.type === "card" || shape.type === "table" || shape.type === "frame";
   if (!isEditingThis && shape.type !== "text" && !laysOutOwnText && shape.text?.content) {
     const labelBounds = getShapeBounds(doc, shape);
     nodes.push(
@@ -2316,7 +2320,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
 
       {/* ─── Top Main Toolbar ────────────────────────────────────────────── */}
       {!readOnly && (
-        <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1.5 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 max-w-[calc(100%-24px)]">
+        <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 flex-wrap items-center justify-center gap-0.5 rounded-2xl border border-white/50 bg-white/50 p-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-slate-900/50 max-w-[calc(100%-24px)]">
           {toolbarButton(<MousePointer2 className="h-4 w-4" />, mode === "select", () => setModeSynced("select"), "Select (V)")}
           {toolbarButton(<Pencil className="h-4 w-4" />, mode === "draw", () => setModeSynced("draw"), "Pen (P)")}
           {toolbarButton(<MoveUpRight className="h-4 w-4" />, mode === "arrow", () => setModeSynced("arrow"), "Arrow (A)")}
@@ -2393,7 +2397,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
       )}
 
       {/* ─── Zoom Controls ───────────────────────────────────────────────── */}
-      <div className="absolute bottom-3 left-3 z-20 flex items-center gap-0.5 rounded-xl border border-slate-200 bg-white/95 p-1 shadow-lg shadow-slate-900/5 backdrop-blur dark:border-slate-800 dark:bg-slate-900/95">
+      <div className="absolute bottom-4 left-4 z-20 flex items-center gap-0.5 rounded-2xl border border-white/50 bg-white/50 p-1 shadow-xl shadow-slate-900/10 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-slate-900/50">
         <button
           type="button"
           onClick={() => zoomBy(1 / ZOOM_STEP)}
