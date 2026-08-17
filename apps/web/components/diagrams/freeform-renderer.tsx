@@ -29,6 +29,7 @@ import {
 } from "@/lib/diagrams/freeform-canvas";
 
 import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
+import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
 
 type Props = {
   source: string;
@@ -1669,6 +1670,12 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     URL.revokeObjectURL(url);
   };
 
+  const handleAutoLayout = (dir: "LR" | "TB" = "LR") => {
+    const laidOut = autoLayoutFreeformDocument(doc, { direction: dir });
+    setDoc(laidOut);
+    commitChanges(laidOut);
+  };
+
   const marqueeRect = marquee
     ? {
         x: Math.min(marquee.x0, marquee.x1),
@@ -1750,6 +1757,15 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           {toolbarButton("Frame", mode === "place" && placeKind === "frame", () => enterPlaceMode("frame"))}
 
           <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+          <button
+            type="button"
+            onClick={() => handleAutoLayout("LR")}
+            className="rounded px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 border border-slate-300 dark:border-slate-700 dark:text-slate-300"
+            title="Auto-organize diagram hierarchy in 2ms"
+          >
+            ✨ Tidy Up
+          </button>
 
           <button
             type="button"
