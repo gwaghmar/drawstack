@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="40 40 720 920" width="100%" height="auto" preserveAspectRatio="xMidYMid meet" style="background:#f8fafc;border-radius:14px;box-shadow:inset 0 0 0 1px #e2e8f0;max-width:100%;display:block;">
+  
+  <defs>
+    <filter id="soft-card-shadow" x="-10%" y="-10%" width="125%" height="125%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.06" />
+      <feDropShadow dx="0" dy="1" stdDeviation="3" flood-color="#000000" flood-opacity="0.03" />
+    </filter>
+    <filter id="pill-shadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.05" />
+    </filter>
+    <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#4A85F6" stop-opacity="0.25"/>
+      <stop offset="100%" stop-color="#4A85F6" stop-opacity="0.0"/>
+    </linearGradient>
+    <linearGradient id="sparkline-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#10b981" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#10b981" stop-opacity="0.0"/>
+    </linearGradient>
+    <pattern id="estimate-stripes" width="8" height="8" patternTransform="rotate(45 0 0)" patternUnits="userSpaceOnUse">
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#d97706" stroke-width="2.5" />
+    </pattern>
+    <marker id="arrowhead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#475569" />
+    </marker>
+    <marker id="arrowhead-start" viewBox="0 0 10 10" refX="1.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
+      <path d="M 8.5 1.5 L 0 5 L 8.5 8.5 z" fill="#475569" />
+    </marker>
+  </defs>
+  <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+    <circle cx="2" cy="2" r="1" fill="#cbd5e1" />
+  </pattern>
+  <rect x="40" y="40" width="720" height="920" fill="url(#dot-grid)" opacity="0.65" />
+  <g >
+          <rect x="100" y="100" width="600" height="800" rx="0" fill="#ffffff" stroke="#e2e8f0" stroke-width="0" />
+          <text x="400" y="130" text-anchor="middle" font-family="Inter, sans-serif" font-size="22" font-weight="900" fill="#0f172a">GASTRONOMY PROCESS</text>
+          
+          <rect x="120" y="160" width="560" height="350" rx="12" fill="none" stroke="#eab308" stroke-dasharray="6,6" stroke-width="2" />
+          <text x="140" y="190" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="#eab308">MENTAL &amp; EMOTIONAL</text>
+        
+          <rect x="120" y="520" width="560" height="350" rx="12" fill="none" stroke="#3b82f6" stroke-dasharray="6,6" stroke-width="2" />
+          <text x="140" y="550" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="#3b82f6">PHYSICAL PROCESS</text>
+        
+          <circle cx="201.33333333333331" cy="216" r="3" fill="#0f172a"/><rect x="197.33333333333331" y="220" width="8" height="12" rx="2" fill="#0f172a"/><circle cx="213.33333333333331" cy="216" r="3" fill="#0f172a"/><rect x="209.33333333333331" y="220" width="8" height="12" rx="2" fill="#0f172a"/><circle cx="225.33333333333331" cy="216" r="3" fill="#0f172a"/><rect x="221.33333333333331" y="220" width="8" height="12" rx="2" fill="#0f172a"/>
+          <text x="213.33333333333331" y="244" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#475569">Actors</text>
+        
+          <circle cx="213.33333333333331" cy="580" r="16" fill="#ffffff" stroke="#0f172a" stroke-width="2" />
+          <text x="213.33333333333331" y="604" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#475569">Elaboration</text>
+        
+          <circle cx="399.99999999999994" cy="580" r="16" fill="#ffffff" stroke="#0f172a" stroke-width="2" />
+          <text x="399.99999999999994" y="604" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="#475569">Delivery</text>
+        
+          <path d="M 213.33333333333331 236 L 213.33333333333331 400 L 213.33333333333331 400 L 213.33333333333331 564" fill="none" stroke="#3b82f6" stroke-width="1.5"  />
+          <circle cx="213.33333333333331" cy="564" r="3" fill="#3b82f6" />
+        
+          <path d="M 213.33333333333331 596 L 213.33333333333331 580 L 399.99999999999994 580 L 399.99999999999994 564" fill="none" stroke="#eab308" stroke-width="1.5" stroke-dasharray='4,4' />
+          <circle cx="399.99999999999994" cy="564" r="3" fill="#eab308" />
+        
+        </g>
+</svg>

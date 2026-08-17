@@ -1403,6 +1403,21 @@ export function EditorClient({
     }
   }, [source, showToast]);
 
+  const handleCopyReactCode = useCallback(async () => {
+    try {
+      if (diagramType !== "freeform") return;
+      const { parseFreeformSource } = await import("@/lib/diagrams/freeform-canvas");
+      const { exportFreeformToReact } = await import("@/lib/diagrams/freeform-to-react");
+      const parsed = parseFreeformSource(source);
+      const reactCode = exportFreeformToReact(parsed.doc);
+      await navigator.clipboard.writeText(reactCode);
+      showToast("React code copied to clipboard");
+    } catch (e) {
+      console.error(e);
+      showToast("Failed to compile React code");
+    }
+  }, [diagramType, source, showToast]);
+
   /**
    * Capture a 1200x630 PNG of the current diagram for OG previews. Best-effort:
    * returns undefined on any failure so the OG route falls back to the
@@ -2605,6 +2620,11 @@ export function EditorClient({
                     <button type="button" onClick={() => void handleCopySource()} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">Copy source</button>
                     <button type="button" onClick={() => downloadSource(source, diagramType, title || "diagram")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">{`Download .${sourceFileExtension(diagramType)}`}</button>
                   </div>
+                  {diagramType === "freeform" && (
+                    <div className="mb-1.5 flex items-center gap-1.5">
+                      <button type="button" onClick={() => void handleCopyReactCode()} className="flex-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50">Copy React Prototype</button>
+                    </div>
+                  )}
                   <div className="flex items-center gap-1.5">
                     <button type="button" onClick={() => void handleExport("png")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">PNG</button>
                     <button type="button" onClick={() => void handleExport("svg")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">SVG</button>
@@ -2827,7 +2847,7 @@ export function EditorClient({
               <NivoRenderer source={source} />
             </div>
           )}
-          {diagramType === "freeform" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}><FreeformRenderer source={source} onChange={setSource} /></div>}
+          {diagramType === "freeform" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}><FreeformRenderer source={source} onChange={setSource} roomId={currentProjectId ?? undefined} /></div>}
           {diagramType === "bpmn" && (
             <div className="flex h-full min-h-0 w-full max-w-full flex-col self-stretch">
               <div

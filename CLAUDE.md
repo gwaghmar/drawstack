@@ -19,7 +19,7 @@ pnpm --filter @flowchart/web exec tsc --noEmit
 pnpm --filter @flowchart/web build
 
 # Unit tests (node --test, no framework)
-pnpm test:unit                            # all 13 suites
+pnpm test:unit                            # all 46 suites
 
 # Run a single test file
 node --experimental-strip-types apps/web/lib/diagrams/social-cards.test.ts
@@ -100,13 +100,18 @@ no translation layer between what the AI writes and what the human sees.
 Milestones A–K are complete, tested, and verified:
 - `apps/web/lib/diagrams/freeform-canvas.ts` — scene-graph schema (`CanvasDocument`/
   `CanvasShape`) + pure functions (parse/serialize/resolveArrowEndpoint/validateRefs).
+  Schema includes `onClickNavigateToFrameId` (prototype wiring) and `presentationMode` (interactive play mode).
 - `apps/web/lib/diagrams/freeform-ops.ts` — surgical patch ops engine (`applyCanvasOps`).
 - `apps/web/lib/diagrams/freeform-serialization.ts` — compact model view serialization.
+- `apps/web/lib/diagrams/freeform-to-react.ts` — compiler that transpiles the freeform scene graph to React + Tailwind code (`exportFreeformToReact`).
+- `apps/web/lib/diagrams/yjs-store.ts` — Yjs CRDT wrapper (`YjsCanvasStore`) using `y-webrtc` for P2P real-time multiplayer collaboration. Bound to the active `projectId` as the room ID.
 - `apps/web/components/diagrams/freeform-renderer.tsx` — Konva-based renderer with select,
   drag, snap, resize/rotate (`Konva.Transformer`), text-editing, arrow binding, frames,
-  sticky notes, zoom/pan.
+  sticky notes, zoom/pan. Also includes Interactive Prototype Mode (▶ Present toggle — shapes
+  with `onClickNavigateToFrameId` animate the viewport to the target frame on click).
 - `apps/web/app/api/ai/agent/route.ts` & `editor-client.tsx` — `apply_ops` tool integration.
   Pure-lib milestones (A–C) don't need it — they run on unit tests in this repo.
+- Export menu includes "Copy React Prototype" for freeform diagrams (generates React/Tailwind component from canvas).
 
 ## Status — what's shipped
 
@@ -315,6 +320,11 @@ aliases resolve to the same deployment).
 - Brand name consistency ("FlowStudio" everywhere)
 - IP rate limiting + secure cookie flag on demo endpoint
 - `mockDb` chain fix
+
+### Engine Expansions — Figma-class capabilities ✅
+- **Interactive Prototypes** — shapes can be wired to frames via `onClickNavigateToFrameId`; clicking them in ▶ Present Mode animates the Konva viewport to that frame (auto-scales to fit). A "Link: [Frame]" select dropdown appears in the shape format toolbar for wiring directly in the UI.
+- **React + Tailwind Code Export** — `freeform-to-react.ts` transpiles the JSON scene graph to a standalone React component with Tailwind utility classes; accessible via "Copy React Prototype" in the Export menu.
+- **Multiplayer / CRDT Collaboration** — `yjs-store.ts` wraps Yjs + `y-webrtc` (P2P, no server needed). `FreeformRenderer` accepts an optional `roomId` prop; `editor-client.tsx` passes `currentProjectId` so each project becomes a shared room automatically.
 
 If the user says "keep going" without specifying, propose new work from the roadmap.
 

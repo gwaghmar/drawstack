@@ -1,6 +1,7 @@
 export type CanvasDocument = {
   version: 1;
   renderMode?: "clean" | "sketchy";
+  presentationMode?: boolean;
   shapes: CanvasShape[];
 };
 
@@ -19,6 +20,7 @@ export type BaseShape = {
   frameId?: string | null;
   parentId?: string | null;
   locked?: boolean;
+  onClickNavigateToFrameId?: string;
   text?: {
     content: string;
     fontSize?: number;
@@ -186,6 +188,60 @@ export type MockupShape = BaseShape & {
   cornerRadius?: number;
 };
 
+export type VennTimelineShape = BaseShape & {
+  type: "venn_timeline";
+  width: number;
+  height: number;
+  title?: string;
+  nodes: {
+    number?: string;
+    primaryText: string;
+    subText?: string;
+    vennLabels?: string[];
+    branches?: { text: string; side?: "left" | "right" }[];
+    color?: "dark" | "light" | "accent";
+  }[];
+};
+
+export type TechHudPanelShape = BaseShape & {
+  type: "tech_hud_panel";
+  width: number;
+  height: number;
+  title: string;
+  gridItems: {
+    label: string;
+    value?: string;
+    barcode?: boolean;
+    crosshair?: boolean;
+    colSpan?: number;
+    rowSpan?: number;
+  }[];
+};
+
+export type LayeredProcessMapShape = BaseShape & {
+  type: "layered_process_map";
+  width: number;
+  height: number;
+  title: string;
+  zones: {
+    id: string;
+    label: string;
+    color?: string;
+  }[];
+  nodes: {
+    id: string;
+    zoneId: string;
+    label: string;
+    icon?: "people" | "gear" | "document" | "circle";
+  }[];
+  connections: {
+    from: string;
+    to: string;
+    color?: string;
+    style?: "solid" | "dotted";
+  }[];
+};
+
 export type PathShape = BaseShape & {
   type: "path";
   points: [number, number][];
@@ -228,6 +284,9 @@ export type CanvasShape =
   | SCurveTimelineShape
   | IsometricBlockShape
   | MockupShape
+  | VennTimelineShape
+  | TechHudPanelShape
+  | LayeredProcessMapShape
   | PathShape
   | ArrowShape;
 
@@ -507,6 +566,13 @@ export function validateFreeformRefs(doc: CanvasDocument): string[] {
         } else if (endTarget.type === "arrow" || endTarget.type === "line") {
           errors.push(`Arrow ${shape.id} endpoint may not bind to arrow/line "${endRef.shapeId}"`);
         }
+      }
+    }
+
+    if (shape.onClickNavigateToFrameId) {
+      const frameExists = doc.shapes.some((s) => s.id === shape.onClickNavigateToFrameId && s.type === "frame");
+      if (!frameExists) {
+        errors.push(`Shape ${shape.id} has onClickNavigateToFrameId "${shape.onClickNavigateToFrameId}" which is not a frame`);
       }
     }
   }

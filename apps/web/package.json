@@ -69,6 +69,8 @@
     "simple-icons": "^16.25.0",
     "stripe": "^22.2.0",
     "svg-to-pdfkit": "^0.1.8",
+    "y-webrtc": "^10.3.0",
+    "yjs": "^13.6.32",
     "zod": "^4.4.3"
   },
   "devDependencies": {

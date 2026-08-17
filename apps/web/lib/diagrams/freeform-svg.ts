@@ -15,6 +15,9 @@ import {
   type SCurveTimelineShape,
   type IsometricBlockShape,
   type MockupShape,
+  type VennTimelineShape,
+  type TechHudPanelShape,
+  type LayeredProcessMapShape,
   resolveArrowRenderEndpoints,
   getShapeBounds,
   resolveColor,
@@ -46,7 +49,7 @@ function escapeXml(str: string): string {
 }
 
 // ─── Real Multi-Color Cloud & Tech Brand Icons ──────────────────────────────
-export function getSvgIcon(iconName: string, size = 16, color = "#2563eb"): string {
+export function getSvgIcon(iconName: string, size = 16, color = "#4A85F6"): string {
   const norm = iconName.toLowerCase().replace(/[^a-z0-9-]/g, "");
   switch (norm) {
     case "aws":
@@ -306,8 +309,8 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="${isDark ? "0.3" : "0.05"}" />
     </filter>
     <linearGradient id="chart-area-grad" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0%" stop-color="#2563eb" stop-opacity="${isDark ? "0.45" : "0.25"}"/>
-      <stop offset="100%" stop-color="#2563eb" stop-opacity="0.0"/>
+      <stop offset="0%" stop-color="#4A85F6" stop-opacity="${isDark ? "0.45" : "0.25"}"/>
+      <stop offset="100%" stop-color="#4A85F6" stop-opacity="0.0"/>
     </linearGradient>
     <linearGradient id="sparkline-grad" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#10b981" stop-opacity="${isDark ? "0.35" : "0.2"}"/>
@@ -534,7 +537,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         `<g ${shadowFilter} ${opacity}>
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${m.cornerRadius ?? 10}" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <g transform="translate(${x + 14}, ${y + 14}) scale(0.66)">
-            ${getSvgIcon(iconName, 16, isDark ? "#60a5fa" : "#2563eb")}
+            ${getSvgIcon(iconName, 16, isDark ? "#60a5fa" : "#4A85F6")}
           </g>
           <text x="${x + 36}" y="${y + 24}" font-family="Inter, -apple-system, sans-serif" font-size="11" font-weight="700" fill="${textColorMuted}">${escapeXml(m.label.toUpperCase())}</text>
           <text x="${x + 14}" y="${y + 62}" font-family="Inter, -apple-system, sans-serif" font-size="24" font-weight="800" fill="${textColorPrimary}">${escapeXml(m.value)}</text>
@@ -547,6 +550,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
           <line x1="${sparkX0}" y1="${sparkY0 + sparkH}" x2="${sparkX0 + sparkW}" y2="${sparkY0 + sparkH}" stroke="${gridLineColor}" stroke-width="1" />
           <path d="${sparkArea}" fill="url(#sparkline-grad)" />
           <path d="${sparkPath}" fill="none" stroke="${deltaColor}" stroke-width="2" stroke-linecap="round" />
+          <circle cx="${coords[coords.length - 1].x}" cy="${coords[coords.length - 1].y}" r="3" fill="${cardBg}" stroke="${deltaColor}" stroke-width="1.5" />
         </g>`
       );
       continue;
@@ -595,7 +599,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         const seriesArray = Array.from(seriesNames);
         const legendSvg = seriesArray.map((name, idx) => {
           const lx = x + w - padRight - (seriesArray.length - idx) * 85;
-          const sColor = seriesColors[name] ?? (idx === 0 ? "#2563eb" : "#94a3b8");
+          const sColor = seriesColors[name] ?? (idx === 0 ? "#4A85F6" : "#94a3b8");
           return `
             <g transform="translate(${lx}, ${y + 22})">
               <rect x="0" y="0" width="8" height="8" rx="2" fill="${sColor}" />
@@ -616,7 +620,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             const barH = (s.value / niceCeil) * innerH;
             const bx = groupX + groupOffset + sIdx * (barW + 4);
             const by = y + padTop + innerH - barH;
-            const barColor = s.color ?? (sIdx === 0 ? "#2563eb" : "#94a3b8");
+            const barColor = s.color ?? (sIdx === 0 ? "#4A85F6" : "#94a3b8");
             const fillStyle = s.isEstimate ? `fill="url(#estimate-stripes)" stroke="#d97706" stroke-dasharray="4,3"` : `fill="${barColor}"`;
 
             return `
@@ -633,47 +637,61 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
             </g>`;
         }).join("");
 
-        chartBody = `${gridLinesSvg}${legendSvg}${barsSvg}`;
+        // X and Y Axes
+        const axesSvg = `
+          <g>
+            <line x1="${x + padLeft}" y1="${y + padTop}" x2="${x + padLeft}" y2="${y + padTop + innerH}" stroke="${gridLineColor}" stroke-width="1.5" />
+            <line x1="${x + padLeft}" y1="${y + padTop + innerH}" x2="${x + w - padRight}" y2="${y + padTop + innerH}" stroke="${isDark ? "#475569" : "#94a3b8"}" stroke-width="1.5" />
+          </g>
+        `;
+
+        chartBody = `${gridLinesSvg}${axesSvg}${legendSvg}${barsSvg}`;
       }
 
-      // B. Donut Mix Chart (2.5px Slice Gap & Centered Legend)
+      // B. Donut Mix Chart (Centered Pie, Left Legend)
       else if (chartType === "donut" && c.donutData) {
-        const cx = x + 110;
-        const cy = y + padTop + innerH / 2;
-        const radius = Math.min(innerH * 0.46, 68);
-        const strokeW = 28;
+        // Move donut to center-right
+        const cx = x + (innerW / 2) + 60;
+        const cy = y + padTop + innerH / 2 - 10;
+        const radius = Math.min(innerH * 0.46, 75);
+        const strokeW = 32;
         const circumference = 2 * Math.PI * radius;
 
         let accumulatedPercent = 0;
         const donutArcs = c.donutData.map((slice) => {
-          const strokeDash = (slice.percent / 100) * circumference - 2;
+          const strokeDash = (slice.percent / 100) * circumference - 2.5;
           const strokeOffset = -(accumulatedPercent / 100) * circumference;
           accumulatedPercent += slice.percent;
 
           return `<circle cx="${cx}" cy="${cy}" r="${radius}" fill="none" stroke="${slice.color}" stroke-width="${strokeW}" stroke-dasharray="${Math.max(0, strokeDash)} ${circumference}" stroke-dashoffset="${strokeOffset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt" />`;
         }).join("");
 
-        // Auto-center legend rows relative to donut height
-        const totalLegendH = c.donutData.length * 28;
-        const startLegendY = cy - totalLegendH / 2 + 6;
-
+        // Move legend to the left
+        const startLegendY = y + padTop;
         const legendItems = c.donutData.map((slice, idx) => {
-          const ly = startLegendY + idx * 28;
-          const lx = x + 230;
+          const ly = startLegendY + idx * 34;
+          const lx = x + padLeft;
           return `
             <g transform="translate(${lx}, ${ly})">
-              <rect x="0" y="0" width="10" height="10" rx="2" fill="${slice.color}" />
-              <text x="16" y="9" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorPrimary}">${escapeXml(slice.label)}</text>
-              <rect x="110" y="-1" width="70" height="18" rx="4" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
-              <text x="145" y="11.5" text-anchor="middle" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="700" fill="${textColorMuted}">${escapeXml(slice.value)} · ${slice.percent}%</text>
+              <rect x="0" y="0" width="12" height="12" rx="3" fill="${slice.color}" />
+              <text x="22" y="10" font-family="Inter, sans-serif" font-size="12" font-weight="600" fill="${textColorPrimary}">${escapeXml(slice.label)}</text>
+              <text x="22" y="26" font-family="'JetBrains Mono', monospace" font-size="10" font-weight="600" fill="${textColorMuted}">${escapeXml(slice.value)} · ${slice.percent}%</text>
             </g>`;
         }).join("");
 
+        // Commentary Box
+        const commentary = c.centerLabel?.secondary ? `
+          <g transform="translate(${x + padLeft}, ${y + h - 50})">
+            <rect x="0" y="0" width="${innerW}" height="32" rx="4" fill="${isDark ? "#1e293b" : "#f1f5f9"}" />
+            <text x="12" y="20" font-family="Inter, sans-serif" font-size="10.5" font-weight="500" fill="${textColorMuted}">Note: ${escapeXml(c.centerLabel.secondary)}</text>
+          </g>
+        ` : "";
+
         chartBody = `
           ${donutArcs}
-          <text x="${cx}" y="${cy - 2}" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="${textColorPrimary}">${escapeXml(c.centerLabel?.primary ?? "")}</text>
-          <text x="${cx}" y="${cy + 14}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(c.centerLabel?.secondary ?? "")}</text>
+          <text x="${cx}" y="${cy + 6}" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="800" fill="${textColorPrimary}">${escapeXml(c.centerLabel?.primary ?? "")}</text>
           ${legendItems}
+          ${commentary}
         `;
       }
 
@@ -685,7 +703,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         chartBody = c.data.map((d, idx) => {
           const ry = y + padTop + idx * rowH;
           const barWidth = Math.max(20, (d.value / maxVal) * (innerW - 140));
-          const barColor = d.color ?? "#2563eb";
+          const barColor = d.color ?? "#4A85F6";
 
           return `
             <g transform="translate(${x + padLeft}, ${ry})">
@@ -742,9 +760,9 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
         chartBody = `
           ${gridLinesSvg}
           <path d="${areaPath}" fill="url(#chart-area-grad)" />
-          <path d="${linePath}" fill="none" stroke="${isDark ? "#60a5fa" : "#2563eb"}" stroke-width="2.5" stroke-linecap="round" />
+          <path d="${linePath}" fill="none" stroke="${isDark ? "#60a5fa" : "#4A85F6"}" stroke-width="2.5" stroke-linecap="round" />
           ${coords.map((p, idx) => `
-            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${isDark ? "#60a5fa" : "#2563eb"}" stroke-width="2" />
+            <circle cx="${p.x}" cy="${p.y}" r="3.5" fill="${cardBg}" stroke="${isDark ? "#60a5fa" : "#4A85F6"}" stroke-width="2" />
             <text x="${p.x}" y="${y + padTop + innerH + 18}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9.5" font-weight="600" fill="${textColorMuted}">${escapeXml(chartData[idx].label)}</text>
           `).join("")}
         `;
@@ -918,8 +936,8 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
           <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${sc.cornerRadius ?? 14}" fill="${isEditorial ? "#f5f2eb" : cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
           <!-- Dedicated Header Banner at Top -->
           <text x="${x + 36}" y="${y + 38}" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="${textColorPrimary}">${escapeXml(sc.title)}</text>
-          ${sc.subtitle ? `<text x="${x + 36}" y="${y + 58}" font-family="Inter, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="${textColorMuted}">${escapeXml(sc.subtitle.toUpperCase())}</text>` : ""}
-          <line x1="${x + 36}" y1="${y + 74}" x2="${x + w - 36}" y2="${y + 74}" stroke="${isDark ? "#334155" : "#e2ded4"}" stroke-width="1" />
+          ${sc.subtitle ? `<text x="${x + 36}" y="${y + 64}" font-family="Inter, sans-serif" font-size="11" font-weight="700" letter-spacing="0.08em" fill="${textColorMuted}">${escapeXml(sc.subtitle.toUpperCase())}</text>` : ""}
+          <line x1="${x + 36}" y1="${y + 80}" x2="${x + w - 36}" y2="${y + 80}" stroke="${isDark ? "#334155" : "#e2ded4"}" stroke-width="1" />
           <!-- Continuous Serpentine S-Curve Track -->
           <path d="${scurvePath}" fill="none" stroke="${trackColor}" stroke-width="5" stroke-linecap="round" />
           ${hubsSvg}
@@ -973,7 +991,215 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
       continue;
     }
 
-    // ─── 9. Image Shape ───────────────────────────────────────────────────────
+    // ─── 9. Graphic Design Venn Timeline (`type: "venn_timeline"`) ────────────
+    if (shape.type === "venn_timeline") {
+      const vt = shape as VennTimelineShape;
+      const spineX = x + w / 2;
+      const startY = y + 80;
+      const nodeGap = (h - 160) / Math.max(vt.nodes.length - 1, 1);
+      
+      let elementsSvg = "";
+      
+      // Spine
+      elementsSvg += `<line x1="${spineX}" y1="${startY}" x2="${spineX}" y2="${startY + (vt.nodes.length - 1) * nodeGap}" stroke="${gridLineColor}" stroke-width="2" />`;
+      
+      vt.nodes.forEach((node, idx) => {
+        const ny = startY + idx * nodeGap;
+        
+        // Render Branches
+        if (node.branches) {
+          node.branches.forEach((br, bIdx) => {
+            const isLeft = br.side === "left";
+            const bx = isLeft ? spineX - 120 : spineX + 120;
+            const by = ny - 20 + bIdx * 20;
+            elementsSvg += `
+              <path d="M ${spineX} ${ny} L ${spineX + (isLeft ? -40 : 40)} ${ny} L ${bx} ${by}" fill="none" stroke="${gridLineColor}" stroke-width="1.5" />
+              <text x="${bx + (isLeft ? -8 : 8)}" y="${by + 4}" text-anchor="${isLeft ? "end" : "start"}" font-family="Inter, sans-serif" font-size="11" font-weight="500" fill="${textColorMuted}">${escapeXml(br.text)}</text>
+            `;
+          });
+        }
+        
+        // Render Hub
+        if (node.vennLabels && node.vennLabels.length === 2) {
+          // Two overlapping circles
+          elementsSvg += `
+            <circle cx="${spineX - 25}" cy="${ny}" r="45" fill="${cardBg}" stroke="${textColorPrimary}" stroke-width="1.5" />
+            <circle cx="${spineX + 25}" cy="${ny}" r="45" fill="${cardBg}" stroke="${textColorPrimary}" stroke-width="1.5" opacity="0.9" />
+            <text x="${spineX - 40}" y="${ny}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="600" fill="${textColorPrimary}">${escapeXml(node.vennLabels[0])}</text>
+            <text x="${spineX + 40}" y="${ny}" text-anchor="middle" font-family="Inter, sans-serif" font-size="10" font-weight="600" fill="${textColorPrimary}">${escapeXml(node.vennLabels[1])}</text>
+          `;
+        } else {
+          // Single large circle
+          const nodeBg = node.color === "dark" ? textColorPrimary : node.color === "accent" ? "#4A85F6" : cardBg;
+          const nodeFg = node.color === "dark" || node.color === "accent" ? cardBg : textColorPrimary;
+          elementsSvg += `
+            <circle cx="${spineX}" cy="${ny}" r="40" fill="${nodeBg}" stroke="${textColorPrimary}" stroke-width="2" />
+            <text x="${spineX}" y="${ny + 4}" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="800" fill="${nodeFg}">${escapeXml(node.primaryText)}</text>
+          `;
+        }
+        
+        // Primary and Sub text if it's a venn (since single circle renders inside)
+        if (node.vennLabels && node.vennLabels.length === 2) {
+          elementsSvg += `
+            <text x="${spineX}" y="${ny - 55}" text-anchor="middle" font-family="Inter, sans-serif" font-size="13" font-weight="800" fill="${textColorPrimary}">${escapeXml(node.primaryText)}</text>
+          `;
+        }
+        
+        elementsSvg += `
+          ${node.subText ? `<text x="${spineX}" y="${ny + 60}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="500" fill="${textColorMuted}">${escapeXml(node.subText)}</text>` : ""}
+          ${node.number ? `<text x="${x + 40}" y="${ny + 6}" font-family="'JetBrains Mono', monospace" font-size="20" font-weight="800" fill="${gridLineColor}">${escapeXml(node.number)}</text>
+          <line x1="${x + 40}" y1="${ny + 16}" x2="${x + w - 40}" y2="${ny + 16}" stroke="${gridLineColor}" stroke-dasharray="4 4" stroke-width="1" />` : ""}
+        `;
+      });
+      
+      elements.push(
+        `<g ${opacity}>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="12" fill="${cardBg}" stroke="${stroke}" stroke-width="${strokeWidth}" />
+          ${vt.title ? `<text x="${spineX}" y="${y + 40}" text-anchor="middle" font-family="Inter, sans-serif" font-size="18" font-weight="800" fill="${textColorPrimary}">${escapeXml(vt.title)}</text>` : ""}
+          ${elementsSvg}
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 10. Technical HUD Grid (`type: "tech_hud_panel"`) ─────────────────────
+    if (shape.type === "tech_hud_panel") {
+      const hud = shape as TechHudPanelShape;
+      const cols = 4;
+      const gap = 8;
+      const pad = 16;
+      const cellW = (w - pad * 2 - gap * (cols - 1)) / cols;
+      const rowH = 60;
+      
+      let gridSvg = "";
+      let curCol = 0;
+      let curRow = 0;
+      
+      hud.gridItems.forEach((item, idx) => {
+        const cSpan = Math.min(item.colSpan ?? 1, cols);
+        if (curCol + cSpan > cols) {
+          curCol = 0;
+          curRow++;
+        }
+        
+        const cellX = x + pad + curCol * (cellW + gap);
+        const cellY = y + pad + 40 + curRow * (rowH + gap);
+        const cW = cellW * cSpan + gap * (cSpan - 1);
+        const cH = rowH * (item.rowSpan ?? 1) + gap * ((item.rowSpan ?? 1) - 1);
+        
+        gridSvg += `
+          <g transform="translate(${cellX}, ${cellY})">
+            <rect x="0" y="0" width="${cW}" height="${cH}" fill="${isDark ? "#1e293b" : "#f1f5f9"}" stroke="${gridLineColor}" stroke-width="1" />
+            <text x="8" y="16" font-family="'JetBrains Mono', monospace" font-size="9" font-weight="600" fill="${textColorMuted}">${escapeXml(item.label.toUpperCase())}</text>
+            ${item.value ? `<text x="8" y="${cH - 12}" font-family="'JetBrains Mono', monospace" font-size="16" font-weight="800" fill="${textColorPrimary}">${escapeXml(item.value)}</text>` : ""}
+            ${item.barcode ? `
+              <g transform="translate(${cW - 60}, 8)">
+                <rect x="0" y="0" width="2" height="16" fill="${textColorPrimary}" />
+                <rect x="4" y="0" width="4" height="16" fill="${textColorPrimary}" />
+                <rect x="10" y="0" width="1" height="16" fill="${textColorPrimary}" />
+                <rect x="14" y="0" width="6" height="16" fill="${textColorPrimary}" />
+                <rect x="22" y="0" width="2" height="16" fill="${textColorPrimary}" />
+                <rect x="26" y="0" width="5" height="16" fill="${textColorPrimary}" />
+                <rect x="34" y="0" width="2" height="16" fill="${textColorPrimary}" />
+              </g>
+            ` : ""}
+            ${item.crosshair ? `
+              <circle cx="${cW - 20}" cy="${cH / 2}" r="10" fill="none" stroke="${textColorPrimary}" stroke-width="1" />
+              <line x1="${cW - 35}" y1="${cH / 2}" x2="${cW - 5}" y2="${cH / 2}" stroke="${textColorPrimary}" stroke-width="1" />
+              <line x1="${cW - 20}" y1="${cH / 2 - 15}" x2="${cW - 20}" y2="${cH / 2 + 15}" stroke="${textColorPrimary}" stroke-width="1" />
+            ` : ""}
+          </g>
+        `;
+        
+        curCol += cSpan;
+      });
+      
+      elements.push(
+        `<g ${opacity}>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="0" fill="${cardBg}" stroke="${textColorPrimary}" stroke-width="2" />
+          <rect x="${x + 4}" y="${y + 4}" width="${w - 8}" height="${h - 8}" fill="none" stroke="${gridLineColor}" stroke-width="1" />
+          <text x="${x + pad}" y="${y + pad + 16}" font-family="'JetBrains Mono', monospace" font-size="24" font-weight="900" fill="${textColorPrimary}">${escapeXml(hud.title.toUpperCase())}</text>
+          <line x1="${x}" y1="${y + 40}" x2="${x + w}" y2="${y + 40}" stroke="${textColorPrimary}" stroke-width="2" />
+          ${gridSvg}
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 11. Layered Process Map (`type: "layered_process_map"`) ───────────────
+    if (shape.type === "layered_process_map") {
+      const pm = shape as LayeredProcessMapShape;
+      const zoneW = w - 40;
+      const zoneH = (h - 80) / Math.max(pm.zones.length, 1);
+      
+      let pmSvg = "";
+      
+      // Render Zones
+      pm.zones.forEach((z, idx) => {
+        const zy = y + 60 + idx * zoneH;
+        pmSvg += `
+          <rect x="${x + 20}" y="${zy}" width="${zoneW}" height="${zoneH - 10}" rx="12" fill="none" stroke="${z.color ?? gridLineColor}" stroke-dasharray="6,6" stroke-width="2" />
+          <text x="${x + 40}" y="${zy + 30}" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="${z.color ?? textColorMuted}">${escapeXml(z.label.toUpperCase())}</text>
+        `;
+      });
+      
+      // Map nodes to coordinates
+      const nodeCoords: Record<string, {x: number, y: number}> = {};
+      pm.nodes.forEach((n, idx) => {
+        const zIdx = pm.zones.findIndex(z => z.id === n.zoneId);
+        const validZIdx = zIdx === -1 ? 0 : zIdx;
+        const zy = y + 60 + validZIdx * zoneH;
+        
+        // Just place them in a simple grid within their zone
+        const nodesInZone = pm.nodes.filter(n2 => n2.zoneId === n.zoneId);
+        const myLocalIdx = nodesInZone.findIndex(n2 => n2.id === n.id);
+        const cols = Math.max(Math.ceil(nodesInZone.length / 2), 3);
+        
+        const cellW = zoneW / cols;
+        const nx = x + 20 + (myLocalIdx % cols) * cellW + cellW / 2;
+        const ny = zy + 60 + Math.floor(myLocalIdx / cols) * 80;
+        
+        nodeCoords[n.id] = { x: nx, y: ny };
+        
+        let iconSvg = "";
+        if (n.icon === "people") {
+          iconSvg = `<circle cx="${nx - 12}" cy="${ny - 4}" r="3" fill="${textColorPrimary}"/><rect x="${nx - 16}" y="${ny}" width="8" height="12" rx="2" fill="${textColorPrimary}"/><circle cx="${nx}" cy="${ny - 4}" r="3" fill="${textColorPrimary}"/><rect x="${nx - 4}" y="${ny}" width="8" height="12" rx="2" fill="${textColorPrimary}"/><circle cx="${nx + 12}" cy="${ny - 4}" r="3" fill="${textColorPrimary}"/><rect x="${nx + 8}" y="${ny}" width="8" height="12" rx="2" fill="${textColorPrimary}"/>`;
+        } else {
+          iconSvg = `<circle cx="${nx}" cy="${ny}" r="16" fill="${cardBg}" stroke="${textColorPrimary}" stroke-width="2" />`;
+        }
+        
+        pmSvg += `
+          ${iconSvg}
+          <text x="${nx}" y="${ny + 24}" text-anchor="middle" font-family="Inter, sans-serif" font-size="9" font-weight="600" fill="${textColorMuted}">${escapeXml(n.label)}</text>
+        `;
+      });
+      
+      // Render Connections
+      pm.connections.forEach(c => {
+        const from = nodeCoords[c.from];
+        const to = nodeCoords[c.to];
+        if (!from || !to) return;
+        
+        const midY = (from.y + to.y) / 2;
+        const path = `M ${from.x} ${from.y + 16} L ${from.x} ${midY} L ${to.x} ${midY} L ${to.x} ${to.y - 16}`;
+        const dash = c.style === "dotted" ? "stroke-dasharray='4,4'" : "";
+        pmSvg += `
+          <path d="${path}" fill="none" stroke="${c.color ?? textColorPrimary}" stroke-width="1.5" ${dash} />
+          <circle cx="${to.x}" cy="${to.y - 16}" r="3" fill="${c.color ?? textColorPrimary}" />
+        `;
+      });
+      
+      elements.push(
+        `<g ${opacity}>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="0" fill="${isEditorial ? "#f5f2eb" : cardBg}" stroke="${stroke}" stroke-width="0" />
+          <text x="${x + w / 2}" y="${y + 30}" text-anchor="middle" font-family="Inter, sans-serif" font-size="22" font-weight="900" fill="${textColorPrimary}">${escapeXml(pm.title.toUpperCase())}</text>
+          ${pmSvg}
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 12. Image Shape ───────────────────────────────────────────────────────
     if (shape.type === "image") {
       const img = shape as ImageShape;
       const rx = img.cornerRadius ?? 10;
@@ -995,7 +1221,7 @@ export function freeformToSvg(doc: CanvasDocument, options?: { theme?: "light" |
     if (shape.type === "card") {
       const card = shape as CardShape;
       const iconName = card.icon ?? "server";
-      const iconColor = card.stroke ? resolveColor(card.stroke) ?? card.stroke : isDark ? "#60a5fa" : "#2563eb";
+      const iconColor = card.stroke ? resolveColor(card.stroke) ?? card.stroke : isDark ? "#60a5fa" : "#4A85F6";
       const badgeText = card.badge?.text ?? card.role ?? "";
       const badgeBg = card.badge?.bg ?? (isDark ? "rgba(37,99,235,0.2)" : "#eff6ff");
       const badgeColor = card.badge?.color ?? (isDark ? "#93c5fd" : "#1d4ed8");

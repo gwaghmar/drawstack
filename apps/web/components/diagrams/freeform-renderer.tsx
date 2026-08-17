@@ -33,11 +33,13 @@ import {
 
 import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
+import { YjsCanvasStore } from "@/lib/diagrams/yjs-store";
 
 type Props = {
   source: string;
   onChange?: (source: string) => void;
   readOnly?: boolean;
+  roomId?: string;
 };
 
 type MarqueeState = {
@@ -898,7 +900,7 @@ function renderShape(
   return nodes;
 }
 
-export function FreeformRenderer({ source, onChange, readOnly }: Props) {
+export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) {
   const [doc, setDoc] = useState<CanvasDocument>(() => {
     const { doc: parsed, errors } = parseFreeformSource(source);
     if (errors.length > 0) return parsed;
@@ -928,6 +930,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const transformerRef = useRef<Konva.Transformer>(null);
   const docRef = useRef(doc);
   docRef.current = doc;
+  const yjsStoreRef = useRef<YjsCanvasStore | null>(null);
   const snapCandidatesRef = useRef<SnapCandidates>({ verticals: [], horizontals: [] });
   const modeRef = useRef<ToolMode>(mode);
   const placeKindRef = useRef<ShapeKind | null>(null);
@@ -965,6 +968,33 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     setModeSynced("place");
   };
 
+  // Setup Yjs multiplayer collaboration if roomId is provided
+  useEffect(() => {
+    if (!roomId) return;
+    const store = new YjsCanvasStore(roomId, docRef.current);
+    yjsStoreRef.current = store;
+
+    const unsubscribe = store.subscribe((remoteShapes) => {
+      setDoc((prev) => {
+        const nextDoc = { ...prev, shapes: remoteShapes };
+        if (!readOnly && onChange) {
+          const serialized = serializeFreeformDocument(nextDoc);
+          if (serialized !== lastSourceRef.current) {
+            lastSourceRef.current = serialized;
+            onChange(serialized);
+          }
+        }
+        return nextDoc;
+      });
+    });
+
+    return () => {
+      unsubscribe();
+      store.destroy();
+      yjsStoreRef.current = null;
+    };
+  }, [roomId, readOnly, onChange]);
+
   // Sync external source prop to local state
   useEffect(() => {
     if (source === lastSourceRef.current) return;
@@ -982,9 +1012,12 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     });
   }, [source]);
 
-  // Commit changes to onChange
+  // Commit changes to onChange and Yjs store
   const commitChanges = (newDoc: CanvasDocument) => {
     if (readOnly) return;
+    if (yjsStoreRef.current) {
+      yjsStoreRef.current.syncLocalToYjs(newDoc.shapes);
+    }
     const serialized = serializeFreeformDocument(newDoc);
     if (serialized !== lastSourceRef.current) {
       lastSourceRef.current = serialized;
@@ -1278,6 +1311,23 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   }, [readOnly, editingShapeId]);
 
   const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
+    if (doc.presentationMode) {
+      const shape = doc.shapes.find((s) => s.id === shapeId);
+      if (shape?.onClickNavigateToFrameId) {
+        const targetFrame = doc.shapes.find((s) => s.id === shape.onClickNavigateToFrameId && s.type === "frame");
+        if (targetFrame && "width" in targetFrame && targetFrame.width && "height" in targetFrame && targetFrame.height) {
+          const scaleX = (STAGE_WIDTH - 80) / targetFrame.width;
+          const scaleY = (STAGE_HEIGHT - 80) / targetFrame.height;
+          const scale = Math.min(scaleX, scaleY);
+          const finalScale = Math.min(Math.max(scale, MIN_SCALE), MAX_SCALE);
+          const x = STAGE_WIDTH / 2 - (targetFrame.x + targetFrame.width / 2) * finalScale;
+          const y = STAGE_HEIGHT / 2 - (targetFrame.y + targetFrame.height / 2) * finalScale;
+          setViewport({ scale: finalScale, x, y });
+        }
+      }
+      return;
+    }
+
     if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
     if (e.evt.shiftKey) {
       setSelectedIds((prev) => {
@@ -1958,6 +2008,23 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
           <button
             type="button"
+            onClick={() => {
+              const newDoc = { ...doc, presentationMode: !doc.presentationMode };
+              setDoc(newDoc);
+              commitChanges(newDoc);
+            }}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
+              doc.presentationMode
+                ? "bg-indigo-500 text-white shadow-sm"
+                : "border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+            }`}
+            title="Toggle Interactive Prototype Presentation Mode"
+          >
+            {doc.presentationMode ? "⏹ Stop Presenting" : "▶ Present"}
+          </button>
+
+          <button
+            type="button"
             onClick={handleExportSvg}
             className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
             title="Download pure vector SVG"
@@ -2120,6 +2187,28 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           >
             Back
           </button>
+
+          {primarySelected && selectedShapes.length === 1 && primarySelected.type !== "frame" && (
+            <>
+              <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+              <select
+                className="text-[10px] p-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 w-28"
+                value={primarySelected.onClickNavigateToFrameId || ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateSelectedProps((s) => ({
+                    ...s,
+                    onClickNavigateToFrameId: val === "" ? undefined : val
+                  }));
+                }}
+              >
+                <option value="">No Link</option>
+                {doc.shapes.filter(s => s.type === "frame").map(f => (
+                  <option key={f.id} value={f.id}>Link: {f.name}</option>
+                ))}
+              </select>
+            </>
+          )}
         </div>
       )}
 

@@ -859,11 +859,14 @@ SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, 
    - "chart": { "type": "chart", "title": "Revenue by Quarter", "chartType": "grouped_bar" | "donut" | "horizontal_bar" | "progress_gauge" | "area", "groupedData": [{"category":"Q1 FY26","series":[{"name":"Revenue","value":143.8,"formatted":"$143.8B","color":"#3b82f6"}]}], "donutData": [{"label":"iPhone","value":"$196.5B","percent":54,"color":"#3b82f6"}], "centerLabel": {"primary":"$364.4B","secondary":"FY26 9mo"}, "progressSegments": [{"label":"Operating cash flow","value":"$117.0B","percent":85,"color":"#3b82f6"}] }
    - "feed_table": { "type": "feed_table", "title": "Recent Activity", "rows": [{"date":"Jul 30 '26","event":"Q4 guidance announced","amount":"$100.0B"}] }
    - "metric": { "type": "metric", "label": "Annual Run Rate", "value": "$4.28M", "delta": "+28.4% YoY", "deltaDirection": "up", "sparkline": [20,28,35,52,68], "icon": "activity" }
-2. Swiss Editorial Mindmaps & S-Curve Timelines:
+2. Swiss Editorial Mindmaps, Venn Timelines & S-Curves:
    - "mindmap": { "type": "mindmap", "steps": [{"number":"01","title":"Graphic design","subtitle":"concept","isTerminal":true}, {"number":"02","title":"Branches","branches":[{"side":"left","text":"font"},{"side":"right","text":"color"}]}, {"number":"03","title":"Venn","vennNodes":[{"label":"function","callout":"Target"},{"label":"mood","callout":"Emotion"}]}, {"number":"05","title":"Pills","pills":["idea sketch","idea meeting"]}] }
    - "scurve_timeline": { "type": "scurve_timeline", "title": "Project Steps", "subtitle": "INFOGRAPHICS TEMPLATE", "strokeColor": "#365f60", "steps": [{"stepNumber":"01","title":"Research","description":"...","hubColor":"#cf3c2e"}], "hasSilhouette": true }
+   - "venn_timeline": { "type": "venn_timeline", "title": "Concept Derivation", "nodes": [{"primaryText":"Brand Identity","subText":"Core Values","vennLabels":["Function","Form"],"branches":[{"text":"Typography","side":"left"},{"text":"Palette","side":"right"}],"color":"dark"}] }
    - "isometric_block": { "type": "isometric_block", "title": "Business Growth", "callouts": [{"number":"01","title":"Setup","description":"...","side":"left"}], "hasSilhouette": true }
-3. System Architecture & Whiteboard:
+3. System Architecture, Process Maps & HUDs:
+   - "layered_process_map": { "type": "layered_process_map", "title": "Gastronomy Process", "zones": [{"id":"z1","label":"Mental & Emotional","color":"#eab308"}], "nodes": [{"id":"n1","zoneId":"z1","label":"Actors","icon":"people"}], "connections": [{"from":"n1","to":"n2","style":"solid","color":"#3b82f6"}] }
+   - "tech_hud_panel": { "type": "tech_hud_panel", "title": "System Diagnostics", "gridItems": [{"label":"Sector Alpha","value":"12415251","barcode":true,"colSpan":2},{"label":"Target","crosshair":true,"rowSpan":2}] }
    - "card": { "type": "card", "title": "API Gateway", "icon": "k8s"|"postgres"|"kafka"|"stripe"|"openai"|"aws", "badge": {"text":"INGRESS","bg":"#ecfdf5","color":"#047857"}, "subtitle": "...", "metadata": [{"label":"p99","value":"1.4ms"}] }
    - "table": { "type": "table", "tableName": "users", "columns": [{"name":"id","type":"uuid","isPk":true}, {"name":"email","type":"varchar"}] }
    - "image": { "type": "image", "src": "data:image/..." | "https://...", "width": 200, "height": 150 }
@@ -887,7 +890,8 @@ Avoid generic AI output — this is the most common failure mode, and it costs n
 - Don't default to the flattest, most obvious structure because it's safe. If the request implies a specific shape (a real approval chain with a rejection path, a data flow with real branches, an actual hierarchy), build that — not a generic straight-line or symmetric-tree fallback.
 - Don't use placeholder-sounding labels ("Step 1", "Process A", "User", "Admin", "Service") when the prompt gives you enough to be specific. Name real entities, real service names, real role titles, real stage names.
 - Make deliberate visual choices — grouping, color, emphasis, layout — instead of even-spacing/default-palette output. An unspecified detail is freedom to make a good call, not license to do the least possible.
-- When a "textbook example" version and a "built for this specific request" version would look different, always build the specific one.`;
+- When a "textbook example" version and a "built for this specific request" version would look different, always build the specific one.
+- **Standard Dashboard Practices**: Legends must be legible and properly aligned (left or bottom). Always include baselines and axes for charts. Do not use generic bright tailwind colors; use subtle, muted corporate palettes (like Apple Financials or McKinsey). Never let labels overlap; truncate or wrap them if necessary. Use metric sparklines with proper baseline grounding.`;
 
 // ─── Large / complex diagram guidance ────────────────────────────────────────
 // Graph-structured types degrade into spaghetti past ~25 nodes. When the intent
