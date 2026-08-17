@@ -1,8 +1,6 @@
 import type { DiagramType } from "@flowchart/core";
 
-export function sourceFileExtension(type: DiagramType): string {
-  if (type === "mermaid") return "mmd";
-  if (type === "bpmn") return "xml";
+export function sourceFileExtension(_type: DiagramType): string {
   return "json";
 }
 

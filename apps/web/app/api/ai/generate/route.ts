@@ -90,7 +90,7 @@ function defaultIntentPlan(prompt: string): IntentPlan {
 }
 
 const VALID_PRESET_IDS: SocialPresetId[] = ["square_feed", "vertical_feed", "story_reel", "landscape", "link_preview"];
-const VALID_DIAGRAM_TYPES: DiagramType[] = ["mermaid", "excalidraw", "reactflow", "echarts", "nivo", "freeform", "bpmn", "cloud", "erd", "orgchart", "timeline", "versus", "matrix2x2", "funnel", "venn", "tierlist", "iceberg", "alignment", "budget", "habits", "bingo", "bracket"];
+const VALID_DIAGRAM_TYPES: DiagramType[] = ["freeform"];
 
 function parseIntentPlan(raw: string, prompt: string): IntentPlan & { _fallback?: boolean } {
   const repaired = parsePossiblyBrokenJson(raw);
@@ -212,7 +212,7 @@ export async function POST(req: Request) {
 
   if (!apiKey) {
     const body: ApiError = {
-      error: "No API key configured. Add one in Settings (BYOK — OpenAI, Gemini, Claude, Groq, etc.), or set OPENAI_API_KEY on the server.",
+      error: "No API key configured. Add one in Settings (OpenAI, Gemini, Claude, Groq, etc.), or set OPENAI_API_KEY on the server.",
       code: "VALIDATION_ERROR",
     };
     return NextResponse.json(body, { status: 400 });
@@ -247,7 +247,7 @@ export async function POST(req: Request) {
     return NextResponse.json(errBody, { status: 400 });
   }
 
-  const diagramType: DiagramType = reqBody.diagramType ?? "mermaid";
+  const diagramType: DiagramType = reqBody.diagramType ?? "freeform";
   const systemPrompt = DIAGRAM_SYSTEM_PROMPTS[diagramType];
   const compact = Boolean(reqBody.compact);
   const useCaseId: UseCaseId = reqBody.useCaseId ?? "custom";
@@ -317,33 +317,7 @@ export async function POST(req: Request) {
 
   try {
     const typeHints: Record<DiagramType, string> = {
-      mermaid:    "Extract: flow direction (LR/TD), subgraph groupings, decision points, actor names. Suggest a mermaid subtype in suggestedSubtype (flowchart/sequenceDiagram/erDiagram/gantt/mindmap/classDiagram/stateDiagram-v2/timeline).",
-      excalidraw: "Extract: spatial groupings, connection directions, layout preference (left-to-right or top-to-bottom), element categories for color coding.",
-      reactflow:  "Extract: node types (start/process/decision/end), edge directions, swim-lane groupings, workflow stages.",
-      echarts:    "Extract: series names, axis type (category/time/value), time granularity (daily/monthly/yearly), chart subtype recommendation. Set suggestedSubtype to bar/line/pie/scatter/radar/sankey/treemap/funnel/gauge.",
-      nivo:       "Extract: data series names, comparison axes, chart subtype. Set suggestedSubtype to bar/line/pie/radar/treemap/sankey/network/chord/calendar/waffle.",
-      bpmn:       "Extract: participants/lanes, gateway types (exclusive/parallel/inclusive), process stages, happy path vs exception paths, SLA constraints.",
-      cloud:      "Extract: cloud provider (aws/gcp/azure/generic), the services/components involved, and the request/data flow direction (clients -> edge -> gateway -> compute -> data). Map each component to a service token from the cloud icon registry.",
-      erd:        "Extract: every entity/table, its columns with SQL types, primary keys (PK), foreign keys (FK), unique keys (UK), and the relationships (1:1 / 1:N / N:M) between tables.",
-      orgchart:   "Extract: every person (name) and their role/title, plus the reporting lines (who reports to whom). Build a single top-down tree from the most senior leader.",
-      timeline:   "Extract: every dated milestone (date + what happened) in chronological order. Keep labels short; move detail to description.",
-      versus:     "Extract: the two things being compared and parallel comparison dimensions. Point N on each side must address the same dimension.",
-      matrix2x2:  "Extract: the two axes (each with a low/high label) and the items to be plotted in each of the four quadrants.",
-      funnel:     "Extract: the funnel stage names in order from top to bottom, and any numeric values or percentages associated with each stage.",
-      venn:       "Extract: the two or three sets being compared and the items in each region (exclusive to set A, exclusive to set B, intersection, etc.).",
-      tierlist:   "Extract: the tier categories (S/A/B/C/D/F or custom) and the items ranked in each tier from best to worst.",
-      iceberg:    "Extract: the layers from top to surface level to deepest/darkest level, with items and descriptions at each depth level.",
-      alignment:  "Extract: the axis dimensions (each with opposing labels like left-right, good-evil) and plot the items on the alignment chart.",
-      budget:     "Extract: each spending category, its percentage of total, and optional dollar amount. Percentages must sum to 100.",
-      habits:     "Extract: the habit being tracked, the month, and which days were completed. Include ALL days of the month.",
-      bingo:      "Extract: the theme and 25 bingo square phrases. All squares must relate to the theme.",
-      bracket:    "Extract: the tournament subject, all competitors, which round they appear in, and any declared winners.",
-      freeform:   "Extract: every distinct shape/note and its spatial relationship to the others (grouped in a frame, connected by an arrow, positioned near another element). Suggest a suggestedSubtype (sketch/spatial-map/sticky-board/mood-board).",
-      d3:         "Extract: all entities/nodes and their relationships. Identify if this is a force-directed network, hierarchy (tree), flow (sankey), part-to-whole (sunburst), or category-flow (chord). Extract node names, groups, and connection weights.",
-      cytoscape:  "Extract: all entities/nodes, their connections, and relationship labels. Identify the graph type: organic network (cose), directed pipeline (dagre), circular (circle), or layered tree (breadthfirst). Extract node categories and edge directions.",
-      visnetwork: "Extract: all entities as nodes with labels, tooltips, and relative sizes. Extract connections with directionality and labels. Identify if physics simulation should be spring (general), hierarchical (top-down), or cluster (dense).",
-      fabric:     "Extract: the design type (mockup, wireframe, poster, slide), all visual elements (shapes, text blocks, images), their approximate positions, colors, and content. For wireframes, simplify to gray fills only.",
-      pixi:       "Extract: all visual objects (circles, rects, text), their positions, sizes, colors, and any connecting lines. Identify if animated particles are needed. Prefer dark backgrounds and bright accent colors.",
+      freeform: "Extract: every distinct shape/note and its spatial relationship to the others (grouped in a frame, connected by an arrow, positioned near another element). Suggest a suggestedSubtype (sketch/spatial-map/sticky-board/mood-board).",
     };
     const intentInstruction = `You are analyzing intent for a ${diagramType} diagram. ${typeHints[diagramType]}
 Return ONLY JSON matching this shape:
@@ -362,8 +336,7 @@ Return ONLY JSON matching this shape:
   "shouldAskClarification": true|false,
   "clarificationQuestion": "one concise question",
   "clarificationOptions": ["short answer option 1", "short answer option 2", "short answer option 3 (optional)"],
-  "suggestedPresetId": "landscape|square_feed|story_reel|vertical_feed|link_preview|null",
-  "suggestedDiagramType": "mermaid|excalidraw|reactflow|echarts|nivo|freeform|bpmn|cloud|erd|orgchart|timeline|versus|matrix2x2|funnel|venn|tierlist|iceberg|alignment|budget|habits|bingo|bracket|null"
+  "suggestedPresetId": "landscape|square_feed|story_reel|vertical_feed|link_preview|null"
 }
 Rules:
 - Base ambiguity on missing critical nouns/actors/flow direction.
@@ -379,36 +352,12 @@ Rules:
   - "OG image", "link preview", "Open Graph", "social card", "blog thumbnail" -> "link_preview"
   - "README", "docs", "documentation", "diagram", "chart", "flowchart", no platform signal -> null
   - Only return a non-null value when a STRONG, EXPLICIT platform keyword is present.
-  - Do NOT infer from vague style cues like "make it nice" or "for my team".
-- suggestedDiagramType rules (ONLY set when prompt strongly fits a DIFFERENT type than current):
-  - "chart", "bar chart", "pie chart", "line chart", "graph the data", "visualize numbers", "statistics", "metrics", "compare values" → "echarts"
-  - "beautiful chart", "nivo chart", "publication chart" → "nivo"
-  - "node graph", "network diagram", "pipeline stages", "dependency graph", "tree nodes" → "reactflow"
-  - "org chart", "organizational chart", "reporting structure", "company hierarchy", "who reports to whom", "team structure", "leadership chart" → "orgchart"
-  - "whiteboard", "sketch", "brainstorm", "freehand", "wireframe", "rough drawing" → "excalidraw"
-  - "BPMN", "business process model", "enterprise workflow", "swim lanes process", "service task" → "bpmn"
-  - "infinite canvas", "design mockup", "presentation canvas", "slide layout", "freeform canvas", "sticky note board" → "freeform"
-  - "flowchart", "sequence diagram", "class diagram", "Gantt", "mindmap", "state machine", "C4", "journey map" → "mermaid"
-  - "ERD", "database schema", "entity relationship", "data model", "tables and relationships", "DB design", "schema design" → "erd"
-  - "architecture diagram", "system design", "infrastructure", "cloud diagram", "AWS", "GCP", "Azure", "how it's deployed", "deployment topology" → "cloud"
-  - "timeline", "roadmap", "milestones", "history", "what happened when" → "timeline"
-  - "versus", "compare X and Y", "pros cons", "side by side" → "versus"
-  - "2x2", "quadrant", "matrix", "SWOT", "effort impact", "priority matrix" → "matrix2x2"
-  - "funnel", "conversion", "signup funnel", "marketing funnel", "drop-off" → "funnel"
-  - "venn diagram", "overlap", "intersection of", "sets", "what do X and Y share" → "venn"
-  - "tier list", "tier ", "ranking", "S tier", "A tier", "rank these", "best to worst" → "tierlist"
-  - "iceberg", "hidden depth", "above the surface", "below the surface", "what's below" → "iceberg"
-  - "alignment chart", "alignment grid", "3x3 grid", "lawful good", "chaotic evil", "moral alignment" → "alignment"
-  - "budget", "spending breakdown", "expense breakdown", "where my money goes", "income split" → "budget"
-  - "habit tracker", "streak", "daily habit", "30 day challenge", "habit grid" → "habits"
-  - "bingo" → "bingo"
-  - "bracket", "tournament", "single elimination", "who wins" → "bracket"
-  - DEFAULT to null — do not suggest switching when the current type can serve the request reasonably.${editorMode === "business" ? `
+  - Do NOT infer from vague style cues like "make it nice" or "for my team".${editorMode === "business" ? `
 - Business-mode style check (independent of the content-ambiguity rule above): if \`requestedStyle\` gives no clear stylistic direction, set \`shouldAskClarification: true\` with a \`clarificationQuestion\` about visual style and exactly 3 \`clarificationOptions\` in this spirit — one formal/enterprise-consulting look (e.g. "Gartner-style — formal, analyst-report feel"), one bold/minimal startup look (e.g. "Startup-style — bold, minimal, modern"), and one wildcard (e.g. "Surprise me"). Skip this check (proceed to generate normally) if the user already stated a style preference anywhere in the conversation, or if this is a patch to an existing diagram rather than a first generation.` : ""}`;
     const intentStart = Date.now();
     const { text: intentText } = await generateText({
       model: languageModel,
-      system: "You are a diagram intent analyzer. Extract structure from user requests accurately.",
+      system: "You are a diagram intent analyzer. Extract structure from user requests accurately. Any text meant for the user (clarificationQuestion, assumptions, missingInfo) must read as plain, direct sentences: no em dashes, no filler like 'certainly' or 'delve', no hedging.",
       messages: [
         ...messages.slice(-(compact ? 3 : 4)),
         { role: "user", content: `${intentInstruction}\n\nUser prompt:\n${promptText}\n\nHistory:\n${messages.map((m) => `${m.role}: ${m.content}`).join("\n").slice(-1800)}` },
@@ -438,14 +387,7 @@ Rules:
     const effectiveSystemPrompt =
       effectiveDiagramType === diagramType ? systemPrompt : DIAGRAM_SYSTEM_PROMPTS[effectiveDiagramType];
 
-    const baseMaxOutputTokens =
-      effectiveDiagramType === "mermaid"
-        ? 2500
-        : effectiveDiagramType === "bpmn"
-          ? 2800
-          : effectiveDiagramType === "echarts" || effectiveDiagramType === "nivo"
-            ? 3200
-            : 3500;
+    const baseMaxOutputTokens = 3500;
     const maxTokens = compact ? Math.max(900, Math.round(baseMaxOutputTokens * 0.7)) : baseMaxOutputTokens;
 
     const patchDirective = generationMode === "patch"
@@ -478,7 +420,7 @@ ${ANTI_GENERIC_DIRECTIVE}`;
     const typeSwitched = effectiveDiagramType !== diagramType;
     const switchedTypeLabel = typeSwitched ? getDiagramTypeMeta(effectiveDiagramType).label : null;
     const assumptionNote = typeSwitched
-      ? `Switched to ${switchedTypeLabel} — better fit for your prompt.${intentPlan.assumptions.length > 0 ? ` Assumptions: ${intentPlan.assumptions.slice(0, 2).join("; ")}.` : ""}`
+      ? `Switched to ${switchedTypeLabel}, a better fit for your prompt.${intentPlan.assumptions.length > 0 ? ` Assumptions: ${intentPlan.assumptions.slice(0, 2).join("; ")}.` : ""}`
       : generationMode === "patch"
         ? `Patched existing diagram${intentPlan.assumptions.length > 0 ? `. Assumptions: ${intentPlan.assumptions.slice(0, 2).join("; ")}.` : "."}`
         : intentPlan.assumptions.length > 0
@@ -508,6 +450,16 @@ ${ANTI_GENERIC_DIRECTIVE}`;
 
         const genStart = Date.now();
 
+        // Real progress events tied to the actual phases below, reconciled on the
+        // client by a stable id (writing the same id again updates the same row
+        // instead of appending a new one) — replaces a client-side hardcoded
+        // "Analyzing... Planning... Streaming..." list that didn't track what the
+        // server was actually doing.
+        const writeProgress = (step: string, label: string, status: "active" | "done" | "error") =>
+          writer.write({ type: "data-progress", id: "progress", data: { step, label, status } });
+
+        writeProgress("generate", "Generating diagram…", "active");
+
         // Reserve the credit atomically BEFORE generation. Charging afterwards
         // let concurrent requests all pass the up-front gate and get charged
         // once collectively. tryDecrementCredit only succeeds if balance > 0, so
@@ -516,6 +468,7 @@ ${ANTI_GENERIC_DIRECTIVE}`;
         if (user.plan === "free" && !skipCredits) {
           creditReserved = await tryDecrementCredit(user.id);
           if (!creditReserved) {
+            writeProgress("generate", "No credits left", "error");
             writer.write({
               type: "data-meta",
               data: {
@@ -554,8 +507,10 @@ ${ANTI_GENERIC_DIRECTIVE}`;
             outputTokens = usage?.outputTokens;
           } catch {}
 
+          writeProgress("validate", "Checking output…", "active");
           const validation = await validateAndRepairOutput(effectiveDiagramType, finalText);
           console.log(`[AI generate] validation ${validation.ok ? "ok" : "FAILED"} type=${effectiveDiagramType} latencyMs=${genLatencyMs} outputLen=${finalText.length}${validation.ok ? "" : ` reason=${validation.reason}`}`);
+          if (validation.ok) writeProgress("done", "Diagram ready", "done");
 
           // Deterministic, authored follow-up suggestions computed against the
           // actual final source (not model-generated, not predicted blind before
@@ -572,6 +527,7 @@ ${ANTI_GENERIC_DIRECTIVE}`;
 
           if (!validation.ok) {
             retryAttempted = true;
+            writeProgress("repair", "Fixing an issue…", "active");
             const correctiveInstruction = `Your previous ${effectiveDiagramType} output failed validation: ${validation.reason}
 
 Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanation, no markdown fences. Preserve the intent and structure of your previous attempt; fix only what is broken.`;
@@ -592,6 +548,7 @@ Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanati
               const recheck = await validateAndRepairOutput(effectiveDiagramType, corrective.text);
               if (recheck.ok) {
                 validationStatus = "repaired";
+                writeProgress("done", "Diagram ready", "done");
                 writer.write({
                   type: "data-meta",
                   data: {
@@ -603,6 +560,7 @@ Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanati
               } else {
                 validationStatus = "failed_after_retry";
                 console.warn("[AI generate] Corrective pass also failed:", recheck.reason);
+                writeProgress("repair", "Couldn't fully fix the output", "error");
                 writer.write({
                   type: "data-meta",
                   data: {
@@ -614,6 +572,7 @@ Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanati
             } catch (e) {
               validationStatus = "failed_after_retry";
               console.warn("[AI generate] Corrective pass errored:", e);
+              writeProgress("repair", "Couldn't fully fix the output", "error");
               writer.write({
                 type: "data-meta",
                 data: {
@@ -628,6 +587,7 @@ Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanati
           validationStatus = "error";
           errorMessage = e instanceof Error ? e.message : String(e);
           console.error("[AI generate] post-stream error:", e);
+          writeProgress("generate", "Generation failed", "error");
           // Generation never produced usable output — give the reserved credit back.
           if (creditReserved) {
             await refundCredit(user.id);

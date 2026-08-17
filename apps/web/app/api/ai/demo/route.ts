@@ -87,7 +87,7 @@ export async function POST(req: Request) {
       : (openAiModelFromEnv || "gpt-4o-mini");
 
   const languageModel = buildLanguageModel(credentials.provider, model, credentials.apiKey, credentials.baseUrl);
-  const systemPrompt = DIAGRAM_SYSTEM_PROMPTS["mermaid"];
+  const systemPrompt = DIAGRAM_SYSTEM_PROMPTS["freeform"];
 
   let raw: string;
   try {
@@ -103,11 +103,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "generation_failed" }, { status: 500 });
   }
 
-  const validation = await validateAndRepairOutput("mermaid", raw);
+  const validation = await validateAndRepairOutput("freeform", raw);
   const source = validation.ok ? validation.source : raw;
 
   const newUses = uses + 1;
-  const response = NextResponse.json({ diagramType: "mermaid", source });
+  const response = NextResponse.json({ diagramType: "freeform", source });
   response.cookies.set(COOKIE_NAME, String(newUses), {
     httpOnly: true,
     path: "/",

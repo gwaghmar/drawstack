@@ -8,28 +8,7 @@ import { sha256Hex } from "@/lib/crypto";
 export const runtime = "nodejs";
 
 const TYPE_LABELS: Record<string, string> = {
-  mermaid: "Text flowchart",
-  excalidraw: "Whiteboard",
-  reactflow: "Node graph",
-  echarts: "Chart",
-  nivo: "Chart",
   freeform: "Free Canvas",
-  bpmn: "BPMN process",
-  cloud: "Cloud architecture",
-  erd: "Database schema",
-  orgchart: "Org chart",
-  timeline: "Timeline",
-  versus: "Versus",
-  matrix2x2: "2x2 Matrix",
-  funnel: "Funnel",
-  venn: "Venn Diagram",
-  tierlist: "Tier List",
-  iceberg: "Iceberg",
-  alignment: "Alignment Chart",
-  budget: "Budget Breakdown",
-  habits: "Habit Tracker",
-  bingo: "Bingo Card",
-  bracket: "Bracket",
 };
 
 function decodeDataUrl(dataUrl: string): { mime: string; bytes: Buffer } | null {

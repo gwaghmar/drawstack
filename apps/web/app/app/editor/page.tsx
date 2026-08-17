@@ -16,7 +16,7 @@ import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TYPES: DiagramType[] = ["mermaid", "excalidraw", "reactflow", "echarts", "nivo", "freeform", "bpmn", "cloud", "erd", "orgchart", "timeline", "versus", "matrix2x2", "funnel", "venn", "tierlist", "iceberg", "alignment", "budget", "habits", "bingo", "bracket"];
+const VALID_TYPES: DiagramType[] = ["freeform"];
 
 function buildAiAssistantHint(ai: Awaited<ReturnType<typeof getAiSettingsForUser>>) {
   const serverOpenAiFallback = Boolean(
@@ -78,7 +78,7 @@ export default async function EditorPage({
     if (!p) redirect("/app");
     const diagramType: DiagramType = VALID_TYPES.includes(p.diagramType as DiagramType)
       ? (p.diagramType as DiagramType)
-      : "mermaid";
+      : "freeform";
     return (
       <EditorWithCollaboration
         projectId={p.id}
@@ -125,9 +125,9 @@ export default async function EditorPage({
       <EditorClient
         projectId={null}
         initialTitle="Example: Whiteboard Sketch"
-        initialSource={DIAGRAM_TYPE_DEFAULTS.excalidraw}
+        initialSource={DIAGRAM_TYPE_DEFAULTS.freeform}
         initialThemeId="stage_pipeline"
-        initialDiagramType="excalidraw"
+        initialDiagramType="freeform"
         showWatermark={showWatermark}
         creditsBalance={creditsBalance}
         aiAssistantHint={aiAssistantHint}
@@ -141,9 +141,9 @@ export default async function EditorPage({
   }
 
   const t = ALL_TEMPLATES.find((x) => x.id === templateId) ?? TEMPLATES[0];
-  const templateDiagramType: DiagramType = VALID_TYPES.includes((t.diagramType ?? "mermaid") as DiagramType)
-    ? ((t.diagramType ?? "mermaid") as DiagramType)
-    : "mermaid";
+  const templateDiagramType: DiagramType = VALID_TYPES.includes((t.diagramType ?? "freeform") as DiagramType)
+    ? ((t.diagramType ?? "freeform") as DiagramType)
+    : "freeform";
   return (
     <EditorClient
       projectId={null}

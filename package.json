@@ -10,7 +10,7 @@
     "db:studio": "pnpm --filter @flowchart/web db:studio",
     "mcp:dev": "pnpm --filter @flowchart/mcp-server dev",
     "test": "pnpm exec playwright test",
-    "test:unit": "node --test --experimental-strip-types apps/web/lib/ai-messages.test.ts apps/web/lib/auth-mode.test.ts apps/web/lib/deployment-readiness.test.ts apps/web/lib/db/mode.test.ts apps/web/lib/profile.test.ts apps/web/lib/diagrams/xyflow-base.test.ts apps/web/lib/diagrams/cloud-icons.test.ts apps/web/lib/diagrams/freeform-canvas.test.ts apps/web/lib/diagrams/freeform-ops.test.ts apps/web/lib/diagrams/freeform-model-view.test.ts apps/web/lib/diagrams/social-cards.test.ts apps/web/lib/template-match.test.ts apps/web/lib/agent-tools.test.ts apps/web/lib/brand-directive.test.ts apps/web/lib/diagrams/validate-output.test.ts",
+    "test:unit": "node --test --experimental-strip-types apps/web/lib/agent-tools.test.ts apps/web/lib/ai-messages.test.ts apps/web/lib/auth-mode.test.ts apps/web/lib/brand-directive.test.ts apps/web/lib/db/mode.test.ts apps/web/lib/deployment-readiness.test.ts apps/web/lib/diagrams/freeform-autolayout.test.ts apps/web/lib/diagrams/freeform-canvas.test.ts apps/web/lib/diagrams/freeform-model-view.test.ts apps/web/lib/diagrams/freeform-ops.test.ts apps/web/lib/diagrams/validate-output.test.ts apps/web/lib/profile.test.ts apps/web/lib/template-match.test.ts apps/web/lib/user-sync.test.ts",
     "test:web": "pnpm --filter @flowchart/web test"
   },
   "engines": {

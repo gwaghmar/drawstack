@@ -1,51 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import mermaid from "mermaid";
 import { toPng } from "html-to-image";
 import Link from "next/link";
-import { buildMermaidConfig, getTheme } from "@flowchart/core";
 import type { DiagramType } from "@flowchart/core";
 import { downloadSource, sourceFileExtension } from "@/lib/diagrams/source-export";
 
-// Lazy-load heavy renderers so they don't bloat the share page bundle
-const ExcalidrawRenderer = dynamic(
-  () => import("./diagrams/excalidraw-renderer").then((m) => m.ExcalidrawRenderer),
-  { ssr: false }
-);
-const ReactFlowRenderer = dynamic(
-  () => import("./diagrams/reactflow-renderer").then((m) => m.ReactFlowRenderer),
-  { ssr: false }
-);
-const EChartsRenderer = dynamic(
-  () => import("./diagrams/echarts-renderer").then((m) => m.EChartsRenderer),
-  { ssr: false }
-);
-const NivoRenderer = dynamic(
-  () => import("./diagrams/nivo-renderer").then((m) => m.NivoRenderer),
-  { ssr: false }
-);
-const BpmnRenderer = dynamic(
-  () => import("./diagrams/bpmn-renderer").then((m) => m.BpmnRenderer),
-  { ssr: false }
-);
-const CloudRenderer = dynamic(
-  () => import("./diagrams/cloud-renderer").then((m) => m.CloudRenderer),
-  { ssr: false }
-);
-const ErdRenderer = dynamic(
-  () => import("./diagrams/erd-renderer").then((m) => m.ErdRenderer),
-  { ssr: false }
-);
-const OrgChartRenderer = dynamic(
-  () => import("./diagrams/orgchart-renderer").then((m) => m.OrgChartRenderer),
-  { ssr: false }
-);
-const SocialCardRenderer = dynamic(
-  () => import("./diagrams/social-card-renderer").then((m) => m.SocialCardRenderer),
-  { ssr: false }
-);
+// Lazy-load heavy renderer so it doesn't bloat the share page bundle
 const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
   { ssr: false }
@@ -62,10 +24,7 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
   const [data, setData] = useState<ShareData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sourceCopied, setSourceCopied] = useState(false);
-  const innerRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
-
-  const theme = useMemo(() => getTheme(data?.themeId ?? "stage_pipeline"), [data?.themeId]);
 
   // Fetch share data
   useEffect(() => {
@@ -77,30 +36,10 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
         return;
       }
       const j = await res.json();
-      if (!cancelled) setData({ ...j, diagramType: j.diagramType ?? "mermaid" });
+      if (!cancelled) setData({ ...j, diagramType: j.diagramType ?? "freeform" });
     })();
     return () => { cancelled = true; };
   }, [token]);
-
-  // Mermaid-specific rendering into the innerRef div
-  useEffect(() => {
-    if (!data || data.diagramType !== "mermaid") return;
-    let cancelled = false;
-    (async () => {
-      mermaid.initialize({
-        ...buildMermaidConfig(theme),
-        startOnLoad: false,
-        suppressErrorRendering: true,
-      });
-      try {
-        const { svg } = await mermaid.render(`s${Date.now()}`, data.source);
-        if (!cancelled && innerRef.current) innerRef.current.innerHTML = svg;
-      } catch {
-        if (!cancelled) setError("Failed to render this diagram.");
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [data, theme]);
 
   const downloadPng = async () => {
     const node = frameRef.current;
@@ -125,35 +64,9 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
     }
   };
 
-  const diagramType = data?.diagramType ?? "mermaid";
+  const diagramType = data?.diagramType ?? "freeform";
   const DIAGRAM_TYPE_LABELS: Record<DiagramType, string> = {
-    mermaid: "Text flowchart",
-    excalidraw: "Whiteboard",
-    reactflow: "Node graph",
-    echarts: "Chart",
-    nivo: "Chart",
-    bpmn: "BPMN process",
-    cloud: "Cloud architecture",
-    erd: "Database schema",
-    orgchart: "Org chart",
-    timeline: "Timeline",
-    versus: "Versus",
-    matrix2x2: "2x2 Matrix",
-    funnel: "Funnel",
-    venn: "Venn Diagram",
-    tierlist: "Tier List",
-    iceberg: "Iceberg",
-    alignment: "Alignment Chart",
-    budget: "Budget Breakdown",
-    habits: "Habit Tracker",
-    bingo: "Bingo Card",
-    bracket: "Bracket",
     freeform: "Free Canvas",
-    d3: "D3 Visualization",
-    cytoscape: "Network Graph",
-    visnetwork: "Physics Network",
-    fabric: "Design Canvas",
-    pixi: "WebGL Canvas",
   };
 
   return (
@@ -204,76 +117,16 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
                   {`Download .${sourceFileExtension(diagramType)}`}
                 </button>
               )}
-              {diagramType === "mermaid" && (
-                <span className="text-xs text-slate-500">
-                  Theme: <span className="font-medium">{theme.name}</span>
-                </span>
-              )}
             </div>
 
             <div
               ref={frameRef}
               className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white"
-              style={{
-                background: diagramType === "mermaid" ? (theme.themeVariables.background ?? "#fff") : "#fff",
-                minHeight: "400px",
-              }}
+              style={{ minHeight: "400px" }}
             >
-              {diagramType === "mermaid" && (
-                <div className="p-6">
-                  <div ref={innerRef} className="[&_svg]:max-w-full [&_svg]:h-auto" />
-                </div>
-              )}
-              {diagramType === "excalidraw" && (
-                <div className="h-[600px]">
-                  <ExcalidrawRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "reactflow" && (
-                <div className="h-[600px]">
-                  <ReactFlowRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "echarts" && (
-                <div className="h-[500px] p-4">
-                  <EChartsRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "nivo" && (
-                <div className="h-[500px] p-4">
-                  <NivoRenderer source={data.source} />
-                </div>
-              )}
-              {diagramType === "freeform" && (
-                <div className="h-[600px]">
-                  <FreeformRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "bpmn" && (
-                <div className="h-[600px]">
-                  <BpmnRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "cloud" && (
-                <div className="h-[600px]">
-                  <CloudRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "erd" && (
-                <div className="h-[600px]">
-                  <ErdRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {diagramType === "orgchart" && (
-                <div className="h-[600px]">
-                  <OrgChartRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
-              {(diagramType === "timeline" || diagramType === "versus" || diagramType === "matrix2x2" || diagramType === "funnel" || diagramType === "venn" || diagramType === "tierlist" || diagramType === "iceberg" || diagramType === "alignment" || diagramType === "budget" || diagramType === "habits" || diagramType === "bingo" || diagramType === "bracket") && (
-                <div className="h-[600px] [container-type:size]">
-                  <SocialCardRenderer source={data.source} readOnly onChange={() => {}} />
-                </div>
-              )}
+              <div className="h-[600px]">
+                <FreeformRenderer source={data.source} readOnly onChange={() => {}} />
+              </div>
             </div>
           </>
         )}

@@ -2,8 +2,7 @@
  * @flowchart/cli — Generate diagrams from the terminal
  *
  * Usage:
- *   npx @flowchart/cli generate "User login flow" --type mermaid --subtype sequence
- *   npx @flowchart/cli generate "Org chart" --type reactflow --out diagram.json
+ *   npx @flowchart/cli generate "User login flow" --out diagram.json
  *   npx @flowchart/cli list-types
  *
  * Config (~/.flowchart/config.json):
@@ -13,13 +12,7 @@
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  DIAGRAM_TYPE_META,
-  MERMAID_SUBTYPE_META,
-  getMermaidSubtypeMeta,
-  type DiagramType,
-  type MermaidSubtype,
-} from "@flowchart/core";
+import { DIAGRAM_TYPE_META, type DiagramType } from "@flowchart/core";
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
@@ -102,21 +95,13 @@ async function cmdGenerate(positional: string[], flags: Record<string, string | 
   const baseUrl = (flags["base-url"] as string) || config.baseUrl || "http://localhost:3040";
   const apiKey = (flags["api-key"] as string) || config.apiKey;
 
-  const diagramType = ((flags["type"] as string) || "mermaid") as DiagramType;
-  const subtypeFlag = flags["subtype"] as string | undefined;
+  const diagramType: DiagramType = "freeform";
   const outFile = flags["out"] as string | undefined;
-
-  // Build the enriched prompt
-  let enrichedPrompt = prompt;
-  if (diagramType === "mermaid" && subtypeFlag) {
-    const subMeta = getMermaidSubtypeMeta(subtypeFlag as MermaidSubtype);
-    enrichedPrompt = subMeta.aiHint + prompt;
-  }
 
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
 
-  log(dim(`Generating ${diagramType}${subtypeFlag ? ` (${subtypeFlag})` : ""} diagram…`));
+  log(dim(`Generating ${diagramType} diagram…`));
 
   let res: Response;
   try {
@@ -124,7 +109,7 @@ async function cmdGenerate(positional: string[], flags: Record<string, string | 
       method: "POST",
       headers,
       body: JSON.stringify({
-        prompt: enrichedPrompt,
+        prompt,
         diagramType,
         compact: false,
       }),
@@ -168,12 +153,6 @@ function cmdListTypes(_flags: Record<string, string | boolean>) {
   log("");
   for (const dt of DIAGRAM_TYPE_META) {
     log(`  ${cyan(dt.id.padEnd(12))} ${dt.label}`);
-    if (dt.id === "mermaid") {
-      log(`  ${" ".repeat(12)} ${dim("Subtypes (--subtype <id>):")}`);
-      for (const sub of MERMAID_SUBTYPE_META) {
-        log(`  ${" ".repeat(12)}   ${yellow(sub.id.padEnd(12))} ${sub.label}`);
-      }
-    }
   }
   log("");
 }

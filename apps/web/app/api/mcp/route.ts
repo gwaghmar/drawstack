@@ -20,13 +20,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  DIAGRAM_TYPE_META,
-  MERMAID_SUBTYPE_META,
-  getMermaidSubtypeMeta,
-  type DiagramType,
-  type MermaidSubtype,
-} from "@flowchart/core";
+import { DIAGRAM_TYPE_META, type DiagramType } from "@flowchart/core";
 import { z } from "zod";
 
 // Tools are stateless — each request creates a fresh server instance
@@ -41,23 +35,13 @@ function buildMcpServer(): Server {
       {
         name: "generate_diagram",
         description:
-          "Generate a diagram from a natural-language prompt. Returns the diagram source (Mermaid syntax, JSON, XML, etc.) ready to paste into drawxyz or save to a file.",
+          "Generate a diagram from a natural-language prompt. Returns the freeform canvas source (JSON) ready to paste into drawxyz or save to a file.",
         inputSchema: {
           type: "object" as const,
           properties: {
             prompt: {
               type: "string",
               description: "What the diagram should show, e.g. 'User authentication flow'",
-            },
-            diagramType: {
-              type: "string",
-              enum: DIAGRAM_TYPE_META.map((d) => d.id),
-              description: `Diagram renderer. Default: mermaid. Options: ${DIAGRAM_TYPE_META.map((d) => d.id).join(", ")}`,
-            },
-            mermaidSubtype: {
-              type: "string",
-              enum: MERMAID_SUBTYPE_META.map((s) => s.id),
-              description: `Mermaid sub-format (only when diagramType=mermaid). Options: ${MERMAID_SUBTYPE_META.map((s) => `${s.id} (${s.label})`).join(", ")}`,
             },
             baseUrl: {
               type: "string",
@@ -69,7 +53,7 @@ function buildMcpServer(): Server {
       },
       {
         name: "list_diagram_types",
-        description: "List all available diagram types and Mermaid subtypes with descriptions.",
+        description: "List all available diagram types with descriptions.",
         inputSchema: { type: "object" as const, properties: {} },
       },
     ],
@@ -82,12 +66,6 @@ function buildMcpServer(): Server {
       const lines: string[] = ["Available diagram types:\n"];
       for (const dt of DIAGRAM_TYPE_META) {
         lines.push(`• ${dt.id} — ${dt.label}: ${dt.description}`);
-        if (dt.id === "mermaid") {
-          lines.push("  Mermaid subtypes:");
-          for (const sub of MERMAID_SUBTYPE_META) {
-            lines.push(`    - ${sub.id} (${sub.label})`);
-          }
-        }
       }
       return { content: [{ type: "text", text: lines.join("\n") }] };
     }
@@ -96,8 +74,6 @@ function buildMcpServer(): Server {
       const parsed = z
         .object({
           prompt: z.string().min(1),
-          diagramType: z.string().optional(),
-          mermaidSubtype: z.string().optional(),
           baseUrl: z.string().url().optional(),
         })
         .safeParse(args);
@@ -110,21 +86,14 @@ function buildMcpServer(): Server {
       }
 
       const { prompt, baseUrl = "http://localhost:3040" } = parsed.data;
-      const diagramType = (parsed.data.diagramType ?? "mermaid") as DiagramType;
-      const mermaidSubtype = parsed.data.mermaidSubtype as MermaidSubtype | undefined;
-
-      // Prepend subtype hint so the AI produces the right Mermaid variant
-      let enrichedPrompt = prompt;
-      if (diagramType === "mermaid" && mermaidSubtype) {
-        enrichedPrompt = getMermaidSubtypeMeta(mermaidSubtype).aiHint + prompt;
-      }
+      const diagramType: DiagramType = "freeform";
 
       let res: Response;
       try {
         res = await fetch(`${baseUrl}/api/ai/generate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: enrichedPrompt, diagramType, compact: false }),
+          body: JSON.stringify({ prompt, diagramType, compact: false }),
         });
       } catch {
         return {

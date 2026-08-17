@@ -2,9 +2,7 @@
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import mermaid from "mermaid";
 import { toPng, toSvg } from "html-to-image";
-import JSZip from "jszip";
 import { Logo } from "@/components/logo";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
@@ -22,12 +20,9 @@ import {
   Circle,
   Loader2,
   ChevronDown,
-  MessageSquare,
   Clock,
   Palette,
   Code2,
-  Wand2,
-  Paintbrush,
   Search,
   ChevronUp,
   X,
@@ -42,21 +37,9 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Group, Panel, Separator, type PanelImperativeHandle } from "react-resizable-panels";
 import {
   THEMES,
-  buildMermaidConfig,
-  SOCIAL_PRESETS,
-  getPreset,
-  DIAGRAM_TYPE_META,
-  DIAGRAM_TYPE_DEFAULTS,
   getDiagramTypeMeta,
-  MERMAID_SUBTYPE_META,
-  getMermaidSubtypeMeta,
-  EDITOR_MODE_CATEGORIES,
-  getEditorModeForCategory,
-  type SocialPresetId,
   type DiagramType,
-  type MermaidSubtype,
   type UseCaseId,
-  type EditorMode,
 } from "@flowchart/core";
 import Link from "next/link";
 import { DiagramTypeIcon } from "@/components/diagram-icon";
@@ -68,80 +51,10 @@ import { saveProject, createProject, listRevisions, restoreRevision } from "@/ap
 import { getBrandKit } from "@/app/actions/brand-kit";
 import { createShareLink } from "@/app/actions/share";
 import dynamic from "next/dynamic";
-import type { EChartsRendererHandle } from "@/components/diagrams/echarts-renderer";
-import {
-  applyChartFamily,
-  applyColorPalette,
-  COLOR_PALETTES,
-  parseEChartsJson,
-  toggleDataLabels,
-  toggleLegend,
-  toggleSplitLine,
-  toggleStack,
-  detectChartFamily,
-  type ChartFamilyId,
-  type EChartsUiTheme,
-} from "@/lib/echarts-presets";
 
-const ExcalidrawRenderer = dynamic(
-  () => import("./diagrams/excalidraw-renderer").then((m) => ({ default: m.ExcalidrawRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Whiteboard" /> }
-);
-const ReactFlowRenderer = dynamic(
-  () => import("./diagrams/reactflow-renderer").then((m) => ({ default: m.ReactFlowRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Node graph" /> }
-);
-const CloudRenderer = dynamic(
-  () => import("./diagrams/cloud-renderer").then((m) => ({ default: m.CloudRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Architecture" /> }
-);
-const ErdRenderer = dynamic(
-  () => import("./diagrams/erd-renderer").then((m) => ({ default: m.ErdRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Schema" /> }
-);
-const OrgChartRenderer = dynamic(
-  () => import("./diagrams/orgchart-renderer").then((m) => ({ default: m.OrgChartRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Org chart" /> }
-);
-const SocialCardRenderer = dynamic(
-  () => import("./diagrams/social-card-renderer").then((m) => ({ default: m.SocialCardRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Card" /> }
-);
-const EChartsRenderer = dynamic(
-  () => import("./diagrams/echarts-renderer").then((m) => ({ default: m.EChartsRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Chart" /> }
-);
-const NivoRenderer = dynamic(
-  () => import("./diagrams/nivo-renderer").then((m) => ({ default: m.NivoRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Chart" /> }
-);
-const BpmnRenderer = dynamic(
-  () => import("./diagrams/bpmn-renderer").then((m) => ({ default: m.BpmnRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="BPMN" /> }
-);
 const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => ({ default: m.FreeformRenderer })),
   { ssr: false, loading: () => <CanvasLoader label="Canvas" /> }
-);
-const D3Renderer = dynamic(
-  () => import("./diagrams/d3-renderer").then((m) => ({ default: m.D3Renderer })),
-  { ssr: false, loading: () => <CanvasLoader label="D3" /> }
-);
-const CytoscapeRenderer = dynamic(
-  () => import("./diagrams/cytoscape-renderer").then((m) => ({ default: m.CytoscapeRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Network" /> }
-);
-const VisNetworkRenderer = dynamic(
-  () => import("./diagrams/visnetwork-renderer").then((m) => ({ default: m.VisNetworkRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Physics Network" /> }
-);
-const FabricRenderer = dynamic(
-  () => import("./diagrams/fabric-renderer").then((m) => ({ default: m.FabricRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Design Canvas" /> }
-);
-const PixiRenderer = dynamic(
-  () => import("./diagrams/pixi-renderer").then((m) => ({ default: m.PixiRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="WebGL" /> }
 );
 
 function CanvasLoader({ label }: { label: string }) {
@@ -158,12 +71,6 @@ function CanvasLoader({ label }: { label: string }) {
 type ChatMessage = { id: string; role: "assistant" | "user"; content: string };
 type UiState = { showGrid?: boolean; fontId?: string; paletteId?: string; customBackground?: string; customAccent?: string; backgroundPattern?: string };
 type FontOption = { id: string; label: string; cssValue: string };
-type ReactFlowSourceNode = {
-  id: string;
-  data?: Record<string, unknown>;
-  style?: Record<string, unknown>;
-  [key: string]: unknown;
-};
 
 const FONT_OPTIONS: FontOption[] = [
   { id: "geist", label: "Geist Sans", cssValue: "var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif" },
@@ -194,15 +101,6 @@ function caretFromOffset(value: string, offset: number): { line: number; col: nu
   return { line, col };
 }
 
-function cloudNeedsLayout(src: string): boolean {
-  try {
-    const d = JSON.parse(src) as { nodes?: { position?: unknown }[] };
-    return Array.isArray(d?.nodes) && d.nodes.length > 0 && d.nodes.every((n) => !n.position);
-  } catch {
-    return false;
-  }
-}
-
 function parseUiFromSource(raw: string): { source: string; ui: UiState } {
   const lines = raw.split("\n");
   const first = lines[0]?.trim() ?? "";
@@ -210,74 +108,16 @@ function parseUiFromSource(raw: string): { source: string; ui: UiState } {
   try { return { source: lines.slice(1).join("\n"), ui: JSON.parse(first.slice(UI_META_PREFIX.length)) as UiState }; }
   catch { return { source: raw, ui: {} }; }
 }
-function embedUiInSource(raw: string, ui: UiState): string {
-  return `${UI_META_PREFIX}${JSON.stringify(ui)}\n${parseUiFromSource(raw).source.trimStart()}`;
-}
-
 function summarizeDiagramSource(diagramType: DiagramType, source: string): string {
   const trimmed = source.trim();
   if (!trimmed) return "Empty diagram.";
-  if (diagramType === "mermaid" || diagramType === "bpmn") {
-    const lines = trimmed.split("\n").map((line) => line.trim()).filter(Boolean);
-    return lines.slice(0, 18).join("\n");
-  }
   try {
-    const parsed = JSON.parse(trimmed) as {
-      elements?: unknown[];
-      nodes?: unknown[];
-      edges?: unknown[];
-      series?: unknown[];
-      type?: string;
-      data?: unknown[] | Record<string, unknown>;
-    };
-    if (diagramType === "excalidraw") {
-      const count = Array.isArray(parsed.elements) ? parsed.elements.length : 0;
-      return `Excalidraw scene with ${count} elements.`;
-    }
-    if (diagramType === "reactflow") {
-      const nodeCount = Array.isArray(parsed.nodes) ? parsed.nodes.length : 0;
-      const edgeCount = Array.isArray(parsed.edges) ? parsed.edges.length : 0;
-      return `React Flow graph with ${nodeCount} nodes and ${edgeCount} edges.`;
-    }
-    if (diagramType === "echarts") {
-      const seriesCount = Array.isArray(parsed.series) ? parsed.series.length : 0;
-      return `ECharts config with ${seriesCount} series.`;
-    }
-    if (diagramType === "nivo") {
-      const dataCount = Array.isArray(parsed.data) ? parsed.data.length : 0;
-      return `Nivo chart type "${parsed.type ?? "unknown"}" with ${dataCount} data items.`;
-    }
-    if (diagramType === "freeform") {
-      const parsedFreeform = parsed as { shapes?: unknown[] };
-      const count = Array.isArray(parsedFreeform.shapes) ? parsedFreeform.shapes.length : 0;
-      return `Freeform canvas with ${count} shapes.`;
-    }
-    if (diagramType === "d3") {
-      const p = parsed as { subtype?: string; nodes?: unknown[]; links?: unknown[] };
-      return `D3 ${p.subtype ?? "force"} chart with ${p.nodes?.length ?? 0} nodes and ${p.links?.length ?? 0} links.`;
-    }
-    if (diagramType === "cytoscape") {
-      const p = parsed as { elements?: { nodes?: unknown[]; edges?: unknown[] }; layout?: { name?: string } };
-      const nodeCount = p.elements?.nodes?.length ?? 0;
-      const edgeCount = p.elements?.edges?.length ?? 0;
-      return `Cytoscape ${p.layout?.name ?? "cose"} graph with ${nodeCount} nodes and ${edgeCount} edges.`;
-    }
-    if (diagramType === "visnetwork") {
-      const p = parsed as { nodes?: unknown[]; edges?: unknown[] };
-      return `vis-network with ${p.nodes?.length ?? 0} nodes and ${p.edges?.length ?? 0} edges.`;
-    }
-    if (diagramType === "fabric") {
-      const p = parsed as { objects?: unknown[] };
-      return `Fabric.js canvas with ${p.objects?.length ?? 0} objects.`;
-    }
-    if (diagramType === "pixi") {
-      const p = parsed as { stage?: unknown[] };
-      return `PixiJS stage with ${p.stage?.length ?? 0} objects.`;
-    }
+    const parsed = JSON.parse(trimmed) as { shapes?: unknown[] };
+    const count = Array.isArray(parsed.shapes) ? parsed.shapes.length : 0;
+    return `Freeform canvas with ${count} shapes.`;
   } catch {
     return `${diagramType} source is present but not fully parseable.`;
   }
-  return `${diagramType} source available.`;
 }
 
 export type AiAssistantHint =
@@ -348,33 +188,21 @@ export function EditorClient({
   const [source, setSource] = useState(parsedInitial.source);
   const [themeId, setThemeId] = useState(initialThemeId);
   const [title, setTitle] = useState(initialTitle);
-  const [diagramType, setDiagramType] = useState<DiagramType>(initialDiagramType);
-  const [editorMode, setEditorMode] = useState<EditorMode>(() =>
-    getEditorModeForCategory(getDiagramTypeMeta(initialDiagramType).category)
-  );
-  const [presetId, setPresetId] = useState<SocialPresetId>("square_feed");
+  const [diagramType] = useState<DiagramType>(initialDiagramType);
   const [useCaseId, setUseCaseId] = useState<UseCaseId>("custom");
-  const [customExportWidth, setCustomExportWidth] = useState(1920);
-  const [customExportHeight, setCustomExportHeight] = useState(1080);
   const [pngScale, setPngScale] = useState<1 | 2 | 3>(2);
-  const [zipIncludeCustom, setZipIncludeCustom] = useState(false);
   const [showGrid, setShowGrid] = useState(Boolean(parsedInitial.ui.showGrid));
-  const [zoom, setZoom] = useState(1);
   const [fontId, setFontId] = useState(parsedInitial.ui.fontId ?? "geist");
   const [paletteId, setPaletteId] = useState(parsedInitial.ui.paletteId ?? "default");
   const [customBackground, setCustomBackground] = useState(parsedInitial.ui.customBackground ?? "#f8fafc");
   const [customAccent, setCustomAccent] = useState(parsedInitial.ui.customAccent ?? "#6366f1");
   const [parseError, setParseError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [showTypePanel, setShowTypePanel] = useState(false);
-  const [showTypeHelp, setShowTypeHelp] = useState(false);
   const [backgroundPattern, setBackgroundPattern] = useState<"none" | "dots" | "grid" | "lines">(
     (parsedInitial.ui.backgroundPattern as "none" | "dots" | "grid" | "lines") ?? "none"
   );
   /** Raw source hidden by default; power users expand. Opens automatically on parse errors. */
   const [sourceExpanded, setSourceExpanded] = useState(true);
-  /** Active Mermaid subtype — only used when diagramType === "mermaid" */
-  const [mermaidSubtype, setMermaidSubtype] = useState<MermaidSubtype>("flowchart");
   /** Tools / chat column — hide for focus on diagram (persisted). */
   const [leftPanelOpen, setLeftPanelOpen] = useState(true);
   const [showAiPopover, setShowAiPopover] = useState(false);
@@ -414,25 +242,18 @@ export function EditorClient({
     window.localStorage.setItem("flowstudio-ai-chat-width", String(Math.round(panel.getSize().inPixels)));
   }, []);
   const [isNavMenuOpen, setIsNavMenuOpen] = useState(false);
-  const [agentTasks, setAgentTasks] = useState<{ id: string; label: string; status: "pending" | "loading" | "completed" }[]>([]);
   const [compactAiContext, setCompactAiContext] = useState(false);
   const [isAgentMode, setIsAgentMode] = useState(false);
   const [forceCreateNext, setForceCreateNext] = useState(false);
-  const [layoutDir, setLayoutDir] = useState<"LR" | "TB">("LR");
-  const [layoutSpacing, setLayoutSpacing] = useState(1);
   const [pendingRevisionLabel, setPendingRevisionLabel] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [revisions, setRevisions] = useState<{ id: string; label: string | null; createdAt: Date }[]>([]);
   const [revisionsDirty, setRevisionsDirty] = useState(0);
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [applyingBrand, setApplyingBrand] = useState(false);
-  const [themeMenuOpen, setThemeMenuOpen] = useState(false);
   const presenceOthers = usePresence(currentProjectId, userEmail, userName);
   const [input, setInput] = useState("");
   const [darkMode, setDarkMode] = useState(false);
-  // ECharts needs an explicit theme (it doesn't inherit CSS dark mode) — follow
-  // the editor's real dark-mode toggle instead of a second, disconnected state.
-  const echartsUiTheme: EChartsUiTheme = darkMode ? "dark" : "light";
   const [toolEffects, setToolEffects] = useState<Record<string, { status: "applied" | "noop" | "error"; label: string; detail?: string }>>({});
   const brandKitInFlight = useRef<Set<string>>(new Set());
 
@@ -446,7 +267,6 @@ export function EditorClient({
       diagramSummary: summarizeDiagramSource(diagramType, source),
       compact: compactAiContext,
       useCaseId,
-      editorMode,
       mode: forceCreateNext || !source.trim() ? "create" : "patch",
     };
   });
@@ -501,19 +321,11 @@ export function EditorClient({
     onFinish: async ({ message }) => {
       const text = getMessageText(message);
       if (text.trim()) {
-        let cleaned = cleanModelOutput(text);
+        const cleaned = cleanModelOutput(text);
         if (cleaned && cleaned.trim() !== source.trim()) {
-          if (diagramType === "cloud" && cloudNeedsLayout(cleaned)) {
-            cleaned = await (await import("./diagrams/cloud-renderer")).autoLayoutCloud(cleaned);
-          } else if (diagramType === "erd" && cloudNeedsLayout(cleaned)) {
-            cleaned = await (await import("./diagrams/erd-renderer")).autoLayoutErd(cleaned);
-          } else if (diagramType === "orgchart" && cloudNeedsLayout(cleaned)) {
-            cleaned = await (await import("./diagrams/orgchart-renderer")).autoLayoutOrgChart(cleaned);
-          }
           setSource(cleaned);
         }
       }
-      setAgentTasks((prev) => prev.map(t => t.id === "generate" ? { ...t, status: "completed" } : t));
       showToast("Diagram updated · ⌘Z to undo");
       const lastUserMsg = messages.filter((m) => m.role === "user").slice(-1)[0];
       const lastUserInput = lastUserMsg ? getMessageText(lastUserMsg).trim() : "";
@@ -527,7 +339,6 @@ export function EditorClient({
     },
     onError: (err) => {
       console.error("[ai-chat]", err);
-      setAgentTasks([]);
       if (forceCreateNext) setForceCreateNext(false);
       const msg = err instanceof Error ? err.message : String(err);
       setAiError(msg.includes("API") || msg.includes("key") || msg.includes("auth")
@@ -539,15 +350,21 @@ export function EditorClient({
 
   const aiLoading = status === "submitted" || status === "streaming";
 
-  useEffect(() => {
-    if (status === "streaming") {
-      setAgentTasks([
-        { id: "intent", label: "Analyzing intent...", status: "completed" },
-        { id: "structure", label: "Planning structure...", status: "completed" },
-        { id: "generate", label: "Streaming diagram...", status: "loading" },
-      ]);
+  // Real progress, not a hardcoded list: "submitted" genuinely means the intent
+  // analysis call is running server-side (that's the only thing happening before
+  // the stream opens). Once streaming starts, the data-progress part the server
+  // writes (generate/route.ts) reflects the actual phase — generating, validating,
+  // repairing, done — reconciled in place by its stable id rather than appended.
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const progressPart = useMemo(() => {
+    if (!lastMessage || lastMessage.role !== "assistant") return null;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const parts: any[] = Array.isArray((lastMessage as { parts?: unknown[] }).parts) ? (lastMessage as { parts: any[] }).parts : [];
+    for (let i = parts.length - 1; i >= 0; i--) {
+      if (parts[i]?.type === "data-progress") return parts[i].data as { step: string; label: string; status: "active" | "done" | "error" };
     }
-  }, [status]);
+    return null;
+  }, [lastMessage]);
 
   const recordUndo = useCallback((snapshot: string) => {
     setUndoStack(prev => {
@@ -590,20 +407,8 @@ export function EditorClient({
     const meta = streamData[streamData.length - 1] as any;
     if (!meta) return;
     
-    if (meta.suggestedPresetId) {
-      const inferredUseCase: UseCaseId =
-        meta.suggestedPresetId === "landscape" ? "presentation" :
-        (["square_feed", "vertical_feed", "story_reel"].includes(meta.suggestedPresetId) ? "social" : "custom");
-      setUseCaseId(inferredUseCase);
-      setPresetId(meta.suggestedPresetId);
-    }
-    if (meta.typeSwitched && meta.diagramType) {
-      setDiagramType(meta.diagramType);
-      setEditorMode(getEditorModeForCategory(getDiagramTypeMeta(meta.diagramType).category));
-      if (meta.diagramType === "mermaid") setMermaidSubtype("flowchart");
-    }
     if (meta.assistantMessage) {
-      setAiNotice(meta.assistantMessage);
+      setAiNotice(stripAiSlop(meta.assistantMessage));
       setFollowUpSuggestions(null); // a fresh reply supersedes any prior turn's suggestions
     }
     if (Array.isArray(meta.suggestedFollowUps)) {
@@ -620,11 +425,7 @@ export function EditorClient({
       const detail = typeof meta.detailLevel === "string"
         ? meta.detailLevel.charAt(0).toUpperCase() + meta.detailLevel.slice(1)
         : "Medium";
-      // Use newly inferred preset from this response if present, otherwise current state
-      const activePresetId: SocialPresetId | "custom" = meta.suggestedPresetId ?? presetId;
-      const activePreset = activePresetId === "custom" ? null : getPreset(activePresetId as SocialPresetId);
-      const presetLabel = activePreset?.label ?? "Custom";
-      setAssumptionBanner(`Generated as: ${meta.resolvedSubtype} · ${presetLabel} · ${detail} detail`);
+      setAssumptionBanner(`Generated as: ${meta.resolvedSubtype} · ${detail} detail`);
     }
     // Dark-launched "missing pieces" hint — prompt-derived, informational only.
     if (
@@ -638,7 +439,7 @@ export function EditorClient({
         .filter((s: string) => s.length > 0 && !PLACEHOLDERS.has(s.toLowerCase()));
       setMissingPieces(pieces.length > 0 ? pieces.slice(0, 5) : null);
     }
-  }, [streamData, presetId]);
+  }, [streamData]);
 
   useEffect(() => {
     if (!missingPieces) return;
@@ -687,9 +488,6 @@ export function EditorClient({
 
   // Keep sourceRef current so tool effects can read latest source without stale closures.
   useEffect(() => { sourceRef.current = source; }, [source]);
-
-  const lastGoodSvgRef = useRef<string | null>(null);
-  const renderSeqRef = useRef(0);
 
   const handleUndo = useCallback(() => {
     setUndoStack(prev => {
@@ -821,7 +619,6 @@ export function EditorClient({
   const [toast, setToast] = useState<string | null>(null);
   const showToast = useCallback((msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); }, []);
   const [exportOpen, setExportOpen] = useState(false);
-  const [isMermaidPanning, setIsMermaidPanning] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -829,17 +626,12 @@ export function EditorClient({
   const exportRef = useRef<HTMLDivElement>(null);
   const navRef = useRef<HTMLDivElement>(null);
   const historyRef = useRef<HTMLDivElement>(null);
-  const themeRef = useRef<HTMLDivElement>(null);
   useClickOutside(exportRef, exportOpen, () => setExportOpen(false));
   const sourcePanelBodyId = useId();
   const leftPanelHydrated = useRef(false);
   const frameRef = useRef<HTMLDivElement>(null);
-  const echartsRef = useRef<EChartsRendererHandle>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
-  const mermaidViewportRef = useRef<HTMLDivElement>(null);
   const sourceScrollRef = useRef<HTMLDivElement>(null);
   const sourceTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const mermaidPanStartRef = useRef<{ x: number; y: number; left: number; top: number } | null>(null);
   const chatListRef = useRef<HTMLDivElement>(null);
   const sourceRef = useRef(source);
   const [undoStack, setUndoStack] = useState<string[]>([]);
@@ -879,83 +671,10 @@ export function EditorClient({
 
   const typeMeta = useMemo(() => getDiagramTypeMeta(diagramType), [diagramType]);
   const theme = useMemo(() => THEMES.find((t) => t.id === themeId) ?? THEMES[0], [themeId]);
-  const selectedFont = useMemo(() => FONT_OPTIONS.find((x) => x.id === fontId) ?? FONT_OPTIONS[0], [fontId]);
   const bgColor = paletteId === "default" ? (theme.themeVariables.background ?? "#f8fafc") : customBackground;
-  const accentColor = paletteId === "default" ? (theme.themeVariables.primaryColor ?? "#6366f1") : customAccent;
   const uiState = useMemo(() => ({ showGrid, fontId, paletteId, customBackground, customAccent, backgroundPattern }), [showGrid, fontId, paletteId, customBackground, customAccent, backgroundPattern]);
-  const sourceWithUi = useMemo(() => diagramType === "mermaid" ? embedUiInSource(source, uiState) : source, [source, uiState, diagramType]);
+  const sourceWithUi = source;
 
-  // Initialize Mermaid when theme OR brand-applied palette changes. Brand-kit
-  // colors override the active theme's primary/background so applying a brand
-  // kit visually changes the Mermaid diagram, not just the canvas background.
-  useEffect(() => {
-    if (diagramType !== "mermaid") return;
-    const base = buildMermaidConfig(theme);
-    const brandOverrides =
-      paletteId !== "default"
-        ? {
-            primaryColor: customAccent,
-            primaryBorderColor: customAccent,
-            lineColor: customAccent,
-            background: customBackground,
-          }
-        : {};
-    mermaid.initialize({
-      ...base,
-      themeVariables: { ...base.themeVariables, ...brandOverrides },
-      startOnLoad: false,
-      suppressErrorRendering: true,
-    });
-  }, [theme, diagramType, paletteId, customAccent, customBackground]);
-
-  const [mermaidRenderError, setMermaidRenderError] = useState<string | null>(null);
-
-  // Live Mermaid preview — renders the active source into the preview canvas.
-  // Streaming-aware: validates with mermaid.parse() before rendering, and on
-  // parse failure (common during AI streaming) it keeps the last good render
-  // visible so the canvas doesn't flicker to empty between chunks.
-  useEffect(() => {
-    if (diagramType !== "mermaid") return;
-    const node = innerRef.current;
-    if (!node) return;
-    const trimmed = source.trim();
-    if (!trimmed) {
-      node.innerHTML = "";
-      lastGoodSvgRef.current = null;
-      setMermaidRenderError(null);
-      return;
-    }
-    // Debounce while AI is actively streaming to avoid re-rendering on every
-    // chunk. Render immediately when not streaming so manual edits feel snappy.
-    const delay = aiLoading ? 120 : 0;
-    const seq = ++renderSeqRef.current;
-    const t = setTimeout(() => {
-      void (async () => {
-        try {
-          // Cheap validity check first — avoids the expensive render+throw cycle
-          // on partial streamed source.
-          await mermaid.parse(trimmed);
-          const { svg } = await mermaid.render(`m${seq}-${Math.floor(Math.random() * 1e9)}`, trimmed);
-          if (seq !== renderSeqRef.current) return;
-          lastGoodSvgRef.current = svg;
-          node.innerHTML = svg;
-          setMermaidRenderError(null);
-        } catch (e) {
-          if (seq !== renderSeqRef.current) return;
-          const msg = e instanceof Error ? e.message.split("\n")[0] : "Invalid Mermaid syntax";
-          // Mid-stream: keep last good silently. Otherwise surface the error so
-          // the user knows their manual edit broke parsing.
-          if (aiLoading) {
-            if (!lastGoodSvgRef.current) node.innerHTML = "";
-          } else {
-            setMermaidRenderError(msg);
-            if (!lastGoodSvgRef.current) node.innerHTML = "";
-          }
-        }
-      })();
-    }, delay);
-    return () => clearTimeout(t);
-  }, [source, diagramType, aiLoading, theme, paletteId, customAccent, customBackground]);
   // When loading an existing project, lastSavedSnapshot starts as "" — treat that as "saved" so we don't show "Unsaved" before any changes.
   const isDirty = useMemo(() => {
     if (lastSavedSnapshot.current === "" && projectId !== null) return false;
@@ -963,36 +682,6 @@ export function EditorClient({
   }, [sourceWithUi, themeId, title, projectId]);
   /** Derive from isDirty + saving — avoid useEffect(setState) on isDirty (can contribute to update loops). */
   const saveState: "saved" | "saving" | "unsaved" = saving ? "saving" : isDirty ? "unsaved" : "saved";
-
-  const handleAutoLayout = useCallback(async () => {
-    try {
-      let next = source;
-      const lo = { rankdir: layoutDir, spacingScale: layoutSpacing };
-      if (diagramType === "reactflow") {
-        next = await (await import("./diagrams/reactflow-renderer")).autoLayoutReactFlow(source, lo);
-      } else if (diagramType === "cloud") {
-        next = await (await import("./diagrams/cloud-renderer")).autoLayoutCloud(source, lo);
-      } else if (diagramType === "erd") {
-        next = await (await import("./diagrams/erd-renderer")).autoLayoutErd(source, lo);
-      } else if (diagramType === "orgchart") {
-        next = await (await import("./diagrams/orgchart-renderer")).autoLayoutOrgChart(source, lo);
-      } else if (diagramType === "bpmn") {
-        next = await (await import("./diagrams/bpmn-renderer")).autoLayoutBpmn(source);
-      } else {
-        return;
-      }
-      if (next === source) {
-        showToast("Layout unchanged");
-        return;
-      }
-      recordUndo(source);
-      setSource(next);
-      showToast("Auto-layout applied · ⌘Z to undo");
-    } catch (e) {
-      console.error("[auto-layout]", e);
-      showToast("Could not auto-layout");
-    }
-  }, [diagramType, source, recordUndo, showToast, layoutDir, layoutSpacing]);
 
   const handleApplyBrandKit = useCallback(async (opts?: { silent?: boolean }): Promise<boolean> => {
     setApplyingBrand(true);
@@ -1028,6 +717,19 @@ export function EditorClient({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Cheap client-side backstop for the prose the model writes for the user to
+  // read (chat replies, assumption notes, tool explanations) — never applied to
+  // diagram source, where an em dash or "delve" could be legitimate user content
+  // (a label, a title) rather than model filler.
+  const stripAiSlop = (text: string) => {
+    return text
+      .replace(/\s*[—–]\s*/g, ", ")
+      .replace(/\b(certainly|delve into|dive into|let's dive in|it's worth noting that|i'd be happy to)\b/gi, "")
+      .replace(/[ \t]{2,}/g, " ")
+      .replace(/,\s*,/g, ",")
+      .trim();
+  };
+
   const cleanModelOutput = (text: string) => {
     // Strip markdown code blocks
     let cleaned = text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "");
@@ -1038,16 +740,12 @@ export function EditorClient({
     return cleaned.trim();
   };
 
-  const handleNodeClick = useCallback((nodeId: string) => {
-    setInput(`Edit node [${nodeId}]: `);
-  }, [setInput]);
-
   // Keyboard shortcuts
   const handleSave = useCallback(async (labelOverride?: string) => {
     if (saving) return;
     setSaving(true);
     try {
-      const sourceToSave = diagramType === "mermaid" ? embedUiInSource(source, uiState) : source;
+      const sourceToSave = source;
       const label = labelOverride ?? pendingRevisionLabel ?? undefined;
       if (currentProjectId) {
         await saveProject(currentProjectId, { source: sourceToSave, themeId, title, diagramType }, label);
@@ -1077,10 +775,6 @@ export function EditorClient({
 
   const handleUseCaseChange = useCallback((id: UseCaseId) => {
     setUseCaseId(id);
-    // D-07: use-case change drives preset to canonical default
-    if (id === "presentation") setPresetId("landscape");
-    else if (id === "social") setPresetId("square_feed");
-    // "documentation" and "custom" do not change the preset
   }, []);
 
   // Apply agent tool results to editor state; record each outcome in toolEffects.
@@ -1124,10 +818,9 @@ export function EditorClient({
         effects[id] = { status: "applied", label: "Patch applied" };
       } else if (toolName === "apply_patch" && typeof result.find === "string") {
         const { source: next, replaced } = applyPatch(liveSource, result.find, result.replace ?? "");
-        const isJsonDiagram = diagramType !== "mermaid" && diagramType !== "bpmn";
         if (replaced === 0) {
           effects[id] = { status: "noop", label: "Couldn't find that text", detail: result.find.slice(0, 60) };
-        } else if (isJsonDiagram && !isValidJson(next)) {
+        } else if (!isValidJson(next)) {
           effects[id] = { status: "error", label: "Patch would break the diagram", detail: "result was not valid JSON" };
         } else {
           liveSource = next;
@@ -1135,24 +828,11 @@ export function EditorClient({
           setSource(next);
           effects[id] = { status: "applied", label: `Replaced ${replaced} occurrence${replaced === 1 ? "" : "s"}` };
         }
-      } else if (toolName === "apply_ops" && diagramType === "freeform" && typeof result.sourceCode === "string") {
+      } else if (toolName === "apply_ops" && typeof result.sourceCode === "string") {
         liveSource = result.sourceCode;
         mutated = true;
         setSource(result.sourceCode);
         effects[id] = { status: "applied", label: `Applied ${result.applied} op${result.applied === 1 ? "" : "s"}` };
-      } else if (toolName === "update_node" && diagramType === "reactflow") {
-        try {
-          const parsed = JSON.parse(liveSource);
-          const nodes: ReactFlowSourceNode[] = Array.isArray(parsed.nodes) ? parsed.nodes : [];
-          const updatedNodes = nodes.map((n) => n.id === result.id ? { ...n, data: result.data ? { ...n.data, ...result.data } : n.data, style: result.style ? { ...n.style, ...result.style } : n.style } : n);
-          const next = JSON.stringify({ ...parsed, nodes: updatedNodes }, null, 2);
-          liveSource = next;
-          mutated = true;
-          setSource(next);
-          effects[id] = { status: "applied", label: `Updated node ${result.id}` };
-        } catch {
-          effects[id] = { status: "error", label: "Couldn't update node" };
-        }
       } else if (toolName === "set_title" && result.title) {
         setTitle(result.title);
         effects[id] = { status: "applied", label: `Renamed to "${result.title}"` };
@@ -1211,7 +891,6 @@ export function EditorClient({
   }, [historyOpen, currentProjectId, revisionsDirty]);
 
   useClickOutside(historyRef, historyOpen, () => setHistoryOpen(false));
-  useClickOutside(themeRef, themeMenuOpen, () => setThemeMenuOpen(false));
   useClickOutside(navRef, isNavMenuOpen, () => setIsNavMenuOpen(false));
 
   const handleRestore = useCallback(async (revisionId: string) => {
@@ -1220,23 +899,7 @@ export function EditorClient({
     try {
       const { source: restored } = await restoreRevision(currentProjectId, revisionId);
       recordUndo(source);
-      const parsed = diagramType === "mermaid"
-        ? parseUiFromSource(restored)
-        : { source: restored, ui: {} as UiState };
-      setSource(parsed.source);
-      // Also restore UI metadata (palette, accent, font, etc.) so the diagram
-      // visually matches the snapshot, not just structurally.
-      if (diagramType === "mermaid") {
-        const ui = parsed.ui;
-        if (typeof ui.showGrid === "boolean") setShowGrid(ui.showGrid);
-        if (ui.fontId) setFontId(ui.fontId);
-        if (ui.paletteId) setPaletteId(ui.paletteId);
-        if (ui.customBackground) setCustomBackground(ui.customBackground);
-        if (ui.customAccent) setCustomAccent(ui.customAccent);
-        if (ui.backgroundPattern) {
-          setBackgroundPattern(ui.backgroundPattern as "none" | "dots" | "grid" | "lines");
-        }
-      }
+      setSource(restored);
       setRevisionsDirty((v) => v + 1);
       showToast("Revision restored · ⌘Z to undo");
       setHistoryOpen(false);
@@ -1246,15 +909,7 @@ export function EditorClient({
     } finally {
       setRestoringId(null);
     }
-  }, [currentProjectId, source, diagramType, recordUndo, showToast]);
-
-  const blobToDataUrl = (b: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-      const r = new FileReader();
-      r.onload = () => resolve(r.result as string);
-      r.onerror = reject;
-      r.readAsDataURL(b);
-    });
+  }, [currentProjectId, source, recordUndo, showToast]);
 
   const pngDataUrlToJpeg = (pngDataUrl: string, quality: number, backgroundColor: string): Promise<string> =>
     new Promise((resolve, reject) => {
@@ -1275,26 +930,12 @@ export function EditorClient({
     });
 
   const capturePngDataUrl = useCallback(async (): Promise<string | null> => {
-    if (diagramType === "mermaid") {
-      const svg = innerRef.current?.querySelector("svg");
-      if (!svg) return null;
-      return await toPng(svg as unknown as HTMLElement, { pixelRatio: pngScale, backgroundColor: bgColor });
-    }
-    if (diagramType === "excalidraw") {
-      const { exportExcalidrawToPng } = await import("./diagrams/excalidraw-renderer");
-      const b = await exportExcalidrawToPng(source);
-      return b ? await blobToDataUrl(b) : null;
-    }
-    if (diagramType === "echarts") {
-      const bg = echartsUiTheme === "dark" ? "#0f172a" : "#ffffff";
-      return echartsRef.current?.getDataURL({ type: "png", pixelRatio: pngScale, backgroundColor: bg }) ?? null;
-    }
     const node = frameRef.current;
     if (!node) return null;
     return await toPng(node, { pixelRatio: pngScale, filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
-  }, [diagramType, source, echartsUiTheme, pngScale, bgColor]);
+  }, [pngScale]);
 
-  const handleExport = useCallback(async (format: "png" | "svg" | "zip" | "pdf") => {
+  const handleExport = useCallback(async (format: "png" | "svg" | "pdf") => {
     setIsExporting(true);
     try {
       const fn = title || "diagram";
@@ -1306,7 +947,7 @@ export function EditorClient({
         // the size. JPEG has no alpha channel, so flatten transparent PNGs onto
         // the diagram's own background color first (otherwise transparent areas
         // render solid black).
-        const jpegDu = await pngDataUrlToJpeg(du, 0.85, bgColor || "#ffffff");
+        const jpegDu = await pngDataUrlToJpeg(du, 0.85, "#ffffff");
         const { jsPDF } = await import("jspdf");
         const img = new Image();
         await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error("image load failed")); img.src = jpegDu; });
@@ -1317,110 +958,25 @@ export function EditorClient({
         downloadBlob(pdf.output("blob"), `${fn}.pdf`);
         return;
       }
-      if (diagramType === "mermaid" && (format === "png" || format === "svg")) {
-        const svg = innerRef.current?.querySelector("svg");
-        if (!svg) return;
-        if (format === "svg") {
-          const serialized = new XMLSerializer().serializeToString(svg);
-          downloadBlob(new Blob([serialized], { type: "image/svg+xml" }), `${fn}.svg`);
-          return;
-        }
-        const du = await toPng(svg as unknown as HTMLElement, { pixelRatio: pngScale, backgroundColor: bgColor });
-        downloadBlob(await (await fetch(du)).blob(), `${fn}.png`);
-        return;
-      }
-      if (diagramType === "excalidraw") {
-        if (format === "png") { 
-          const { exportExcalidrawToPng } = await import("./diagrams/excalidraw-renderer"); 
-          const b = await exportExcalidrawToPng(source); 
-          if (b) downloadBlob(b, `${fn}.png`); 
-        } else if (format === "svg") { 
-          const { exportExcalidrawToSvg } = await import("./diagrams/excalidraw-renderer"); 
-          const s = await exportExcalidrawToSvg(source); 
-          if (s) downloadBlob(new Blob([s], { type: "image/svg+xml" }), `${fn}.svg`); 
-        }
-        return;
-      }
-      if (diagramType === "echarts") {
-        const bg = echartsUiTheme === "dark" ? "#0f172a" : "#ffffff";
-        if (format === "png") {
-          const url = echartsRef.current?.getDataURL({ type: "png", pixelRatio: pngScale, backgroundColor: bg });
-          if (url) {
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${fn}.png`;
-            a.click();
-          }
-          return;
-        }
-        if (format === "svg") {
-          const url = echartsRef.current?.getDataURL({ type: "svg" });
-          if (url) {
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `${fn}.svg`;
-            a.click();
-          }
-          return;
-        }
-        return;
-      }
       const node = frameRef.current;
       if (!node) return;
-      if (format === "png") { 
-        const du = await toPng(node, { pixelRatio: pngScale, filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") }); 
-        downloadBlob(await (await fetch(du)).blob(), `${fn}.png`); 
-      } else if (format === "svg") { 
-        const s = await toSvg(node, { filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") }); 
-        downloadBlob(await (await fetch(s)).blob(), `${fn}.svg`); 
-      } else if (format === "zip" && diagramType === "mermaid") {
-        const zip = new JSZip();
-        const pw = node.style.width, ph = node.style.height;
-        try {
-          for (const p of SOCIAL_PRESETS) {
-            node.style.width = `${p.width}px`; 
-            node.style.height = `${p.height}px`;
-            await new Promise((r) => setTimeout(r, 150));
-            const du = await toPng(node, { pixelRatio: pngScale });
-            zip.file(`${p.id}-${p.width}x${p.height}.png`, await (await fetch(du)).blob());
-          }
-          if (zipIncludeCustom) {
-            const w = Math.max(200, Math.min(8192, Math.round(customExportWidth)));
-            const h = Math.max(200, Math.min(8192, Math.round(customExportHeight)));
-            node.style.width = `${w}px`;
-            node.style.height = `${h}px`;
-            await new Promise((r) => setTimeout(r, 150));
-            const du = await toPng(node, { pixelRatio: pngScale });
-            zip.file(`custom-${w}x${h}.png`, await (await fetch(du)).blob());
-          }
-        } finally { 
-          node.style.width = pw; 
-          node.style.height = ph; 
-        }
-        downloadBlob(await zip.generateAsync({ type: "blob" }), `${fn}-social.zip`);
+      if (format === "png") {
+        const du = await toPng(node, { pixelRatio: pngScale, filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
+        downloadBlob(await (await fetch(du)).blob(), `${fn}.png`);
+      } else if (format === "svg") {
+        const s = await toSvg(node, { filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
+        downloadBlob(await (await fetch(s)).blob(), `${fn}.svg`);
       }
     } finally {
       setIsExporting(false);
     }
-  }, [diagramType, source, title, echartsUiTheme, pngScale, zipIncludeCustom, customExportWidth, customExportHeight, bgColor, capturePngDataUrl]);
+  }, [title, pngScale, capturePngDataUrl]);
 
   const handleCopyImage = useCallback(async () => {
     setIsExporting(true);
     try {
       let dataUrl: string | undefined;
-      if (diagramType === "mermaid") {
-        const svg = innerRef.current?.querySelector("svg");
-        if (svg) dataUrl = await toPng(svg as unknown as HTMLElement, { pixelRatio: pngScale, backgroundColor: bgColor });
-      } else if (diagramType === "excalidraw") {
-        const { exportExcalidrawToPng } = await import("./diagrams/excalidraw-renderer");
-        const blob = await exportExcalidrawToPng(source);
-        if (!blob) return;
-        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-        showToast("Image copied — paste it anywhere");
-        return;
-      } else if (diagramType === "echarts") {
-        dataUrl = echartsRef.current?.getDataURL({ type: "png", pixelRatio: pngScale, backgroundColor: echartsUiTheme === "dark" ? "#0f172a" : "#ffffff" });
-      } else if (frameRef.current) {
+      if (frameRef.current) {
         dataUrl = await toPng(frameRef.current, { pixelRatio: pngScale, filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
       }
       if (!dataUrl) return;
@@ -1434,7 +990,7 @@ export function EditorClient({
     } finally {
       setIsExporting(false);
     }
-  }, [diagramType, source, pngScale, bgColor, echartsUiTheme, showToast]);
+  }, [pngScale, showToast]);
 
   const handleCopySource = useCallback(async () => {
     try {
@@ -1529,42 +1085,6 @@ export function EditorClient({
     }
   }, [currentProjectId, sourceWithUi, themeId, title, diagramType, captureSharePreview, showToast]);
 
-  const handleSwitchType = useCallback((newType: DiagramType) => {
-    if (newType === diagramType) { setShowTypePanel(false); return; }
-    recordUndo(source);
-    setDiagramType(newType);
-    setEditorMode(getEditorModeForCategory(getDiagramTypeMeta(newType).category));
-    if (newType === "mermaid") {
-      setMermaidSubtype("flowchart");
-      setSource(MERMAID_SUBTYPE_META[0].starter);
-    } else {
-      setSource(DIAGRAM_TYPE_DEFAULTS[newType]);
-    }
-    setShowTypePanel(false);
-    setSourceExpanded(false);
-    sourceAutoExpandedRef.current = false;
-    setParseError(null);
-    setAiError(null);
-  }, [diagramType, source, recordUndo]);
-
-  const handleSwitchMermaidSubtype = useCallback((subtype: MermaidSubtype) => {
-    if (subtype === mermaidSubtype) return;
-    const meta = getMermaidSubtypeMeta(subtype);
-    setMermaidSubtype(subtype);
-    setSource(meta.starter);
-    setParseError(null);
-    setAiError(null);
-  }, [mermaidSubtype]);
-
-  const handleResetView = useCallback(() => {
-    setZoom(1);
-    const vp = mermaidViewportRef.current;
-    if (vp) {
-      const targetLeft = Math.max(0, (vp.scrollWidth - vp.clientWidth) / 2);
-      vp.scrollTo({ left: targetLeft, top: 0, behavior: "smooth" });
-    }
-  }, []);
-
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
@@ -1575,10 +1095,6 @@ export function EditorClient({
         e.preventDefault();
         setLeftPanelOpen((p) => !p);
       }
-      if ((e.metaKey || e.ctrlKey) && e.key === "0") {
-        e.preventDefault();
-        handleResetView();
-      }
       if ((e.metaKey || e.ctrlKey) && (e.key === "f" || e.key === "F")) {
         e.preventDefault();
         openSearch();
@@ -1586,7 +1102,7 @@ export function EditorClient({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleSave, handleResetView, openSearch]);
+  }, [handleSave, openSearch]);
 
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
@@ -1610,17 +1126,6 @@ export function EditorClient({
         icon: <Palette className="h-4 w-4" />,
         run: () => void handleApplyBrandKit(),
       },
-      ...(diagramType === "mermaid"
-        ? [
-            {
-              id: "mermaid-theme",
-              label: "Change Mermaid theme",
-              hint: "Style",
-              icon: <Paintbrush className="h-4 w-4" />,
-              run: () => setThemeMenuOpen(true),
-            },
-          ]
-        : []),
       {
         id: "version-history",
         label: "Open version history",
@@ -1650,13 +1155,6 @@ export function EditorClient({
         run: () => setIsAgentMode((v) => !v),
       },
       {
-        id: "change-diagram-type",
-        label: "Change diagram type",
-        hint: "Type",
-        icon: <DiagramTypeIcon type={diagramType} size={14} />,
-        run: () => setShowTypePanel(true),
-      },
-      {
         id: "toggle-compact-ai-context",
         label: compactAiContext ? "Send full diagram context to AI" : "Send less diagram context to AI",
         hint: compactAiContext ? "Compact: on" : "Compact: off",
@@ -1667,27 +1165,13 @@ export function EditorClient({
     [diagramType, darkMode, isAgentMode, router, handleApplyBrandKit, compactAiContext]
   );
 
-  const preset = useMemo(() => presetId === "custom" ? null : getPreset(presetId), [presetId]);
-  const frameW = preset?.width ?? customExportWidth;
-  const frameH = preset?.height ?? customExportHeight;
-  const previewScale = Math.min(1.8, Math.max(0.4, zoom));
-
   const EDIT_CHIPS = ["Change colors", "Add a step", "Simplify", "Add labels", "Fix layout"];
 
   const QUICK_PROMPTS: Partial<Record<DiagramType, string[]>> = {
-    mermaid: getMermaidSubtypeMeta(mermaidSubtype).quickPrompts,
-    excalidraw: ["Add more steps", "Create a user journey", "Sketch a system design"],
-    reactflow: ["Add a decision node", "Build an org chart", "Add error path"],
-    cloud: ["Add a load balancer", "Put it on GCP", "Add a cache layer", "Add a message queue"],
-    erd: ["Add a junction table", "Add a foreign key", "Add timestamps", "Normalize this schema"],
-    orgchart: ["Add a direct report", "Add an HR department", "Insert a VP layer", "Add a co-founder"],
-    echarts: ["Change to line chart", "Add second series", "Make it a pie chart", "Add gradient colors"],
-    nivo: ["Change to bar chart", "Add monthly data", "Use dark theme"],
-    bpmn: ["Add approval gateway", "Add error boundary", "Add a swimlane"],
     freeform: ["Add shapes", "Create a wireframe", "Add text labels"],
   };
 
-  const sourceLabel = ["mermaid", "bpmn"].includes(diagramType) ? "Source" : "JSON Source";
+  const sourceLabel = "JSON Source";
 
   return (
     <div className={`flex min-h-0 w-full flex-1 flex-col overflow-hidden bg-white${darkMode ? " dark" : ""}`}>
@@ -1865,31 +1349,53 @@ export function EditorClient({
                   </button>
                 </div>
 
-          {/* AI Task List (Plan Mode) */}
-          {aiLoading && agentTasks.length > 0 && (
+          {/* AI Progress — driven by real server-side phase events (data-progress),
+              not a client-authored fake step list. While status is "submitted"
+              there is genuinely nothing to report yet but the intent-analysis
+              call in flight, so that's exactly what this says. */}
+          {aiLoading && (
             <div className="shrink-0 border-b border-white/5 bg-indigo-500/5 dark:bg-indigo-500/10 px-5 py-3">
               <div className="flex items-center gap-2 mb-2">
                 <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
-                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400">Agent Plan</span>
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400">
+                  {isAgentMode ? "Agent" : "AI"}
+                </span>
               </div>
-              <div className="space-y-2">
-                {agentTasks.map((task) => (
-                  <div key={task.id} className="flex items-center gap-3">
-                    {task.status === "completed" ? (
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
-                    ) : task.status === "loading" ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
-                    ) : (
-                      <Circle className="h-3.5 w-3.5 text-slate-700 dark:text-slate-200" />
-                    )}
-                    <span className={`text-xs ${task.status === "loading" ? "text-white font-medium" : "text-slate-500"}`}>
-                      {task.label}
-                    </span>
-                  </div>
-                ))}
+              <div className="flex items-center gap-3">
+                {progressPart?.status === "error" ? (
+                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
+                ) : progressPart?.status === "done" ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                ) : (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin text-indigo-400" />
+                )}
+                <span className="text-xs text-white font-medium">
+                  {progressPart?.label ?? "Analyzing your request…"}
+                </span>
               </div>
             </div>
           )}
+
+          {/* Live model reasoning, when the selected model produces it (e.g.
+              extended-thinking Claude, Gemini thinking). Not synthesized —
+              this is the actual "reasoning" part AI SDK streams from the model,
+              forwarded via sendReasoning on the agent route. */}
+          {isAgentMode && aiLoading && (() => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const parts: any[] = lastMessage && Array.isArray((lastMessage as { parts?: unknown[] }).parts)
+              ? (lastMessage as { parts: any[] }).parts
+              : [];
+            const reasoningText = parts.filter((p) => p?.type === "reasoning").map((p) => p.text).join("").trim();
+            if (!reasoningText) return null;
+            return (
+              <div className="shrink-0 border-b border-white/5 bg-slate-500/5 dark:bg-slate-500/10 px-5 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mb-1.5">Thinking</div>
+                <p className="text-xs italic text-slate-500 dark:text-slate-400 leading-relaxed whitespace-pre-wrap">
+                  {reasoningText.slice(-600)}
+                </p>
+              </div>
+            );
+          })()}
 
           {/* Chat History */}
           <div ref={chatListRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 no-scrollbar">
@@ -1898,29 +1404,8 @@ export function EditorClient({
                 <div style={{ width: 44, height: 44, background: "#EEF2FF", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 12, fontSize: 22, flexShrink: 0 }}>✦</div>
                 <div style={{ fontFamily: "var(--font-mono-fs)", fontSize: 13, color: "var(--charcoal)", marginBottom: 6 }}>How can I help you build?</div>
                 <div style={{ fontFamily: "var(--font-sans-fs)", fontSize: 12, color: "#999", lineHeight: 1.5, fontWeight: 300 }}>
-                  Describe the diagram or process you want to create. I handle Mermaid, Charts, Whiteboards and more.
+                  Describe the sketch, whiteboard, or spatial map you want to create.
                 </div>
-                <button
-                  type="button"
-                  onClick={() => setShowTypeHelp(true)}
-                  className="mt-3 flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-600 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-300"
-                >
-                  📌 Not sure which diagram type to use?
-                </button>
-                {showTypeHelp && (
-                  <div className="mt-3 max-w-xs rounded-lg border border-indigo-200 bg-indigo-50/60 p-3 text-left dark:border-indigo-800 dark:bg-indigo-950/40">
-                    <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
-                      Just describe your idea in plain language — the AI reads it and automatically picks the best diagram type (flowchart, cloud architecture, ERD, timeline, comparison card, and 17 others). You can also pick one yourself with the <span className="font-medium text-indigo-600 dark:text-indigo-300">type switcher</span> in the top toolbar, or change it anytime after generating.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => { setShowTypeHelp(false); setShowTypePanel(true); }}
-                      className="mt-2 text-[11px] font-medium text-indigo-600 underline dark:text-indigo-300"
-                    >
-                      Browse all 22 types →
-                    </button>
-                  </div>
-                )}
               </div>
             )}
             
@@ -2004,7 +1489,7 @@ export function EditorClient({
                           {!isDone ? <Settings2 className="h-3.5 w-3.5 text-indigo-400 animate-spin" /> : failed ? <AlertCircle className="h-3.5 w-3.5 text-amber-500" /> : <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />}
                           <span className="font-semibold">{isDone && effect ? effect.label : (verbs[toolName] ?? "Using tool…")}</span>
                         </div>
-                        {explanation && <span className="pl-5 text-slate-400 dark:text-slate-500">{explanation}</span>}
+                        {explanation && <span className="pl-5 text-slate-400 dark:text-slate-500">{stripAiSlop(explanation)}</span>}
                         {effect?.detail && <span className="pl-5 font-mono text-slate-400 dark:text-slate-500">{effect.detail}</span>}
                       </div>
                     );
@@ -2331,129 +1816,10 @@ export function EditorClient({
             {"</>"} Source
           </button>
             <div className="hidden lg:block h-4 w-px shrink-0" style={{ background: "var(--fs-border)" }} />
-            {/* Mode tabs — outcome-first grouping, filters the type dropdown below */}
-            <div
-              className="hidden lg:flex shrink-0 items-center gap-0.5 rounded-md p-0.5"
-              style={{ background: darkMode ? "rgba(255,255,255,0.06)" : "var(--cream-dark)" }}
-              role="tablist"
-              aria-label="Editor mode"
-            >
-              {(
-                [
-                  { id: "business", label: "Business" },
-                  { id: "technology", label: "Technology" },
-                  { id: "marketing", label: "Marketing" },
-                  { id: "art", label: "Art Board" },
-                ] as { id: EditorMode; label: string }[]
-              ).map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={editorMode === m.id}
-                  onClick={() => setEditorMode(m.id)}
-                  className="fs-btn-press"
-                  style={{
-                    fontFamily: "var(--font-mono-fs)",
-                    fontSize: 10,
-                    letterSpacing: "0.04em",
-                    textTransform: "uppercase",
-                    padding: "3px 9px",
-                    borderRadius: 5,
-                    border: "none",
-                    cursor: "pointer",
-                    background: editorMode === m.id ? "var(--fs-indigo)" : "transparent",
-                    color: editorMode === m.id ? "#fff" : "var(--charcoal-light)",
-                  }}
-                >
-                  {m.label}
-                </button>
-              ))}
+            <div className="hidden lg:flex shrink-0 items-center gap-1.5" style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", color: "var(--charcoal-light)" }}>
+              <DiagramTypeIcon type={diagramType} size={10} />
+              {typeMeta.label}
             </div>
-            <div className="hidden lg:block h-4 w-px shrink-0" style={{ background: "var(--fs-border)" }} />
-            {/* Zoom */}
-            <div className="hidden lg:flex shrink-0 items-center gap-0.5">
-              <button type="button" onClick={() => setZoom((z) => Math.max(0.3, z - 0.1))} className="rounded-sm px-1.5 py-1 text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">−</button>
-              <span className="w-11 text-center text-xs tabular-nums text-slate-600 dark:text-slate-300">{Math.round(zoom * 100)}%</span>
-              <button type="button" onClick={() => setZoom((z) => Math.min(3, z + 0.1))} className="rounded-sm px-1.5 py-1 text-xs text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700">+</button>
-              <button
-                type="button"
-                onClick={handleResetView}
-                className="rounded-sm px-1.5 py-1 text-xs text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700"
-                title="Reset zoom & pan (⌘0)"
-              >
-                ↺
-              </button>
-            </div>
-            
-            <div className="hidden lg:block h-4 w-px shrink-0" style={{ background: "var(--fs-border)" }} />
-            <div className="relative hidden lg:block shrink-0">
-              <button
-                type="button"
-                onClick={() => setShowTypePanel((v) => !v)}
-                className="flex items-center gap-1.5 fs-btn-press"
-                style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, letterSpacing: "0.04em", textTransform: "uppercase", background: "var(--fs-indigo-bg)", color: "var(--fs-indigo)", padding: "3px 10px", borderRadius: 2, border: "1px solid var(--fs-indigo-border)", cursor: "pointer" }}
-                title="Change diagram type"
-              >
-                <DiagramTypeIcon type={diagramType} size={10} />
-                {diagramType === "mermaid" ? getMermaidSubtypeMeta(mermaidSubtype).label : typeMeta.label} ▾
-              </button>
-              {showTypePanel && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowTypePanel(false)} />
-                  <div
-                    className="absolute left-0 top-full z-50 mt-1.5 max-h-96 w-72 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-800"
-                    role="menu"
-                  >
-                    <p className="px-2 pt-1 pb-1.5 text-[10px] font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
-                      Switch diagram type
-                    </p>
-                    {DIAGRAM_TYPE_META.filter((meta) =>
-                      EDITOR_MODE_CATEGORIES[editorMode].includes(meta.category)
-                    ).map((meta) => (
-                      <button
-                        key={meta.id}
-                        type="button"
-                        role="menuitem"
-                        onClick={() => handleSwitchType(meta.id)}
-                        className={`flex w-full items-start gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-slate-50 dark:hover:bg-slate-700 ${meta.id === diagramType ? "bg-indigo-50 dark:bg-indigo-950" : ""}`}
-                      >
-                        <DiagramTypeIcon type={meta.id} size={14} />
-                        <span className="min-w-0 flex-1">
-                          <span className="block font-medium text-slate-700 dark:text-slate-200">{meta.label}</span>
-                          <span className="block truncate text-[10px] text-slate-400 dark:text-slate-500">{meta.description}</span>
-                        </span>
-                      </button>
-                    ))}
-                    <p className="px-2 pt-1.5 pb-1 text-[10px] text-amber-600 dark:text-amber-400">
-                      Switching resets the canvas to a blank starter for the new type.
-                    </p>
-                  </div>
-                </>
-              )}
-            </div>
-
-            {(["mermaid", "reactflow", "nivo", "bpmn"] as DiagramType[]).includes(diagramType) && (
-              <>
-                <div className="hidden xl:block h-4 w-px shrink-0 bg-slate-200 dark:bg-slate-700" />
-                <div className="hidden xl:flex shrink-0 items-center gap-1.5">
-                  <select
-                    value={presetId}
-                    onChange={(e) => setPresetId(e.target.value as SocialPresetId)}
-                    className="rounded-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 hover:border-slate-300 dark:hover:border-slate-600 focus:border-indigo-400 focus:outline-hidden focus:ring-2 focus:ring-indigo-100"
-                    aria-label="Canvas size preset"
-                  >
-                    {SOCIAL_PRESETS.map((p) => (
-                      <option key={p.id} value={p.id}>{p.label}</option>
-                    ))}
-                    <option value="custom">Custom</option>
-                  </select>
-                  <span className="text-xs tabular-nums text-slate-400 dark:text-slate-500" aria-label="Export dimensions">
-                    {frameW}×{frameH}
-                  </span>
-                </div>
-              </>
-            )}
           </div>
 
           <div className="ml-auto flex shrink-0 items-center gap-1.5">
@@ -2495,101 +1861,6 @@ export function EditorClient({
               >
                 <Palette className="h-4 w-4" />
               </button>
-              {diagramType === "mermaid" && (
-                <div ref={themeRef} className="relative" data-theme-menu-root>
-                  <button
-                    type="button"
-                    onClick={() => setThemeMenuOpen((v) => !v)}
-                    title={`Theme: ${theme.name}`}
-                    className="flex items-center gap-1 px-2 py-2 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                    aria-expanded={themeMenuOpen}
-                  >
-                    <Paintbrush className="h-4 w-4" />
-                    <ChevronDown className="h-3 w-3" />
-                  </button>
-                  {themeMenuOpen && (
-                    <div className="absolute right-0 top-full mt-1 z-50 w-56 max-h-96 overflow-y-auto rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-xl">
-                      <div className="sticky top-0 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
-                        Mermaid theme
-                      </div>
-                      <ul className="divide-y divide-slate-100 dark:divide-slate-800">
-                        {THEMES.map((t) => {
-                          const active = t.id === themeId;
-                          const swatch =
-                            t.themeVariables.primaryColor ?? "#6366f1";
-                          const bg = t.themeVariables.background ?? "#f8fafc";
-                          return (
-                            <li key={t.id}>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  if (t.id !== themeId) {
-                                    recordUndo(source);
-                                    setThemeId(t.id);
-                                    showToast(`Theme: ${t.name} · ⌘Z to undo`);
-                                  }
-                                  setThemeMenuOpen(false);
-                                }}
-                                className={`w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 dark:hover:bg-slate-800 ${active ? "bg-indigo-50 dark:bg-indigo-950" : ""}`}
-                              >
-                                <span
-                                  className="h-5 w-5 shrink-0 rounded-sm border border-slate-200 dark:border-slate-700"
-                                  style={{ background: bg }}
-                                >
-                                  <span
-                                    className="block h-full w-full rounded-sm"
-                                    style={{
-                                      background: `linear-gradient(135deg, ${swatch} 0 50%, transparent 50% 100%)`,
-                                    }}
-                                  />
-                                </span>
-                                <span className="text-xs font-medium text-slate-700 dark:text-slate-200 truncate">
-                                  {t.name}
-                                </span>
-                                {active && (
-                                  <CheckCircle2 className="ml-auto h-3.5 w-3.5 text-indigo-600" />
-                                )}
-                              </button>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-              )}
-              {(diagramType === "reactflow" || diagramType === "cloud" || diagramType === "erd" || diagramType === "orgchart") && (
-                <div className="flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 p-0.5" title="Layout direction & spacing — then click the wand to re-layout">
-                  <button
-                    type="button"
-                    onClick={() => setLayoutDir((d) => (d === "LR" ? "TB" : "LR"))}
-                    title={layoutDir === "LR" ? "Direction: left-to-right (click for top-down)" : "Direction: top-down (click for left-to-right)"}
-                    className="rounded-md px-1.5 py-1 text-[11px] font-medium text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  >
-                    {layoutDir === "LR" ? "→" : "↓"}
-                  </button>
-                  <select
-                    value={layoutSpacing}
-                    onChange={(e) => setLayoutSpacing(Number(e.target.value))}
-                    title="Spacing between nodes"
-                    className="rounded-md bg-transparent px-1 py-1 text-[11px] text-slate-500 dark:text-slate-400 focus:outline-none"
-                  >
-                    <option value={0.7}>Compact</option>
-                    <option value={1}>Normal</option>
-                    <option value={1.5}>Spacious</option>
-                  </select>
-                </div>
-              )}
-              {(diagramType === "reactflow" || diagramType === "cloud" || diagramType === "erd" || diagramType === "orgchart" || diagramType === "bpmn") && (
-                <button
-                  type="button"
-                  onClick={() => void handleAutoLayout()}
-                  title={diagramType === "cloud" ? "Auto-layout the architecture" : diagramType === "erd" ? "Auto-layout the schema" : diagramType === "orgchart" ? "Auto-layout the org chart" : diagramType === "bpmn" ? "Auto-layout the process" : "Auto-layout the node graph"}
-                  className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-lg transition-colors"
-                >
-                  <Wand2 className="h-4 w-4" />
-                </button>
-              )}
               <div ref={historyRef} className="relative" data-history-menu-root>
                 <button
                   type="button"
@@ -2662,42 +1933,14 @@ export function EditorClient({
                     <button type="button" onClick={() => void handleCopySource()} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">Copy source</button>
                     <button type="button" onClick={() => downloadSource(source, diagramType, title || "diagram")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">{`Download .${sourceFileExtension(diagramType)}`}</button>
                   </div>
-                  {diagramType === "freeform" && (
-                    <div className="mb-1.5 flex items-center gap-1.5">
-                      <button type="button" onClick={() => void handleCopyReactCode()} className="flex-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50">Copy React Prototype</button>
-                    </div>
-                  )}
+                  <div className="mb-1.5 flex items-center gap-1.5">
+                    <button type="button" onClick={() => void handleCopyReactCode()} className="flex-1 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/30 px-3 py-2 text-xs font-medium text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100 dark:hover:bg-indigo-900/50">Copy React Prototype</button>
+                  </div>
                   <div className="flex items-center gap-1.5">
                     <button type="button" onClick={() => void handleExport("png")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">PNG</button>
                     <button type="button" onClick={() => void handleExport("svg")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">SVG</button>
                     <button type="button" onClick={() => void handleExport("pdf")} className="flex-1 rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">PDF</button>
-                    {diagramType === "mermaid" && (
-                      <button type="button" onClick={() => void handleExport("zip")} className="rounded-lg border border-slate-200 dark:border-slate-700 px-3 py-2 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800" title="All social presets">ZIP</button>
-                    )}
                   </div>
-                  {["mermaid", "reactflow", "nivo", "bpmn"].includes(diagramType) && (
-                    <div className="mt-3 grid gap-2">
-                      <div>
-                        <label htmlFor="editor-export-preset" className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">Canvas size</label>
-                        <select id="editor-export-preset" value={presetId} onChange={(e) => setPresetId(e.target.value as SocialPresetId)} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 text-xs">
-                          {SOCIAL_PRESETS.map((p) => (<option key={p.id} value={p.id}>{p.label} ({p.width}×{p.height})</option>))}
-                          <option value="custom">Custom…</option>
-                        </select>
-                      </div>
-                      {presetId === "custom" && (
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label htmlFor="editor-export-custom-w" className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">Width</label>
-                            <input id="editor-export-custom-w" type="number" inputMode="numeric" min={200} max={8192} value={customExportWidth} onChange={(e) => setCustomExportWidth(Math.max(200, Math.min(8192, Math.round(Number(e.target.value) || 0))))} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 text-xs" />
-                          </div>
-                          <div>
-                            <label htmlFor="editor-export-custom-h" className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">Height</label>
-                            <input id="editor-export-custom-h" type="number" inputMode="numeric" min={200} max={8192} value={customExportHeight} onChange={(e) => setCustomExportHeight(Math.max(200, Math.min(8192, Math.round(Number(e.target.value) || 0))))} className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-2 py-1.5 text-xs" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
                   <div className="mt-3 flex items-center gap-2">
                     <div className="flex-1">
                       <label htmlFor="editor-export-scale" className="mb-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">PNG scale</label>
@@ -2705,16 +1948,8 @@ export function EditorClient({
                         <option value={1}>1×</option><option value={2}>2×</option><option value={3}>3×</option>
                       </select>
                     </div>
-                    {diagramType === "mermaid" && (
-                      <label className="mt-4 flex cursor-pointer items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                        <input type="checkbox" checked={zipIncludeCustom} onChange={(e) => setZipIncludeCustom(e.target.checked)} className="rounded-sm" />
-                        Add custom
-                      </label>
-                    )}
                   </div>
-                  {["excalidraw", "freeform"].includes(diagramType) && (
-                    <p className="mt-2 text-[10px] leading-snug text-slate-400">Native canvas export — custom sizes don&apos;t apply.</p>
-                  )}
+                  <p className="mt-2 text-[10px] leading-snug text-slate-400">Native canvas export — custom sizes don&apos;t apply.</p>
                 </div>
               )}
             </div>
@@ -2722,212 +1957,16 @@ export function EditorClient({
         </div>
 
         <div
-          className={
-            diagramType === "bpmn"
-              ? "fs-dot-grid flex min-h-0 flex-1 items-stretch justify-center overflow-auto p-3"
-              : "fs-dot-grid flex min-h-0 flex-1 items-start justify-center overflow-auto p-3"
-          }
+          className="fs-dot-grid flex min-h-0 flex-1 items-start justify-center overflow-auto p-3"
           style={{ position: "relative" }}
         >
           <div style={{ position: "absolute", top: 12, left: 12, zIndex: 10, fontFamily: "var(--font-mono-fs)", fontSize: 10, color: "#999", letterSpacing: "0.06em", textTransform: "uppercase", background: "white", border: "1px solid var(--fs-border)", padding: "4px 8px", borderRadius: 2, pointerEvents: "none" }}>
-            {diagramType === "mermaid" ? getMermaidSubtypeMeta(mermaidSubtype).label : typeMeta.label}
+            {typeMeta.label}
           </div>
-          {diagramType === "mermaid" && (
-            <div
-              ref={mermaidViewportRef}
-              className={`h-full w-full overflow-auto rounded-xl flex flex-col items-center ${isMermaidPanning ? "cursor-grabbing" : "cursor-grab"}`}
-              onMouseDown={(e) => {
-                if (e.button !== 0 || !mermaidViewportRef.current) return;
-                const el = mermaidViewportRef.current;
-                mermaidPanStartRef.current = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
-                setIsMermaidPanning(true);
-              }}
-              onMouseMove={(e) => {
-                const start = mermaidPanStartRef.current;
-                const el = mermaidViewportRef.current;
-                if (!start || !el) return;
-                el.scrollLeft = start.left - (e.clientX - start.x);
-                el.scrollTop = start.top - (e.clientY - start.y);
-              }}
-              onMouseUp={() => {
-                mermaidPanStartRef.current = null;
-                setIsMermaidPanning(false);
-              }}
-              onMouseLeave={() => {
-                mermaidPanStartRef.current = null;
-                setIsMermaidPanning(false);
-              }}
-            >
-              <div style={{ transform: `scale(${previewScale})`, transformOrigin: "top center", width: "max-content", height: "max-content", padding: "12px" }}>
-                <div
-                  ref={frameRef}
-                  style={{
-                    width: `${frameW}px`,
-                    aspectRatio: `${frameW} / ${frameH}`,
-                    backgroundColor: bgColor,
-                    backgroundImage: showGrid
-                      ? "radial-gradient(circle, #c8c8c8 1px, transparent 1px)"
-                      : backgroundPattern === "dots" ? "radial-gradient(circle, #c8c8c8 1px, transparent 1px)"
-                      : backgroundPattern === "grid" ? "linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)"
-                      : backgroundPattern === "lines" ? "repeating-linear-gradient(-45deg, #e2e8f0, #e2e8f0 1px, transparent 1px, transparent 8px)"
-                      : undefined,
-                    backgroundSize: (showGrid || backgroundPattern !== "none") ? "20px 20px" : undefined,
-                    fontFamily: selectedFont.cssValue,
-                  }}
-                  className="relative overflow-hidden rounded-xl shadow-xl"
-                >
-                  <div ref={innerRef} className="flex min-h-full w-full items-center justify-center p-8 overflow-hidden" />
-                  {!source.trim() && !aiLoading && (
-                    <div
-                      data-no-export
-                      className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 text-center"
-                    >
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-indigo-50 text-indigo-500">
-                        <Sparkles className="h-6 w-6" />
-                      </div>
-                      <div className="space-y-1">
-                        <div className="text-sm font-semibold text-slate-700">
-                          Describe your diagram in the AI chat
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          or open <span className="font-medium text-slate-700">Source</span> to type Mermaid yourself
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {aiLoading && (
-                    <div
-                      data-no-export
-                      className="pointer-events-none absolute inset-0 rounded-xl ring-2 ring-indigo-300/60 animate-pulse"
-                    />
-                  )}
-                  {aiLoading && (
-                    <div
-                      data-no-export
-                      className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-indigo-50/95 border border-indigo-200 px-2.5 py-1 text-[10px] font-medium text-indigo-700 shadow-xs backdrop-blur-xs"
-                    >
-                      <Sparkles className="h-3 w-3 animate-pulse" /> Streaming
-                    </div>
-                  )}
-                  {!aiLoading && mermaidRenderError && (
-                    <div
-                      data-no-export
-                      className="absolute bottom-3 left-3 right-3 mx-auto max-w-md rounded-lg border border-amber-200 bg-amber-50/95 px-3 py-2 text-[11px] text-amber-800 shadow-xs backdrop-blur-xs"
-                    >
-                      <span className="font-medium">Mermaid syntax: </span>
-                      <span className="font-mono">{mermaidRenderError}</span>
-                    </div>
-                  )}
-                  {showWatermark && <div className="absolute bottom-3 right-4 text-[10px] opacity-30 text-slate-600 font-medium select-none">Made with drawxyz</div>}
-                </div>
-              </div>
-            </div>
-          )}
-          {diagramType === "excalidraw" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}><ExcalidrawRenderer source={source} onChange={setSource} /></div>}
-          {diagramType === "reactflow" && (
-            <div
-              ref={frameRef}
-              className="rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900"
-              style={{ width: `${frameW}px`, height: `${frameH}px`, transform: `scale(${previewScale})`, transformOrigin: "top center" }}
-            >
-              <ReactFlowRenderer source={source} onChange={setSource} onNodeClick={handleNodeClick} />
-            </div>
-          )}
-          {diagramType === "cloud" && (
-            <div
-              ref={frameRef}
-              className="w-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900"
-              style={{ minHeight: "600px", height: "100%" }}
-            >
-              <CloudRenderer source={source} onChange={setSource} readOnly={false} />
-            </div>
-          )}
-          {diagramType === "erd" && (
-            <div
-              ref={frameRef}
-              className="w-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900"
-              style={{ minHeight: "600px", height: "100%" }}
-            >
-              <ErdRenderer source={source} onChange={setSource} readOnly={false} />
-            </div>
-          )}
-          {diagramType === "orgchart" && (
-            <div
-              ref={frameRef}
-              className="w-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900"
-              style={{ minHeight: "600px", height: "100%" }}
-            >
-              <OrgChartRenderer source={source} onChange={setSource} readOnly={false} />
-            </div>
-          )}
-          {(diagramType === "timeline" || diagramType === "versus" || diagramType === "matrix2x2" || diagramType === "funnel" ||
-            diagramType === "venn" || diagramType === "tierlist" || diagramType === "iceberg" || diagramType === "alignment"
-            || diagramType === "budget" || diagramType === "habits" || diagramType === "bingo" || diagramType === "bracket") && (
-            <div
-              ref={frameRef}
-              className="w-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900 [container-type:size]"
-              style={{ minHeight: "600px", height: "100%" }}
-            >
-              <SocialCardRenderer source={source} onChange={setSource} readOnly={false} />
-            </div>
-          )}
-          {diagramType === "echarts" && (
-            <div
-              ref={frameRef}
-              className="rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900"
-              style={{ width: "900px", height: "600px", transform: `scale(${previewScale})`, transformOrigin: "top center" }}
-            >
-              <EChartsRenderer ref={echartsRef} source={source} onChange={setSource} uiTheme={echartsUiTheme} />
-            </div>
-          )}
-          {diagramType === "nivo" && (
-            <div
-              ref={frameRef}
-              className="rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900"
-              style={{ width: `${frameW}px`, height: `${frameH}px`, transform: `scale(${previewScale})`, transformOrigin: "top center" }}
-            >
-              <NivoRenderer source={source} />
-            </div>
-          )}
-          {diagramType === "freeform" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}><FreeformRenderer source={source} onChange={setSource} roomId={currentProjectId ?? undefined} /></div>}
-          {diagramType === "bpmn" && (
-            <div className="flex h-full min-h-0 w-full max-w-full flex-col self-stretch">
-              <div
-                ref={frameRef}
-                className="flex h-full min-h-[520px] flex-1 flex-col overflow-hidden rounded-xl bg-white dark:bg-slate-900 shadow-xl"
-                style={{ transform: `scale(${previewScale})`, transformOrigin: "top center" }}
-              >
-                <div className="min-h-0 flex-1">
-                  <BpmnRenderer source={source} onChange={setSource} />
-                </div>
-              </div>
-            </div>
-          )}
-          {diagramType === "d3" && (
-            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white" style={{ minHeight: "500px" }}>
-              <D3Renderer source={source} onChange={setSource} />
-            </div>
-          )}
-          {diagramType === "cytoscape" && (
-            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white" style={{ minHeight: "500px" }}>
-              <CytoscapeRenderer source={source} onChange={setSource} />
-            </div>
-          )}
-          {diagramType === "visnetwork" && (
-            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white" style={{ minHeight: "500px" }}>
-              <VisNetworkRenderer source={source} onChange={setSource} />
-            </div>
-          )}
-          {diagramType === "fabric" && (
-            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl" style={{ minHeight: "500px" }}>
-              <FabricRenderer source={source} onChange={setSource} readOnly={false} />
-            </div>
-          )}
-          {diagramType === "pixi" && (
-            <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-slate-950" style={{ minHeight: "500px" }}>
-              <PixiRenderer source={source} onChange={setSource} />
-            </div>
-          )}
+          <div ref={frameRef} className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}>
+            <FreeformRenderer source={source} onChange={setSource} roomId={currentProjectId ?? undefined} />
+            {showWatermark && <div className="absolute bottom-3 right-4 text-[10px] opacity-30 text-slate-600 font-medium select-none pointer-events-none">Made with drawxyz</div>}
+          </div>
         </div>
       </div>
 
@@ -3228,7 +2267,7 @@ export function EditorClient({
                   wrap="off"
                   className="relative h-full w-full resize-none bg-transparent py-3 pr-4 pl-14 font-mono text-[12px] leading-relaxed text-transparent caret-slate-900 focus:outline-hidden dark:caret-slate-100"
                   style={{ minHeight: "100%" }}
-                  placeholder={diagramType === "mermaid" ? "flowchart LR\n  A --> B" : "{}"}
+                  placeholder="{}"
                 />
               </div>
               <div className="flex items-center justify-between border-t border-slate-100 px-4 py-2 text-[10px] text-slate-400 dark:border-slate-800">

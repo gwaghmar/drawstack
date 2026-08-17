@@ -24,7 +24,7 @@ export async function createProject(
   title: string,
   source: string,
   themeId: string,
-  diagramType: DiagramType = "mermaid"
+  diagramType: DiagramType = "freeform"
 ) {
   const session = await auth();
   const email = session?.user?.email;

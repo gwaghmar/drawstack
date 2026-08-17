@@ -7,26 +7,12 @@ import { DiagramTypeIcon } from "@/components/diagram-icon";
 import { forkTemplate } from "@/app/actions/templates";
 
 const FILTERS: { id: TemplateCategory | "all"; label: string }[] = [
-  { id: "all",          label: "All" },
-  { id: "flowchart",    label: "Flowchart" },
-  { id: "sequence",     label: "Sequence" },
-  { id: "architecture", label: "Architecture" },
-  { id: "erd",          label: "ERD" },
-  { id: "charts",       label: "Charts" },
-  { id: "social",       label: "Social cards" },
-  { id: "bpmn",         label: "BPMN" },
-  { id: "orgchart",     label: "Org chart" },
+  { id: "all",        label: "All" },
+  { id: "whiteboard", label: "Free Canvas" },
 ];
 
 const PREVIEW_BG: Record<string, string> = {
-  flowchart:    "#1E1B4B",
-  sequence:     "#0C1A3A",
-  architecture: "#0F1117",
-  erd:          "#0F172A",
-  charts:       "#2D1B00",
-  social:       "#0D3333",
-  bpmn:         "#1A0F2E",
-  orgchart:     "#0A1F1A",
+  whiteboard: "#1E1B4B",
 };
 
 export function TemplatesClient() {

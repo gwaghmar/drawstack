@@ -14,39 +14,10 @@ export interface FollowUpCandidate {
  * before the diagram exists.
  */
 const FOLLOWUP_BY_CATEGORY: Record<DiagramCategory, FollowUpCandidate[]> = {
-  technical: [
-    { text: "Add a legend", excludeIfSourceContains: ["legend"] },
-    { text: "Try a dark theme", excludeIfSourceContains: ["dark"] },
-    { text: "Simplify to fewer steps" },
-    { text: "Group related nodes into subgraphs", excludeIfSourceContains: ["subgraph"] },
-  ],
-  flowchart: [
-    { text: "Auto-layout the nodes" },
-    { text: "Add a legend", excludeIfSourceContains: ["legend"] },
-    { text: "Simplify to fewer steps" },
-    { text: "Color-code by status" },
-  ],
-  data: [
-    { text: "Switch to a dark theme", excludeIfSourceContains: ["dark"] },
-    { text: "Add data labels" },
-    { text: "Try a different chart type" },
-    { text: "Highlight the key trend" },
-  ],
-  business: [
-    { text: "Add swimlanes", excludeIfSourceContains: ["swimlane", "lane"] },
-    { text: "Simplify to fewer steps" },
-    { text: "Add a legend", excludeIfSourceContains: ["legend"] },
-  ],
   whiteboard: [
     { text: "Add more detail" },
     { text: "Try a different color scheme" },
     { text: "Tidy up the layout" },
-  ],
-  social: [
-    { text: "Generate a dark variant", excludeIfSourceContains: ["dark"] },
-    { text: "Try a punchier headline" },
-    { text: "Export 3 sizes (IG · LinkedIn · X)" },
-    { text: "Match it to the brand kit" },
   ],
 };
 
