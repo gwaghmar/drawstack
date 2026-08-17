@@ -62,6 +62,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
       description: "List export aspect ratio presets (px)",
       inputSchema: { type: "object", properties: {} },
     },
+    {
+      name: "freeform_get_canvas",
+      description: "Get the current active Freeform canvas document JSON",
+      inputSchema: { type: "object", properties: {} },
+    },
+    {
+      name: "freeform_set_canvas",
+      description: "Set the entire Freeform canvas document JSON",
+      inputSchema: {
+        type: "object",
+        properties: { doc: { type: "object" } },
+        required: ["doc"],
+      },
+    },
   ],
 }));
 
@@ -127,6 +141,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           },
         ],
       };
+    }
+    if (name === "freeform_get_canvas") {
+      return {
+        content: [{ type: "text", text: lastSource }],
+      };
+    }
+    if (name === "freeform_set_canvas") {
+      const doc = (args as { doc?: unknown })?.doc;
+      if (!doc || typeof doc !== "object") {
+        return { content: [{ type: "text", text: "Invalid document JSON" }], isError: true };
+      }
+      lastSource = JSON.stringify(doc, null, 2);
+      return { content: [{ type: "text", text: "Freeform canvas updated successfully" }] };
     }
     return {
       content: [{ type: "text", text: "Unknown tool" }],
