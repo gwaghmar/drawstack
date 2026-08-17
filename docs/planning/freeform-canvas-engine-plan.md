@@ -124,8 +124,17 @@ shapes (`research`/`design`/`build`, `role: "step"`), palette shorthand fills,
 bound arrows with labels ("handoff"), frame membership, sticky note — the
 system prompt from milestone H produced exactly the schema it was taught.
 Zod validation + `validateFreeformRefs` passed on the first attempt, no retry
-needed. **Agent-mode `apply_ops` targeted-edit test (e.g. "make the second box
-red") was NOT yet run — do this next before considering H/I fully proven.**
+needed.
+
+**Agent-mode `apply_ops` test (2026-08-17): PASSED.** Prompt: "make Concept A
+red and move the sticky note below the frame" → tool call logged
+`[apply_ops] received 2 op(s): update, update` / `applied=2/2 errors=0`; UI
+showed "Applied 2 ops" and the shape rendered red immediately, no full
+regeneration. Both H and I are now proven end-to-end, not just unit-tested.
+One rough edge observed: the model's own chat text included a couple of
+self-doubting "I apologize, I made a mistake" lines before the successful
+call — cosmetic (the tool call still succeeded), worth revisiting the
+STRATEGY prompt wording later if it recurs, not a blocker.
 
 **Bug found and fixed during the test** (commit `60cef6f`): `defaultFill`/
 `defaultStroke` in `freeform-renderer.tsx` passed `shape.fill`/`shape.stroke`
@@ -145,17 +154,12 @@ touch it because they don't independently exercise "AI output → renderer".
   foreign key constraint` — the `dev-ws-id` workspace row doesn't exist in the
   seeded dev DB. Unrelated to freeform; not yet investigated/fixed.
 
-**Pushed to origin: only through milestone G** (`6181dfe`). Commits for the PDF
-fix + H + I + J + the color-fix are LOCAL ONLY — still unpushed pending the
-apply_ops agent-mode test above.
+**Pushed to origin: through milestone G plus H/I/J/color-fix/logging — AI
+round-trip fully verified 2026-08-17, safe to push.** (Confirm the push landed
+by checking `git log origin/master` if resuming mid-step.)
 
 ### Next steps, in order
-1. **Run the apply_ops agent-mode test** (the one piece of the round-trip not
-   yet done): in Agent Mode on a freeform board, ask for a targeted edit ("make
-   the research box red", "move the sticky note below the frame") and confirm
-   the `apply_ops` tool fires and the edit applies without a full regeneration.
-2. **Push** H+I+J+color-fix once (1) passes.
-3. **Milestone K — remove tldraw** (own revertible commit): VERIFIED 2026-08-16
+1. **Milestone K — remove tldraw** (own revertible commit): VERIFIED 2026-08-16
    that the production DB has ZERO tldraw projects and ZERO tldraw share links
    (7 projects total: 3 cloud, 2 mermaid, 2 excalidraw) → clean removal, no
    migration needed. Remove: dep from package.json, `tldraw-renderer.tsx`, the
