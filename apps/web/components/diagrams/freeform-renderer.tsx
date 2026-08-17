@@ -3580,6 +3580,56 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
             "Toggle bold"
           )}
 
+          {/* Text Align — block-level text.align, already honored by both render
+              paths; this was the only UI gap. */}
+          {selectedShapes.length > 0 &&
+            selectedShapes.every((s) => s.type !== "arrow" && s.type !== "line" && s.type !== "path") && (
+              <div className="flex items-center gap-0.5">
+                {([
+                  ["left", AlignLeft],
+                  ["center", AlignCenter],
+                  ["right", AlignRight],
+                ] as const).map(([align, Icon]) =>
+                  styleIconButton(
+                    <Icon className="h-3.5 w-3.5" />,
+                    (primarySelected?.text?.align ?? "left") === align,
+                    () =>
+                      updateSelectedProps((s) => ({ ...s, text: { ...(s.text ?? { content: "" }), align } })),
+                    `Align text ${align}`
+                  )
+                )}
+              </div>
+            )}
+
+          {/* Text Color Swatches — block-level text.color, already honored by
+              both render paths; this was the only UI gap. */}
+          {selectedShapes.length > 0 &&
+            selectedShapes.every((s) => s.type !== "arrow" && s.type !== "line" && s.type !== "path") && (
+              <>
+                {styleDivider}
+                <div className="flex items-center gap-1">
+                  {["#0f172a", "#ffffff", "5", "4", "3", "1", "6"].map((c) => {
+                    const hex = resolveColor(c) ?? c;
+                    const isActive = primarySelected?.text?.color === c;
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        onClick={() =>
+                          updateSelectedProps((s) => ({ ...s, text: { ...(s.text ?? { content: "" }), color: c } }))
+                        }
+                        className={`h-4 w-4 rounded-full border border-slate-300 transition-transform ${
+                          isActive ? "scale-125 ring-2 ring-indigo-500" : "hover:scale-110"
+                        }`}
+                        style={{ background: hex }}
+                        title={`Text color ${c}`}
+                      />
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
           {/* Font Size — only meaningful for shapes that render a .text block;
               arrows/lines/paths carry their own label/stroke, not this. */}
           {selectedShapes.length > 0 &&
