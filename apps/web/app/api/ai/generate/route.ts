@@ -262,6 +262,8 @@ export async function POST(req: Request) {
     : reqBody.mode === "create" ? "create"
     : hasExistingSource ? "patch" : "create";
 
+  console.log(`[AI generate] diagramType=${diagramType} mode=${generationMode} useCase=${useCaseId} promptLen=${promptText.length}`);
+
   const userProvider = (user.aiProvider ?? "google") as AiProvider;
   const provider: AiProvider = (keySource === "env" && detectedProvider) ? detectedProvider : userProvider;
   
@@ -549,6 +551,7 @@ ${ANTI_GENERIC_DIRECTIVE}`;
           } catch {}
 
           const validation = await validateAndRepairOutput(effectiveDiagramType, finalText);
+          console.log(`[AI generate] validation ${validation.ok ? "ok" : "FAILED"} type=${effectiveDiagramType} latencyMs=${genLatencyMs} outputLen=${finalText.length}${validation.ok ? "" : ` reason=${validation.reason}`}`);
 
           // Deterministic, authored follow-up suggestions computed against the
           // actual final source (not model-generated, not predicted blind before

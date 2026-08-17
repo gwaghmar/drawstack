@@ -189,6 +189,7 @@ export async function POST(req: Request) {
   const reqBody = await req.json();
   const { messages, currentSource, diagramType, title, themeId, useCaseId, editorMode: editorModeRaw } = reqBody;
   const editorMode: EditorMode = editorModeRaw ?? "business";
+  console.log(`[Agent Mode] diagramType=${diagramType} messages=${messages?.length ?? 0} sourceLen=${currentSource?.length ?? 0}`);
 
   if (!messages || !Array.isArray(messages)) {
     const errBody: ApiError = { error: "messages array required", code: "VALIDATION_ERROR" };
@@ -339,7 +340,9 @@ ${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targe
             }),
             execute: async ({ ops, explanation }) => {
               toolCallCount++;
+              console.log(`[apply_ops] received ${ops.length} op(s): ${ops.map((o) => o.op).join(", ")}`);
               const result = applyOpsToSource(workingSource, ops as CanvasOp[]);
+              console.log(`[apply_ops] applied=${result.applied}/${ops.length} errors=${result.errors.length}${result.errors.length ? ` :: ${JSON.stringify(result.errors)}` : ""}`);
               if (result.source === null) {
                 return { success: false, explanation, error: `No ops applied. Errors: ${JSON.stringify(result.errors)}`, errors: result.errors };
               }
