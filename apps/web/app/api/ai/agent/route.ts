@@ -51,6 +51,8 @@ const CanvasOpSchema = z.union([
         "tech_hud_panel",
         "layered_process_map",
         "dot_matrix",
+        "pictogram",
+        "pictogram_row",
         "arrow",
         "line",
       ]),

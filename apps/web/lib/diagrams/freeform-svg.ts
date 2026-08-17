@@ -379,6 +379,70 @@ function findBestLabelPosition(
   return bestMid;
 }
 
+// ─── Squarified Treemap Layout (Bruls, Huizing, van Wijk) ───────────────────
+type TreemapRect = { x: number; y: number; w: number; h: number };
+
+function worstAspect(rowAreas: number[], side: number, sum: number): number {
+  const maxA = Math.max(...rowAreas);
+  const minA = Math.min(...rowAreas);
+  const sideSq = side * side;
+  const sumSq = sum * sum;
+  return Math.max((sideSq * maxA) / sumSq, sumSq / (sideSq * minA));
+}
+
+function squarifyTreemap(items: { value: number }[], rect: TreemapRect): TreemapRect[] {
+  const order = items.map((_, i) => i).sort((a, b) => items[b].value - items[a].value);
+  const total = items.reduce((sum, it) => sum + it.value, 0) || 1;
+  const scale = (rect.w * rect.h) / total;
+  const areas = order.map((i) => Math.max(0.01, items[i].value * scale));
+
+  const placed: TreemapRect[] = new Array(items.length);
+  let queue = areas.map((area, i) => ({ area, orderIdx: i }));
+  let { x, y, w, h } = rect;
+
+  while (queue.length > 0) {
+    const side = Math.min(w, h);
+    let row = [queue[0]];
+    let rowSum = row[0].area;
+    let bestWorst = worstAspect([row[0].area], side, rowSum);
+    let k = 1;
+    while (k < queue.length) {
+      const testSum = rowSum + queue[k].area;
+      const testWorst = worstAspect([...row.map((r) => r.area), queue[k].area], side, testSum);
+      if (testWorst <= bestWorst) {
+        row.push(queue[k]);
+        rowSum = testSum;
+        bestWorst = testWorst;
+        k++;
+      } else break;
+    }
+
+    const thickness = side > 0 ? rowSum / side : 0;
+    if (w <= h) {
+      let cx = x;
+      for (const cell of row) {
+        const cw = thickness > 0 ? cell.area / thickness : 0;
+        placed[order[cell.orderIdx]] = { x: cx, y, w: cw, h: thickness };
+        cx += cw;
+      }
+      y += thickness;
+      h -= thickness;
+    } else {
+      let cy = y;
+      for (const cell of row) {
+        const ch = thickness > 0 ? cell.area / thickness : 0;
+        placed[order[cell.orderIdx]] = { x, y: cy, w: thickness, h: ch };
+        cy += ch;
+      }
+      x += thickness;
+      w -= thickness;
+    }
+    queue = queue.slice(row.length);
+  }
+
+  return placed;
+}
+
 export function freeformToSvg(
   doc: CanvasDocument,
   options?: { theme?: "light" | "dark" | "cyber" | "editorial"; bare?: boolean }
@@ -881,6 +945,60 @@ export function freeformToSvg(
               <rect x="0" y="8" width="${(seg.percent / 100) * innerW}" height="7" rx="3.5" fill="${seg.color}" />
             </g>`;
         }).join("");
+      }
+
+      // F. Squarified Treemap — proportional-area blocks (market share, locations by region).
+      else if (chartType === "treemap" && c.treemapData && c.treemapData.length > 0) {
+        const treemapPalette = ["#f6e7d7", "#8fc7e8", "#f29b95", "#8fd8a8", "#d9c49a", "#b8b3e8"];
+        const cells = squarifyTreemap(c.treemapData, { x: x + padLeft, y: y + padTop, w: innerW, h: innerH });
+
+        const cellsSvg = cells.map((cell, idx) => {
+          const item = c.treemapData![idx];
+          const cx = cell.x + 1;
+          const cy = cell.y + 1;
+          const cw = Math.max(0, cell.w - 2);
+          const ch = Math.max(0, cell.h - 2);
+          const cellFill = item.color ?? treemapPalette[idx % treemapPalette.length];
+          const area = cw * ch;
+          const cellText = textColorForFill(cellFill);
+
+          let labelSvg = "";
+          if (area > 5500) {
+            const labelFits = item.label.length * 0.6 * 13 <= cw - 16;
+            const valueStr = String(item.value);
+            if (labelFits) {
+              labelSvg = `
+                <text x="${cx + 8}" y="${cy + 22}" font-family="Inter, sans-serif" font-size="13" font-weight="700" fill="${cellText}">${escapeXml(item.label)}</text>
+                <text x="${cx + 8}" y="${cy + 46}" font-family="Inter, sans-serif" font-size="20" font-weight="800" fill="${cellText}">${escapeXml(valueStr)}</text>
+                ${item.sublabel ? `<text x="${cx + 8}" y="${cy + 62}" font-family="Inter, sans-serif" font-size="9.5" font-weight="500" fill="${cellText}" opacity="0.75">${escapeXml(item.sublabel)}</text>` : ""}`;
+            }
+          } else if (area >= 1800) {
+            const labelFits = item.label.length * 0.6 * 9.5 <= cw - 12;
+            if (labelFits) {
+              labelSvg = `
+                <text x="${cx + 6}" y="${cy + 16}" font-family="Inter, sans-serif" font-size="9.5" font-weight="700" fill="${cellText}">${escapeXml(item.label)}</text>
+                <text x="${cx + 6}" y="${cy + 30}" font-family="Inter, sans-serif" font-size="12" font-weight="800" fill="${cellText}">${escapeXml(String(item.value))}</text>`;
+            }
+          }
+
+          return `
+            <g>
+              <rect x="${cx}" y="${cy}" width="${cw}" height="${ch}" fill="${cellFill}" stroke="rgba(0,0,0,0.15)" stroke-width="1" />
+              ${labelSvg}
+            </g>`;
+        }).join("");
+
+        const legendSvg = c.treemapLegend
+          ? `<g transform="translate(${x + w - 140 - 16}, ${y + 16})">
+              ${c.treemapLegend.map((entry, idx) => `
+                <g transform="translate(0, ${idx * 18})">
+                  <rect x="0" y="0" width="10" height="10" rx="2" fill="${entry.color}" />
+                  <text x="16" y="9" font-family="Inter, sans-serif" font-size="11" font-weight="600" fill="${textColorMuted}">${escapeXml(entry.label)}</text>
+                </g>`).join("")}
+            </g>`
+          : "";
+
+        chartBody = `${cellsSvg}${legendSvg}`;
       }
 
       // E. Spline Area / Line / Bar with Y-Axis Gridlines.
@@ -1619,6 +1737,48 @@ export function freeformToSvg(
           }).join("")}
         </g>`
       );
+      continue;
+    }
+
+    // ─── 12. Icon Pictogram (`type: "pictogram"`) ─────────────────────────────
+    if (shape.type === "pictogram") {
+      const pg = shape as PictogramShape;
+      const color = (pg.stroke ? resolveColor(pg.stroke) ?? pg.stroke : pg.fill ? resolveColor(pg.fill) ?? pg.fill : undefined) ?? "#1e293b";
+      const size = Math.min(w, h);
+      const iconX = x + (w - size) / 2;
+      const iconY = y + (h - size) / 2;
+      elements.push(
+        `<g transform="translate(${iconX}, ${iconY}) scale(${size / 24})" stroke="${color}" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${opacity}>
+          ${getPictogram(pg.icon)}
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 13. Pictogram Row / Human-Graph (`type: "pictogram_row"`) ────────────
+    if (shape.type === "pictogram_row") {
+      const pr = shape as PictogramRowShape;
+      const count = Math.max(1, pr.count);
+      const filledColor = pr.color ?? "#e05252";
+      const mutedColor = pr.mutedColor ?? (isDark ? "#334155" : "#d5d9e0");
+
+      let iconSize = Math.min(h, w);
+      let gap = count > 1 ? (w - count * iconSize) / (count - 1) : 0;
+      if (count > 1 && gap < 4) {
+        iconSize = (w - (count - 1) * 4) / count;
+        gap = 4;
+      }
+
+      const iconsSvg = Array.from({ length: count }, (_, i) => {
+        const iconX = x + i * (iconSize + gap);
+        const iconY = y + (h - iconSize) / 2;
+        const iconColor = i < pr.filled ? filledColor : mutedColor;
+        return `<g transform="translate(${iconX}, ${iconY}) scale(${iconSize / 24})" stroke="${iconColor}" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          ${getPictogram(pr.icon)}
+        </g>`;
+      }).join("");
+
+      elements.push(`<g ${opacity}>${iconsSvg}</g>`);
       continue;
     }
 

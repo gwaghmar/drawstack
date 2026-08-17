@@ -109,13 +109,15 @@ export type ChartShape = BaseShape & {
   height: number;
   title: string;
   subtitle?: string;
-  chartType: "area" | "bar" | "grouped_bar" | "donut" | "horizontal_bar" | "progress_gauge" | "line";
+  chartType: "area" | "bar" | "grouped_bar" | "donut" | "horizontal_bar" | "progress_gauge" | "line" | "treemap";
   data?: { label: string; value: number; color?: string; isEstimate?: boolean }[];
   groupedData?: { category: string; series: { name: string; value: number; color?: string; formatted?: string; isEstimate?: boolean }[] }[];
   donutData?: { label: string; value: string; percent: number; color: string }[];
   centerLabel?: { primary: string; secondary?: string };
   progressSegments?: { label: string; value: string; percent: number; color: string }[];
   callouts?: { category: string; text: string; color?: string }[];
+  treemapData?: { label: string; value: number; sublabel?: string; color?: string; group?: string }[];
+  treemapLegend?: { label: string; color: string }[];
   cornerRadius?: number;
 };
 
@@ -272,6 +274,24 @@ export type PathShape = BaseShape & {
   points: [number, number][];
 };
 
+export type PictogramShape = BaseShape & {
+  type: "pictogram";
+  width: number;
+  height: number;
+  icon: string;
+};
+
+export type PictogramRowShape = BaseShape & {
+  type: "pictogram_row";
+  width: number;
+  height: number;
+  icon: string;
+  count: number;
+  filled: number;
+  color?: string;
+  mutedColor?: string;
+};
+
 export type ArrowEndpoint =
   | { x: number; y: number }
   | { shapeId: string; anchor?: "top" | "right" | "bottom" | "left" | "center" | "auto" };
@@ -315,6 +335,8 @@ export type CanvasShape =
   | LayeredProcessMapShape
   | DotMatrixShape
   | PathShape
+  | PictogramShape
+  | PictogramRowShape
   | ArrowShape;
 
 export function createEmptyDocument(): CanvasDocument {

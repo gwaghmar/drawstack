@@ -147,6 +147,8 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
     "tech_hud_panel",
     "layered_process_map",
     "dot_matrix",
+    "pictogram",
+    "pictogram_row",
   ]),
   x: z.number(),
   y: z.number(),
