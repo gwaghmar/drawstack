@@ -1,3 +1,4 @@
+import { z } from "zod";
 import {
   type CanvasDocument,
   type CanvasShape,
@@ -8,6 +9,91 @@ import {
   resolveArrowEndpoint,
   validateFreeformRefs,
 } from "./freeform-canvas.ts";
+
+// Shared between the in-app Agent Mode tool and the external MCP endpoint —
+// one schema, so the two surfaces can't drift on what a valid op looks like.
+export const CanvasOpSchema = z.union([
+  z.object({
+    op: z.literal("add"),
+    shape: z.looseObject({
+      type: z.enum([
+        "rectangle",
+        "ellipse",
+        "diamond",
+        "triangle",
+        "cylinder",
+        "cloud",
+        "hexagon",
+        "star",
+        "sticky",
+        "text",
+        "frame",
+        "card",
+        "table",
+        "image",
+        "metric",
+        "dashboard",
+        "chart",
+        "feed_table",
+        "mindmap",
+        "scurve_timeline",
+        "step_timeline",
+        "isometric_block",
+        "mockup",
+        "venn_timeline",
+        "tech_hud_panel",
+        "layered_process_map",
+        "dot_matrix",
+        "pictogram",
+        "pictogram_row",
+        "mesh_connector",
+        "arrow",
+        "line",
+      ]),
+    }).describe("Partial shape; type is required"),
+  }),
+  z.object({
+    op: z.literal("update"),
+    target: z.string().describe("Shape id or unique name"),
+    set: z.record(z.string(), z.unknown()).describe("Dotted-path property updates, e.g. \"text.content\""),
+  }),
+  z.object({
+    op: z.literal("delete"),
+    target: z.string(),
+  }),
+  z.object({
+    op: z.literal("connect"),
+    from: z.string(),
+    to: z.string(),
+    label: z.string().optional(),
+    id: z.string().optional(),
+    name: z.string().optional(),
+    kind: z.enum(["arrow", "line"]).optional(),
+  }),
+  z.object({
+    op: z.literal("place"),
+    target: z.string(),
+    below: z.string().optional(),
+    above: z.string().optional(),
+    rightOf: z.string().optional(),
+    leftOf: z.string().optional(),
+    inside: z.string().optional(),
+    gap: z.number().optional(),
+    align: z.enum(["start", "center", "end"]).optional(),
+  }),
+  z.object({
+    op: z.literal("layout"),
+    targets: z.array(z.string()),
+    arrange: z.enum(["row", "column", "grid"]),
+    gap: z.number().optional(),
+    origin: z.object({ x: z.number(), y: z.number() }).optional(),
+  }),
+  z.object({
+    op: z.literal("reorder"),
+    target: z.string(),
+    to: z.enum(["front", "back", "forward", "backward"]),
+  }),
+]);
 
 export type CanvasOp =
   | { op: "add"; shape: Partial<CanvasShape> & { type: CanvasShape["type"] } }

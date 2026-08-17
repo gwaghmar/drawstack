@@ -2,7 +2,10 @@
  * MCP HTTP endpoint — drawxyz
  *
  * Exposes MCP tools over HTTP (Streamable HTTP transport) so AI IDEs like
- * Cursor and Claude Code can call generate_diagram directly.
+ * Cursor and Claude Code can generate and edit diagrams directly:
+ * generate_diagram, apply_ops, list_diagram_types. Every tool here is
+ * stateless (source in, source out) — none of them read or write a saved
+ * project; the caller owns persisting the result.
  *
  * Cursor config (~/.cursor/mcp.json):
  * {
@@ -22,6 +25,8 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import { DIAGRAM_TYPE_META, type DiagramType } from "@flowchart/core";
 import { z } from "zod";
+import { CanvasOpSchema, type CanvasOp } from "@/lib/diagrams/freeform-ops";
+import { applyOpsToSource } from "@/lib/agent-tools";
 
 // Tools are stateless — each request creates a fresh server instance
 function buildMcpServer(): Server {
@@ -52,6 +57,27 @@ function buildMcpServer(): Server {
         },
       },
       {
+        name: "apply_ops",
+        description:
+          "Apply targeted scene-graph operations (add/update/delete/connect/place/layout/reorder) to an existing freeform canvas document, targeting shapes by id or unique name. Stateless: pass the current canvas source in, get the mutated source back — this tool does not read or write any saved project.",
+        inputSchema: {
+          type: "object" as const,
+          properties: {
+            source: {
+              type: "string",
+              description: "The current freeform canvas document, as JSON (the same format generate_diagram returns).",
+            },
+            ops: {
+              type: "array",
+              description:
+                'Ordered list of ops, each shaped like { "op": "add" | "update" | "delete" | "connect" | "place" | "layout" | "reorder", ...op-specific fields }.',
+              items: { type: "object" as const },
+            },
+          },
+          required: ["source", "ops"],
+        },
+      },
+      {
         name: "list_diagram_types",
         description: "List all available diagram types with descriptions.",
         inputSchema: { type: "object" as const, properties: {} },
@@ -68,6 +94,42 @@ function buildMcpServer(): Server {
         lines.push(`• ${dt.id} — ${dt.label}: ${dt.description}`);
       }
       return { content: [{ type: "text", text: lines.join("\n") }] };
+    }
+
+    if (name === "apply_ops") {
+      const parsed = z
+        .object({
+          source: z.string().min(1),
+          ops: z.array(CanvasOpSchema).min(1),
+        })
+        .safeParse(args);
+
+      if (!parsed.success) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Invalid arguments: ${parsed.error.message}` }],
+        };
+      }
+
+      let result: ReturnType<typeof applyOpsToSource>;
+      try {
+        result = applyOpsToSource(parsed.data.source, parsed.data.ops as CanvasOp[]);
+      } catch (err) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `Could not parse source as a freeform canvas document: ${err instanceof Error ? err.message : String(err)}` }],
+        };
+      }
+
+      if (result.source === null) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: `No ops applied. Errors: ${JSON.stringify(result.errors)}` }],
+        };
+      }
+
+      const summary = `Applied ${result.applied}/${parsed.data.ops.length} op(s).${result.errors.length ? ` Errors: ${JSON.stringify(result.errors)}` : ""}`;
+      return { content: [{ type: "text", text: `${summary}\n\n${result.source}` }] };
     }
 
     if (name === "generate_diagram") {
