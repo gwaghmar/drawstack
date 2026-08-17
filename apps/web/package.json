@@ -48,7 +48,7 @@
     "react-konva": "^19.2.5",
     "react-resizable-panels": "^4.12.2",
     "roughjs": "^4.6.6",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.0",
     "simple-icons": "^16.25.0",
     "stripe": "^22.2.0",
     "svg-to-pdfkit": "^0.1.8",
