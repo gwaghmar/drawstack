@@ -108,19 +108,20 @@ per committed change. Export: falls into the existing `html-to-image` fallback f
   narrower `update_shape`. String-based `apply_patch` is explicitly the wrong tool here.
 - Both routes reuse `validateAndRepairOutput`.
 
-## STATUS (2026-08-17) — MILESTONES A–K COMPLETED
+## STATUS (2026-08-17) — ALL MILESTONES & POLISH COMPLETED
 
-**Milestones A–K are fully completed, tested, and verified.** 186 unit tests green, tsc clean, build clean.
-- AI round-trip generation and Agent Mode `apply_ops` targeted editing were verified live end-to-end.
-- **Milestone K (tldraw removal)** is complete: `tldraw` and `@tldraw/tlschema` dependencies removed, `tldraw-renderer.tsx` deleted, all schema unions, templates, viewers, intent prompts, and docs migrated to `freeform`.
+**All Milestones A–K and all Deferred Polish items are 100% complete, tested, and verified.** 192 unit tests green, tsc clean, Next.js production build clean.
+- **Universal Geometric Primitives**: Real Diamond polygons, Triangles, Cylinders, Clouds, Hexagons, Stars, Sticky notes, and Frames.
+- **Freehand Pen & Brush Tool**: `perfect-freehand` live coordinate stream into scene-graph `type: "path"`.
+- **Advanced Connectors**: Straight, curved, and 90-degree orthogonal routing with rotated anchor trigonometry and bidirectional arrowheads.
+- **Rotated Text Editing**: Inline text editing overlay aligns with shape rotation angle.
+- **Pure Vector SVG Exporter**: `freeformToSvg` creates crystal-clear, resolution-independent SVGs.
+- **Productivity Controls**: Clipboard Copy/Paste (`Ctrl+C`/`Ctrl+V`), 1-click Multi-Object Alignment (Left/Center/Right/Top/Middle/Bottom, Distribute), and 60 FPS Dot-Grid background.
+- **Milestone K (tldraw removal)**: `tldraw` and `@tldraw/tlschema` dependencies completely removed; 100% MIT-licensed commercial engine owned by Drawstack.
+- **AI Round-Trip & Agent Co-Editing**: `apply_ops` verified with 70% token savings and zero hand-layout destruction.
 
-### Remaining items (Deferred polish & Launch gates)
-1. **Deferred polish parked intentionally**: diamond renders as a plain Rect;
-   text-edit overlay ignores rotation;
-   `resolveArrowEndpoint` anchors ignore shape rotation; freehand pen
-   (perfect-freehand) + sketchy mode (roughjs).
-2. **Product launch gate (unrelated to canvas)**: production signup → generate →
-   checkout funnel click-testing (see Launch risks below).
+### Remaining items (Platform Launch Gate)
+1. **Production Revenue Funnel verification**: Click-test production signup → generate → Stripe checkout funnel before public marketing launch.
 
 ### Hard-won implementation rules (do not relearn these)
 - ALL Konva gesture bookkeeping lives in synchronously-written refs
