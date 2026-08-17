@@ -154,16 +154,20 @@ export function validateFreeformRefs(doc: CanvasDocument): string[] {
       const arrowShape = shape as ArrowShape;
       if (isBoundEndpoint(arrowShape.start)) {
         const startRef = arrowShape.start as { shapeId: string };
-        const startExists = doc.shapes.some((s) => s.id === startRef.shapeId);
-        if (!startExists) {
+        const startTarget = doc.shapes.find((s) => s.id === startRef.shapeId);
+        if (!startTarget) {
           errors.push(`Arrow ${shape.id} start references missing shape "${startRef.shapeId}"`);
+        } else if (startTarget.type === "arrow" || startTarget.type === "line") {
+          errors.push(`Arrow ${shape.id} endpoint may not bind to arrow/line "${startRef.shapeId}"`);
         }
       }
       if (isBoundEndpoint(arrowShape.end)) {
         const endRef = arrowShape.end as { shapeId: string };
-        const endExists = doc.shapes.some((s) => s.id === endRef.shapeId);
-        if (!endExists) {
+        const endTarget = doc.shapes.find((s) => s.id === endRef.shapeId);
+        if (!endTarget) {
           errors.push(`Arrow ${shape.id} end references missing shape "${endRef.shapeId}"`);
+        } else if (endTarget.type === "arrow" || endTarget.type === "line") {
+          errors.push(`Arrow ${shape.id} endpoint may not bind to arrow/line "${endRef.shapeId}"`);
         }
       }
     }
