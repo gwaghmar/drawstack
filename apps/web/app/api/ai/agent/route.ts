@@ -19,6 +19,7 @@ import { parseFreeformSource } from "@/lib/diagrams/freeform-canvas";
 import { serializeForModel, MODEL_VIEW_GUIDE } from "@/lib/diagrams/freeform-model-view";
 import type { CanvasOp } from "@/lib/diagrams/freeform-ops";
 import { CanvasOpSchema } from "@/lib/diagrams/freeform-ops";
+import { checkLayoutIssues } from "@/lib/diagrams/freeform-layout-check";
 
 export const maxDuration = 60;
 
@@ -209,7 +210,7 @@ export async function POST(req: Request) {
     const result = streamText({
       model: languageModel,
       messages: await convertToModelMessages(messages),
-      stopWhen: stepCountIs(5),
+      stopWhen: stepCountIs(6),
       abortSignal: AbortSignal.timeout(45_000),
       onError: ({ error }) => {
         if (creditReserved) {
@@ -267,7 +268,7 @@ TOOLS:
 - update_diagram: full rewrite of diagram source
 - apply_patch: surgical find-and-replace on existing source${diagramType === "freeform" ? " — NEVER use on freeform canvas, string patching corrupts the scene JSON" : ""}
 - update_node: React Flow only — update a node's label/style by ID
-${diagramType === "freeform" ? "- apply_ops: freeform canvas only — targeted scene-graph ops (add/update/delete/connect/place/layout/reorder), targeting shapes by id or unique name\n" : ""}- fetch_external_data: fetch JSON from a URL or generate contextual sample data by keyword
+${diagramType === "freeform" ? "- apply_ops: freeform canvas only — targeted scene-graph ops (add/update/delete/connect/place/layout/reorder), targeting shapes by id or unique name\n- check_layout: freeform canvas only — deterministic check for overlapping shapes, dangling arrow references, and shapes outside their parent frame\n" : ""}- fetch_external_data: fetch JSON from a URL or generate contextual sample data by keyword
 - set_title: rename the diagram
 - set_theme: change the visual theme (only the listed theme ids)
 - set_palette: change the color palette
@@ -282,7 +283,7 @@ STRATEGY:
 5. Do not call 'apply_brand_kit' unless a brand kit is configured (see CURRENT STATE).
 6. update_diagram validates your output. If it returns an error, read the error and call update_diagram again with corrected output.
 7. Always briefly explain what you are doing before calling a tool.
-${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targeted edits — target shapes by id or unique name, and use 'place'/'layout' for relative positioning instead of guessing raw x/y coordinates. Reach for 'update_diagram' only for a full rebuild of the canvas. Never use 'apply_patch' here.\n9. " : "8. "}${MODE_STRATEGY_HINTS[editorMode] ?? ""}`,
+${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targeted edits — target shapes by id or unique name, and use 'place'/'layout' for relative positioning instead of guessing raw x/y coordinates. Reach for 'update_diagram' only for a full rebuild of the canvas. Never use 'apply_patch' here.\n9. Freeform canvas: after finishing your layout edits, call 'check_layout' once before ending your turn. If it reports issues, fix them with 'apply_ops' or 'update_diagram' (if you still have step budget), then finish — don't loop on it.\n10. " : "8. "}${MODE_STRATEGY_HINTS[editorMode] ?? ""}`,
       tools: {
         ...(diagramType === "freeform" ? {
           apply_ops: tool({
@@ -301,6 +302,16 @@ ${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targe
               }
               workingSource = result.source;
               return { success: true, explanation, sourceCode: result.source, applied: result.applied, errors: result.errors, canvas: result.canvas };
+            },
+          }),
+          check_layout: tool({
+            description: "Freeform canvas only: deterministically check the CURRENT diagram for overlapping shapes, dangling arrow references, and shapes positioned outside their parent frame. Call this once after you've made your layout edits, before finishing, to catch mistakes before the user sees them. Not an LLM call — instant and free to call.",
+            inputSchema: z.object({}),
+            execute: async () => {
+              toolCallCount++;
+              const { doc } = parseFreeformSource(workingSource);
+              const issues = checkLayoutIssues(doc);
+              return { success: true, issues, clean: issues.length === 0 };
             },
           }),
         } : {}),
