@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage, Circle as KonvaCircle } from "react-konva";
 import Konva from "konva";
 import rough from "roughjs";
@@ -34,10 +34,19 @@ import {
   AlignCenter,
   AlignRight,
   AlignHorizontalDistributeCenter,
+  AlignStartVertical,
+  AlignCenterVertical,
+  AlignEndVertical,
+  AlignVerticalDistributeCenter,
   BringToFront,
   SendToBack,
   Bold,
   Minus,
+  Plus,
+  ArrowLeft,
+  ArrowRight,
+  Spline,
+  CornerDownRight,
   IdCard,
   Table2,
   ListOrdered,
@@ -555,6 +564,90 @@ function MacroShapeNode({
   );
 }
 
+type ImageShapeNodeProps = {
+  shape: ImageShape;
+  w: number;
+  h: number;
+  commonProps: { rotation: number; opacity: number; stroke: string; strokeWidth: number };
+  draggable: boolean;
+  onShapeClick?: (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => void;
+  onShapeDblClick?: (shapeId: string) => void;
+  onShapeDragStart?: (shapeId: string, x: number, y: number) => void;
+  onShapeDragMove?: (e: Konva.KonvaEventObject<DragEvent>, shapeId: string, x: number, y: number) => void;
+  onShapeDragEnd?: (shapeId: string) => void;
+};
+
+// `renderShape` below is a plain function, not a component, so it can't hold
+// the async-loaded-image state itself — same reason MacroShapeNode exists as
+// its own component. Without this, `case "image"` could only ever paint the
+// static placeholder Rect, never the actual picture (SVG export already
+// rendered images correctly via freeformToSvg — this was a real WYSIWYG gap
+// on the interactive canvas, not just an unloaded-yet placeholder).
+function ImageShapeNode({
+  shape,
+  w,
+  h,
+  commonProps,
+  draggable,
+  onShapeClick,
+  onShapeDblClick,
+  onShapeDragStart,
+  onShapeDragMove,
+  onShapeDragEnd,
+}: ImageShapeNodeProps) {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setImage(null);
+    const img = new window.Image();
+    img.onload = () => {
+      if (!cancelled) setImage(img);
+    };
+    img.src = shape.src;
+    return () => {
+      cancelled = true;
+    };
+  }, [shape.src]);
+
+  const handlers = {
+    draggable,
+    onClick: (e: Konva.KonvaEventObject<MouseEvent>) => onShapeClick?.(e, shape.id),
+    onDblClick: () => onShapeDblClick?.(shape.id),
+    onDragStart: () => onShapeDragStart?.(shape.id, shape.x, shape.y),
+    onDragMove: (e: Konva.KonvaEventObject<DragEvent>) =>
+      onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y()),
+    onDragEnd: () => onShapeDragEnd?.(shape.id),
+  };
+
+  return (
+    <Group
+      key={shape.id}
+      id={shape.id}
+      x={shape.x}
+      y={shape.y}
+      rotation={commonProps.rotation}
+      opacity={commonProps.opacity}
+      {...handlers}
+    >
+      {image ? (
+        <KonvaImage image={image} x={0} y={0} width={w} height={h} cornerRadius={shape.cornerRadius ?? 8} />
+      ) : (
+        <Rect x={0} y={0} width={w} height={h} cornerRadius={shape.cornerRadius ?? 8} fill="#e2e8f0" />
+      )}
+      <Rect
+        x={0}
+        y={0}
+        width={w}
+        height={h}
+        cornerRadius={shape.cornerRadius ?? 8}
+        stroke={commonProps.stroke}
+        strokeWidth={commonProps.strokeWidth}
+      />
+    </Group>
+  );
+}
+
 function renderShape(
   shape: CanvasShape,
   doc: CanvasDocument,
@@ -666,6 +759,7 @@ function renderShape(
           pointerAtEnding={arrowShape.arrowEnd !== false}
           listening={!readOnly}
           onClick={(e) => onShapeClick?.(e, shape.id)}
+          onDblClick={() => onShapeDblClick?.(shape.id)}
         />
       ) : (
         <Line
@@ -679,6 +773,7 @@ function renderShape(
           opacity={commonProps.opacity}
           listening={!readOnly}
           onClick={(e) => onShapeClick?.(e, shape.id)}
+          onDblClick={() => onShapeDblClick?.(shape.id)}
         />
       );
 
@@ -1146,31 +1241,19 @@ function renderShape(
 
       case "image": {
         return (
-          <Group
+          <ImageShapeNode
             key={shape.id}
-            id={shape.id}
-            x={shape.x}
-            y={shape.y}
-            rotation={commonProps.rotation}
-            opacity={commonProps.opacity}
+            shape={shape as ImageShape}
+            w={w}
+            h={h}
+            commonProps={commonProps}
             draggable={draggable}
-            onClick={(e) => onShapeClick?.(e, shape.id)}
-            onDblClick={() => onShapeDblClick?.(shape.id)}
-            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
-            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
-            onDragEnd={() => onShapeDragEnd?.(shape.id)}
-          >
-            <Rect
-              x={0}
-              y={0}
-              width={w}
-              height={h}
-              cornerRadius={8}
-              fill="#e2e8f0"
-              stroke={commonProps.stroke}
-              strokeWidth={commonProps.strokeWidth}
-            />
-          </Group>
+            onShapeClick={onShapeClick}
+            onShapeDblClick={onShapeDblClick}
+            onShapeDragStart={onShapeDragStart}
+            onShapeDragMove={onShapeDragMove}
+            onShapeDragEnd={onShapeDragEnd}
+          />
         );
       }
 
@@ -1380,6 +1463,13 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const panRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
+  const selectedIdsRef = useRef(selectedIds);
+  selectedIdsRef.current = selectedIds;
+  const [isDragOverCanvas, setIsDragOverCanvas] = useState(false);
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  const onRemoteChangeRef = useRef(onRemoteChange);
+  onRemoteChangeRef.current = onRemoteChange;
 
   const dragStateRef = useRef<{
     shapeId: string;
@@ -1394,6 +1484,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const dotDragActiveRef = useRef(false);
   const drawDraftRef = useRef<DrawDraft | null>(null);
   const clipboardRef = useRef<CanvasShape[]>([]);
+  const opacityCommitRef = useRef<CanvasDocument | null>(null);
 
   const setModeSynced = (next: ToolMode) => {
     modeRef.current = next;
@@ -1450,7 +1541,10 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         const nextDoc = { ...prev, shapes: remoteShapes };
         // Remote edits go through onRemoteChange (no recordUndo) when the host
         // provides it; local gesture commits keep going through onChange below.
-        const notify = onRemoteChange ?? onChange;
+        // Read via refs, not the closed-over props, so this effect's own
+        // dependency array stays fixed at [roomId, readOnly] regardless of
+        // callback identity churn on the caller's side.
+        const notify = onRemoteChangeRef.current ?? onChangeRef.current;
         if (!readOnly && notify) {
           const serialized = serializeFreeformDocument(nextDoc);
           if (serialized !== lastSourceRef.current) {
@@ -1471,7 +1565,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       yjsStoreRef.current = null;
       setPeers([]);
     };
-  }, [roomId, readOnly, onChange, onRemoteChange]);
+  }, [roomId, readOnly]);
 
   // Sync external source prop to local state
   useEffect(() => {
@@ -1514,10 +1608,16 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const startEditing = (shapeId: string) => {
     if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
     const shape = doc.shapes.find((s) => s.id === shapeId);
-    if (!shape || shape.type === "arrow" || shape.type === "line" || shape.type === "path" || shape.locked) return;
+    if (!shape || shape.type === "line" || shape.type === "path" || shape.locked) return;
     setSelectedIds(new Set());
     setEditingShapeId(shapeId);
-    setEditingValue(shape.type === "frame" ? shape.name ?? "" : shape.text?.content ?? "");
+    setEditingValue(
+      shape.type === "frame"
+        ? shape.name ?? ""
+        : shape.type === "arrow"
+          ? (shape as ArrowShape).label ?? ""
+          : shape.text?.content ?? ""
+    );
   };
 
   const insertShapeAt = (kind: ShapeKind, cx: number, cy: number) => {
@@ -1586,22 +1686,55 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     insertCatalogShapeAt(entry, cx, cy);
   };
 
+  // Undo-stack entries and Yjs sync both serialize the full doc, so an
+  // uncapped multi-MB paste/drop bloats both — downscale before it ever
+  // becomes a stored data URL, not just the on-canvas display box.
+  const MAX_STORED_IMAGE_DIM = 1600;
+
+  const downscaleImageDataUrl = (img: HTMLImageElement, src: string): { src: string; width: number; height: number } => {
+    const w = img.naturalWidth || 0;
+    const h = img.naturalHeight || 0;
+    const maxDim = Math.max(w, h);
+    if (maxDim === 0 || maxDim <= MAX_STORED_IMAGE_DIM) {
+      return { src, width: w || 300, height: h || 200 };
+    }
+    const scale = MAX_STORED_IMAGE_DIM / maxDim;
+    const targetW = Math.round(w * scale);
+    const targetH = Math.round(h * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return { src, width: w, height: h };
+    ctx.drawImage(img, 0, 0, targetW, targetH);
+    return { src: canvas.toDataURL("image/png"), width: targetW, height: targetH };
+  };
+
+  // Shared by the file-picker button, clipboard paste, and drag-drop — reads a
+  // File into a data URL, downscales it if it's oversized, then places it via
+  // the same sizing/placement logic (insertImageAt) all three paths need.
+  const insertImageFromFile = (file: File, cx: number, cy: number) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rawSrc = reader.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        const { src, width, height } = downscaleImageDataUrl(img, rawSrc);
+        insertImageAt(src, width, height, cx, cy);
+      };
+      img.src = rawSrc;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const src = reader.result as string;
-      const img = new window.Image();
-      img.onload = () => {
-        const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
-        const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
-        insertImageAt(src, img.naturalWidth || 300, img.naturalHeight || 200, cx, cy);
-      };
-      img.src = src;
-    };
-    reader.readAsDataURL(file);
+    const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
+    const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+    insertImageFromFile(file, cx, cy);
   };
 
   const zoomBy = (factor: number) => {
@@ -1617,6 +1750,39 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
 
   const resetZoom = () => setViewport({ scale: 1, x: 0, y: 0 });
 
+  // Fits the given shapes (or every shape when omitted/empty) into the
+  // viewport with padding — same bounds-union + scale-to-fit math the
+  // present-mode frame-navigate jump already does for a single frame.
+  const zoomToFit = (shapes: CanvasShape[]) => {
+    const baseDoc = docRef.current;
+    const targets = shapes.length > 0 ? shapes : baseDoc.shapes;
+    if (targets.length === 0) {
+      resetZoom();
+      return;
+    }
+
+    const boundsList = targets.map((s) => getShapeBounds(baseDoc, s));
+    const minX = Math.min(...boundsList.map((b) => b.x));
+    const minY = Math.min(...boundsList.map((b) => b.y));
+    const maxX = Math.max(...boundsList.map((b) => b.x + b.width));
+    const maxY = Math.max(...boundsList.map((b) => b.y + b.height));
+    const contentWidth = Math.max(1, maxX - minX);
+    const contentHeight = Math.max(1, maxY - minY);
+
+    const PADDING = 48;
+    const scaleX = (STAGE_WIDTH - PADDING * 2) / contentWidth;
+    const scaleY = (STAGE_HEIGHT - PADDING * 2) / contentHeight;
+    const finalScale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, Math.min(scaleX, scaleY)));
+
+    const cx = minX + contentWidth / 2;
+    const cy = minY + contentHeight / 2;
+    setViewport({
+      scale: finalScale,
+      x: STAGE_WIDTH / 2 - cx * finalScale,
+      y: STAGE_HEIGHT / 2 - cy * finalScale,
+    });
+  };
+
   const commitEditing = (cancel: boolean) => {
     const shapeId = editingShapeId;
     if (!shapeId) return;
@@ -1630,6 +1796,25 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     if (shape.type === "frame") {
       const name = content.trim() === "" ? shape.name : content;
       const newShapes = doc.shapes.map((s) => (s.id === shapeId ? { ...s, name } : s));
+      const newDoc = { ...doc, shapes: newShapes };
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      return;
+    }
+
+    if (shape.type === "arrow") {
+      // Unlike a frame, an arrow with no label is a normal, common state —
+      // clear it back out instead of keeping the old value on an empty commit.
+      const newShapes = doc.shapes.map((s) => {
+        if (s.id !== shapeId) return s;
+        const updated = { ...(s as ArrowShape) };
+        if (content === "") {
+          delete updated.label;
+        } else {
+          updated.label = content;
+        }
+        return updated;
+      });
       const newDoc = { ...doc, shapes: newShapes };
       setDoc(newDoc);
       commitChanges(newDoc);
@@ -1690,29 +1875,10 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         return;
       }
 
-      // Paste (Ctrl+V / Cmd+V) — works with no live selection, unlike the ops below.
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
-        if (clipboardRef.current.length === 0) return;
-        e.preventDefault();
-        const newIds = new Set<string>();
-        const pasted: CanvasShape[] = clipboardRef.current.map((s) => {
-          const freshId = generateShapeId("copy");
-          newIds.add(freshId);
-          return {
-            ...s,
-            id: freshId,
-            name: s.name ? `${s.name}-copy` : undefined,
-            x: "x" in s ? s.x + 20 : 0,
-            y: "y" in s ? s.y + 20 : 0,
-          };
-        });
-        const newDoc = { ...doc, shapes: [...doc.shapes, ...pasted] };
-        setDoc(newDoc);
-        setSelectedIds(newIds);
-        commitChanges(newDoc);
-        return;
-      }
-
+      // Shape clipboard paste moved to the `paste` DOM event listener below —
+      // that's the same physical Cmd+V keystroke also fires a native `paste`
+      // event, and when the OS clipboard holds an image we need that path to
+      // win without also running this one and double-inserting.
       if (selectedIds.size === 0) return;
 
       if (e.key === "Delete" || e.key === "Backspace") {
@@ -1782,6 +1948,72 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [doc, selectedIds, readOnly, editingShapeId]);
 
+  // Clipboard paste (image takes priority over the internal shape clipboard —
+  // both would otherwise fire off the same physical Cmd+V).
+  useEffect(() => {
+    if (readOnly) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.isContentEditable
+      ) {
+        return;
+      }
+
+      const clipboardData = e.clipboardData;
+      let imageFile: File | null = null;
+      if (clipboardData) {
+        if (clipboardData.files && clipboardData.files.length > 0) {
+          imageFile = Array.from(clipboardData.files).find((f) => f.type.startsWith("image/")) ?? null;
+        }
+        if (!imageFile && clipboardData.items) {
+          for (const item of Array.from(clipboardData.items)) {
+            if (item.kind === "file" && item.type.startsWith("image/")) {
+              imageFile = item.getAsFile();
+              break;
+            }
+          }
+        }
+      }
+
+      if (imageFile) {
+        e.preventDefault();
+        const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
+        const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+        insertImageFromFile(imageFile, cx, cy);
+        return;
+      }
+
+      // No image on the clipboard — fall back to our own shape clipboard
+      // (populated by Cmd+C above). Works with no live selection.
+      if (clipboardRef.current.length === 0) return;
+      e.preventDefault();
+      const baseDoc = docRef.current;
+      const newIds = new Set<string>();
+      const pasted: CanvasShape[] = clipboardRef.current.map((s) => {
+        const freshId = generateShapeId("copy");
+        newIds.add(freshId);
+        return {
+          ...s,
+          id: freshId,
+          name: s.name ? `${s.name}-copy` : undefined,
+          x: "x" in s ? s.x + 20 : 0,
+          y: "y" in s ? s.y + 20 : 0,
+        };
+      });
+      const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, ...pasted] };
+      setDoc(newDoc);
+      setSelectedIds(newIds);
+      commitChanges(newDoc);
+    };
+
+    window.addEventListener("paste", handlePaste);
+    return () => window.removeEventListener("paste", handlePaste);
+  }, [readOnly]);
+
   // Tool-mode shortcuts: v = select, p = pen, a = arrow, r/o/d/t/s/f = place, 0 = reset zoom
   useEffect(() => {
     if (readOnly) return;
@@ -1793,6 +2025,17 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       if ((e.metaKey || e.ctrlKey) && e.key === "0") {
         e.preventDefault();
         resetZoom();
+        return;
+      }
+      // ⌘A/⌃A select-all — guarded separately from ⌘0 above (which fires even
+      // while typing) so it never steals native text selection out of the AI
+      // chat, Source panel, or title field.
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a") {
+        const el = document.activeElement as HTMLElement | null;
+        if (el?.tagName === "INPUT" || el?.tagName === "TEXTAREA" || el?.isContentEditable) return;
+        e.preventDefault();
+        const allIds = new Set(docRef.current.shapes.filter((s) => !s.locked).map((s) => s.id));
+        setSelectedIds(allIds);
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1812,6 +2055,19 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           drawDraftRef.current = null;
           setDrawDraft(null);
           setModeSynced("select");
+        }
+        return;
+      }
+
+      // Shift+2 zoom-to-selection — accept either the physical-key code
+      // ("Digit2", stable across layouts where Shift+2 produces "@") or a
+      // literal "2" in e.key, since some environments (synthetic/automated
+      // key dispatch, certain layouts) don't populate e.code at all.
+      if (e.shiftKey && (e.code === "Digit2" || e.key === "2")) {
+        const selected = docRef.current.shapes.filter((s) => selectedIdsRef.current.has(s.id));
+        if (selected.length > 0) {
+          e.preventDefault();
+          zoomToFit(selected);
         }
         return;
       }
@@ -2440,6 +2696,33 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     commitChanges(newDoc);
   };
 
+  // Opacity slider fires many onChange ticks per drag — commitChanges (and
+  // therefore recordUndo, 50-step capped) must only run once, on release, or
+  // one drag floods the whole undo stack. Live-preview via setDoc alone on
+  // every tick; the final doc is stashed in a ref and committed on pointer-up.
+  const updateSelectedOpacityLive = (value: number) => {
+    const newShapes: CanvasShape[] = doc.shapes.map((s) =>
+      selectedIds.has(s.id) ? ({ ...s, opacity: value } as CanvasShape) : s
+    );
+    const newDoc: CanvasDocument = { ...doc, shapes: newShapes };
+    opacityCommitRef.current = newDoc;
+    setDoc(newDoc);
+  };
+
+  const commitSelectedOpacity = () => {
+    if (!opacityCommitRef.current) return;
+    commitChanges(opacityCommitRef.current);
+    opacityCommitRef.current = null;
+  };
+
+  const bumpSelectedFontSize = (delta: number) => {
+    updateSelectedProps((s) => {
+      const current = s.text?.fontSize ?? 14;
+      const next = Math.max(8, Math.min(72, current + delta));
+      return { ...s, text: { ...(s.text ?? { content: "" }), fontSize: next } };
+    });
+  };
+
   const bringSelectionToFront = () => {
     const without = doc.shapes.filter((s) => !selectedIds.has(s.id));
     const selected = doc.shapes.filter((s) => selectedIds.has(s.id));
@@ -2650,6 +2933,36 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     ...doc.shapes.filter((s) => s.type !== "frame"),
   ];
 
+  const handleCanvasDragOver = (e: ReactDragEvent<HTMLDivElement>) => {
+    if (readOnly) return;
+    if (Array.from(e.dataTransfer.types).includes("Files")) {
+      e.preventDefault();
+      setIsDragOverCanvas(true);
+    }
+  };
+
+  const handleCanvasDragLeave = (e: ReactDragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setIsDragOverCanvas(false);
+  };
+
+  const handleCanvasDrop = (e: ReactDragEvent<HTMLDivElement>) => {
+    if (readOnly) return;
+    e.preventDefault();
+    setIsDragOverCanvas(false);
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+    if (files.length === 0) return;
+    files.forEach((file, i) => {
+      const dropX = stageContainerRect
+        ? (e.clientX - stageContainerRect.left - viewport.x) / viewport.scale
+        : (STAGE_WIDTH / 2 - viewport.x) / viewport.scale;
+      const dropY = stageContainerRect
+        ? (e.clientY - stageContainerRect.top - viewport.y) / viewport.scale
+        : (STAGE_HEIGHT / 2 - viewport.y) / viewport.scale;
+      insertImageFromFile(file, dropX + i * 24, dropY + i * 24);
+    });
+  };
+
   return (
     <div
       className="w-full h-full relative overflow-hidden select-none bg-slate-50 dark:bg-slate-950"
@@ -2658,7 +2971,14 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         backgroundSize: `${20 * viewport.scale}px ${20 * viewport.scale}px`,
         backgroundImage: "radial-gradient(#cbd5e1 1.2px, transparent 1.2px)",
       }}
+      onDragOver={handleCanvasDragOver}
+      onDragLeave={handleCanvasDragLeave}
+      onDrop={handleCanvasDrop}
     >
+      {!readOnly && isDragOverCanvas && (
+        <div className="pointer-events-none absolute inset-0 z-40 rounded-lg border-2 border-dashed border-indigo-400 bg-indigo-500/5" />
+      )}
+
       <input
         ref={fileInputRef}
         type="file"
@@ -2843,9 +3163,9 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         <div className="h-5 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
         <button
           type="button"
-          onClick={resetZoom}
-          title="Reset view (⌘0)"
-          aria-label="Reset view"
+          onClick={() => zoomToFit(doc.shapes)}
+          title="Zoom to fit (⌘0 resets to 100%)"
+          aria-label="Zoom to fit"
           className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
         >
           <Maximize className="h-4 w-4" />
@@ -2886,6 +3206,28 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
 
           {styleDivider}
 
+          {/* Stroke Color Swatches */}
+          <div className="flex items-center gap-1">
+            {["#1e293b", "#94a3b8", "5", "4", "3", "1", "6"].map((c) => {
+              const hex = resolveColor(c) ?? c;
+              const isActive = primarySelected?.stroke === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => updateSelectedProps({ stroke: c })}
+                  className={`h-4 w-4 rounded-full border border-slate-300 transition-transform ${
+                    isActive ? "scale-125 ring-2 ring-indigo-500" : "hover:scale-110"
+                  }`}
+                  style={{ background: hex }}
+                  title={`Stroke ${c}`}
+                />
+              );
+            })}
+          </div>
+
+          {styleDivider}
+
           {/* Stroke Width Toggle */}
           <div className="flex items-center gap-0.5">
             {[1, 2, 4].map((w) => (
@@ -2918,10 +3260,117 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           )}
 
           {styleIconButton(
+            <Minus className="h-3.5 w-3.5" style={{ strokeDasharray: 1.5 }} />,
+            primarySelected?.strokeDash === "dotted",
+            () => updateSelectedProps((s) => ({ ...s, strokeDash: s.strokeDash === "dotted" ? "solid" : "dotted" })),
+            "Toggle dotted line"
+          )}
+
+          {styleDivider}
+
+          {/* Opacity — live-preview per tick, commit once on release (see
+              updateSelectedOpacityLive / commitSelectedOpacity above). */}
+          <div className="flex items-center gap-1 px-0.5">
+            <input
+              type="range"
+              min={10}
+              max={100}
+              step={5}
+              value={Math.round((primarySelected?.opacity ?? 1) * 100)}
+              onChange={(e) => updateSelectedOpacityLive(Number(e.target.value) / 100)}
+              onPointerUp={commitSelectedOpacity}
+              onMouseUp={commitSelectedOpacity}
+              onKeyUp={commitSelectedOpacity}
+              className="h-1 w-14 accent-indigo-500"
+              title="Opacity"
+            />
+            <span className="w-7 text-[10px] font-medium text-slate-500 dark:text-slate-400">
+              {Math.round((primarySelected?.opacity ?? 1) * 100)}%
+            </span>
+          </div>
+
+          {styleDivider}
+
+          {styleIconButton(
             <Bold className="h-3.5 w-3.5" />,
             Boolean(primarySelected?.text?.bold),
             () => updateSelectedProps((s) => ({ ...s, text: { ...(s.text ?? { content: "" }), bold: !s.text?.bold } })),
             "Toggle bold"
+          )}
+
+          {/* Font Size — only meaningful for shapes that render a .text block;
+              arrows/lines/paths carry their own label/stroke, not this. */}
+          {selectedShapes.length > 0 &&
+            selectedShapes.every((s) => s.type !== "arrow" && s.type !== "line" && s.type !== "path") && (
+              <>
+                {styleDivider}
+                <div className="flex items-center gap-0.5">
+                  <button
+                    type="button"
+                    onClick={() => bumpSelectedFontSize(-2)}
+                    title="Decrease font size"
+                    className="flex h-5 w-5 items-center justify-center rounded text-slate-600 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/10"
+                  >
+                    <Minus className="h-3 w-3" />
+                  </button>
+                  <span className="w-5 text-center text-[10px] font-medium text-slate-600 dark:text-slate-300">
+                    {primarySelected?.text?.fontSize ?? 14}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => bumpSelectedFontSize(2)}
+                    title="Increase font size"
+                    className="flex h-5 w-5 items-center justify-center rounded text-slate-600 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/10"
+                  >
+                    <Plus className="h-3 w-3" />
+                  </button>
+                </div>
+              </>
+            )}
+
+          {/* Arrow-only: arrowhead presence at each end, and line routing.
+              Schema only supports booleans here (arrowStart/arrowEnd), not a
+              style enum, so these are plain on/off toggles, not dropdowns. */}
+          {selectedShapes.length > 0 && selectedShapes.every((s) => s.type === "arrow") && (
+            <>
+              {styleDivider}
+              {styleIconButton(
+                <ArrowLeft className="h-3.5 w-3.5" />,
+                Boolean((primarySelected as ArrowShape | undefined)?.arrowStart),
+                () => updateSelectedProps((s) => ({ ...s, arrowStart: !(s as ArrowShape).arrowStart }) as CanvasShape),
+                "Toggle start arrowhead"
+              )}
+              {styleIconButton(
+                <ArrowRight className="h-3.5 w-3.5" />,
+                (primarySelected as ArrowShape | undefined)?.arrowEnd !== false,
+                () => updateSelectedProps((s) => ({ ...s, arrowEnd: (s as ArrowShape).arrowEnd === false }) as CanvasShape),
+                "Toggle end arrowhead"
+              )}
+            </>
+          )}
+
+          {selectedShapes.length > 0 && selectedShapes.every((s) => s.type === "arrow" || s.type === "line") && (
+            <>
+              {styleDivider}
+              {styleIconButton(
+                <Minus className="h-3.5 w-3.5" />,
+                !(primarySelected as ArrowShape | undefined)?.routing || (primarySelected as ArrowShape).routing === "straight",
+                () => updateSelectedProps((s) => ({ ...s, routing: "straight" }) as CanvasShape),
+                "Straight routing"
+              )}
+              {styleIconButton(
+                <Spline className="h-3.5 w-3.5" />,
+                (primarySelected as ArrowShape | undefined)?.routing === "curved",
+                () => updateSelectedProps((s) => ({ ...s, routing: "curved" }) as CanvasShape),
+                "Curved routing"
+              )}
+              {styleIconButton(
+                <CornerDownRight className="h-3.5 w-3.5" />,
+                (primarySelected as ArrowShape | undefined)?.routing === "orthogonal",
+                () => updateSelectedProps((s) => ({ ...s, routing: "orthogonal" }) as CanvasShape),
+                "Orthogonal routing"
+              )}
+            </>
           )}
 
           {/* Multi-Selection Alignment Tools */}
@@ -2932,6 +3381,10 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
               {styleIconButton(<AlignCenter className="h-3.5 w-3.5" />, false, () => alignSelected("center"), "Align center")}
               {styleIconButton(<AlignRight className="h-3.5 w-3.5" />, false, () => alignSelected("right"), "Align right")}
               {styleIconButton(<AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />, false, () => alignSelected("distribute-h"), "Distribute horizontally")}
+              {styleIconButton(<AlignStartVertical className="h-3.5 w-3.5" />, false, () => alignSelected("top"), "Align top")}
+              {styleIconButton(<AlignCenterVertical className="h-3.5 w-3.5" />, false, () => alignSelected("middle"), "Align middle")}
+              {styleIconButton(<AlignEndVertical className="h-3.5 w-3.5" />, false, () => alignSelected("bottom"), "Align bottom")}
+              {styleIconButton(<AlignVerticalDistributeCenter className="h-3.5 w-3.5" />, false, () => alignSelected("distribute-v"), "Distribute vertically")}
             </>
           )}
 
