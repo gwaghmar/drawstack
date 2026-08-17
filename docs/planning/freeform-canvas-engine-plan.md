@@ -1,224 +1,151 @@
-# FlowStudio Custom Canvas Engine — Phase 1 (replace tldraw)
+# FlowStudio Agent-Native Canvas — Plan v2 (supersedes the v1 12-milestone plan)
 
-## Context
+> v2 (2026-08-16) replaces the original "rebuild tldraw from scratch" scope after a
+> three-lane research pass (licenses/code, market gaps, agent-native formats).
+> Milestones 1–2 of the v1 plan shipped (`freeform-canvas.ts`, `freeform-canvas.test.ts`,
+> `freeform-renderer.tsx` with select/move/delete) and carry forward unchanged.
 
-FlowStudio currently uses tldraw to power "Art Board" mode. We discovered tldraw's
-license is not truly free for commercial use — it requires a separate paid agreement.
-That's a real legal risk for a product we intend to sell. Rather than pay for tldraw
-or keep using it under that risk, the decision (confirmed with the user) is to build
-FlowStudio's own freeform canvas engine from scratch — original code, inspired by
-(never copied from) tldraw/Figma/Miro/Excalidraw's UX ideas.
+## Product thesis (from market research)
 
-This is Phase 1 of a longer-term "build our own everything" direction (charts and
-flowcharts could follow later), but only this phase — the freeform/art canvas — is
-being scoped and started now, since it's the one with actual legal urgency. The user
-is solo (just them + Claude Code), in no rush, and wants this built in an isolated
-backup copy of the project so the live app / production deploy is never touched until
-it's ready to merge back in.
+The #1 unfilled gap across the diagram market: **no tool lets AI and humans co-edit
+the same diagram without destroying each other's work.** Auto-layout tools (Mermaid,
+every AI generator) give no layout control; manual tools (draw.io, Miro, Lucid) give
+no AI structure; every AI regeneration nukes hand-placed positions. The composite
+user story nobody serves: *"AI drafts it, I fix it by hand, AI makes a targeted
+change without wrecking my fixes."*
 
-## Decisions
+That is exactly what an id-addressed JSON scene graph with surgical patch ops does.
+Secondary gaps we also hit: diagrams that version-control (text-serializable scene
+graph diffs in git; Mermaid diffs but loses layout, draw.io keeps layout but can't
+diff), performance (Miro dies at ~1k objects), and Excalidraw-grade interaction
+fundamentals (instant start, rock-solid select/drag — the boring basics are the moat).
 
-**Foundation library: Konva.js + react-konva (both MIT license, verified against
-current GitHub LICENSE files today).** Chosen over Fabric.js (fights a React-state-owns-
-the-data architecture), raw Canvas/SVG (too much undifferentiated work for a solo
-build — hit-testing, resize handles, drag from scratch), PixiJS (WebGL/game-oriented,
-not a shape-editor fit for v1), and Paper.js (no maintained React bindings). Confirmed
-`react-konva` 19.x is compatible with the app's installed React 19.2.7.
+Honest scope limits: sell the whiteboard/proposal/social use case. Don't promise
+as-built codebase archaeology (LLMs hallucinate real-system structure — Ilograph).
 
-Architecture stance: **React state is the source of truth; Konva only renders it.**
-No separate "editor store" the way tldraw has — this avoids tldraw's own wart where
-the AI-facing format and the internal save format are two different things.
+## Legal foundation (verified from LICENSE files, 2026-08-16)
 
-**One canonical JSON scene format**, used identically for AI generation, internal
-state, and the saved `source` string — never two formats like tldraw's
-`{elements}` (AI) vs `{snapshot}` (internal) split.
+- **Depend on (MIT, safe):** `konva`, `react-konva`, `perfect-freehand` (freehand pen,
+  take as-is), `roughjs` (sketchy style), later `yjs` (collab). Already in-app: `@xyflow/react`, `mermaid`.
+- **Copy-with-attribution (MIT):** **Excalidraw** is the one codebase to actively mine —
+  element schema patterns (`packages/element/src/types.ts`), arrow-binding logic
+  (`binding.ts`), fractional z-index, bound-text mechanics. Any copied/adapted module
+  gets a header comment (`Portions adapted from Excalidraw (MIT, (c) 2020 Excalidraw)`)
+  and an entry in a new `THIRD_PARTY_LICENSES.md` (also list perfect-freehand, roughjs, Konva).
+- **Ideas only, strictly no code:** tldraw (custom commercial license covers the source —
+  no reading-then-transcribing; concepts from public docs only: record store, bindings-as-
+  records, history marks). JointJS / Penpot / D2 (MPL-2.0 — copying a file open-sources it).
+  mxGraph (modified Apache with field-of-use clause, archived — use drawio, plain
+  Apache-2.0, as routing-algorithm reference instead).
 
-```ts
-type CanvasDocument = { version: 1; shapes: CanvasShape[] };
+## Architecture — four layers
 
-type BaseShape = {
-  id: string; x: number; y: number; rotation?: number;
-  fill?: string; stroke?: string; strokeWidth?: number; opacity?: number;
-  frameId?: string | null; locked?: boolean;
-  text?: { content: string; fontSize?: number; fontFamily?: string;
-           align?: "left" | "center" | "right"; color?: string; bold?: boolean };
-};
-type RectShape    = BaseShape & { type: "rectangle"; width: number; height: number; cornerRadius?: number };
-type EllipseShape = BaseShape & { type: "ellipse";   width: number; height: number };
-type DiamondShape = BaseShape & { type: "diamond";   width: number; height: number };
-type StickyShape  = BaseShape & { type: "sticky";    width: number; height: number };
-type TextShape    = BaseShape & { type: "text";      width: number; height: number };
-type FrameShape   = BaseShape & { type: "frame";     width: number; height: number; name?: string };
-type ArrowEndpoint = { x: number; y: number } | { shapeId: string; anchor?: "top"|"right"|"bottom"|"left"|"center"|"auto" };
-type ArrowShape   = BaseShape & { type: "arrow" | "line"; start: ArrowEndpoint; end: ArrowEndpoint };
-type CanvasShape = RectShape | EllipseShape | DiamondShape | StickyShape | TextShape | FrameShape | ArrowShape;
+**One canonical JSON document** (unchanged principle from v1): same format for AI
+generation, internal state, and the saved `source` string. React state is the source
+of truth; Konva only renders it. Z-order = array order.
+
+### L1 — Document schema (`freeform-canvas.ts`, additive changes to milestone-1)
+- Add `name?: string` to `BaseShape` — stable semantic handle ("api-server",
+  "step-3") so agents and humans target "the database box" without ids leaking into
+  conversation. Enforce name uniqueness in `validateFreeformRefs`. Optional
+  `role?: string` for domain meaning ("database", "decision").
+- Harden `parseFreeformSource`: return `{ doc, errors }` and keep-last-good instead of
+  silently returning an empty document on malformed JSON (one bad AI emit must never
+  wipe the canvas — same principle as the streaming `mermaid.parse()` gate).
+- `resolveArrowEndpoint` on a dead ref: surface a validation error, never guess `(0,0)`.
+- `getShapeBounds` for arrows: compute real bounds from resolved endpoints (spatial
+  queries, marquee, export crop all depend on it).
+- Arrow `label?: string`; palette shorthand colors (named/numbered theme colors,
+  JSON-Canvas-style `"1"–"6"`, resolved at render time — cheaper tokens, brand-kit friendly).
+
+### L2 — Ops engine (`freeform-ops.ts`, new; the heart of agent-native)
+Id/name-addressed typed operation list — NOT RFC-6902 JSON Patch (index-addressed,
+goes stale) and NOT search-replace (anchor ambiguity, aider's documented top failure):
+```json
+{ "ops": [
+  { "op": "add", "shape": { "id": "db1", "type": "rectangle", "name": "database" } },
+  { "op": "update", "target": "api", "set": { "fill": "2", "text.content": "API v2" } },
+  { "op": "delete", "target": "old-note" },
+  { "op": "connect", "from": "api", "to": "db1", "label": "reads" },
+  { "op": "place", "target": "db1", "below": "api", "gap": 80, "align": "center" },
+  { "op": "layout", "targets": ["a","b","c"], "arrange": "row", "gap": 40 },
+  { "op": "reorder", "target": "db1", "to": "front" }
+] }
 ```
+- `target` accepts id or unique name; ambiguous name → structured error listing all
+  candidates, never a silent pick (dtour/excalidraw-mcp pattern).
+- **Relative placement** (`place`, `layout`, `inside: <frameName>`) so the agent
+  rarely writes a coordinate — the engine owns geometry (D2/TALA lesson). Absolute
+  x/y stays legal for humans and precise asks.
+- Auto-size boxes from text with ~15% over-estimation (models can't measure text).
+- **Validate–repair–report:** apply good ops, return per-op errors for bad ones;
+  dedupe ids, round coordinates, cascade/re-anchor on delete (no dangling refs).
+  Never silently guess.
+- Full-document `replace` stays as the escape hatch for big restructures.
 
-- Z-order = array order (no z-index field).
-- Frame membership is a flat `frameId` reference, not a nested tree (easier for the AI
-  to emit correctly, easier to patch one shape by id).
-- Arrow binding is resolved at render time via `resolveArrowEndpoint(doc, endpoint)` —
-  a bound arrow endpoint stores `{shapeId, anchor}`, not raw coordinates, so it follows
-  the shape automatically when it moves/resizes (tldraw-inspired UX idea, original code).
+### L3 — Model-facing serialization (read view ≠ storage format)
+- Integer-rounded coordinates, stable key order, one-line-per-shape JSON (captures
+  most of TOON's 30–60% token saving while staying `JSON.parse`-able).
+- Canvas-absolute coordinates only, stated in the prompt (tldraw built dedicated
+  sanitization for viewport-relative confusion — avoid the class entirely).
+- Later, at scale: tiered fidelity (full props for targeted shapes, `{id, name,
+  type, bounds, text}` for the rest, cluster summaries beyond — tldraw agent kit).
 
-**MVP feature slice:**
-- Shapes: rectangle, ellipse, diamond, arrow/line, text, sticky note, frame.
-- Interactions: select (click/shift-click/marquee), move, resize+rotate (via
-  `Konva.Transformer`), delete, duplicate, keyboard nudge, zoom/pan, double-click text
-  editing (contentEditable overlay — the standard technique for text input on canvas).
-- Snapping: bounds snapping (alignment guides) + handle snapping (needed for arrow
-  binding) in v1. Equal-gap snapping deferred.
-- Frames: drag-into-frame assigns `frameId`; moving a frame moves its children.
-  Resize-scales-children is deferred (ships the simple, correct behavior first).
-- Explicitly deferred (not silently dropped): hand-drawn render style, rich text
-  formatting beyond a bold flag, multiplayer, image shapes, nested frames, freehand
-  pen tool, pixel-perfect export.
-- **Undo/redo needs zero new code** — `editor-client.tsx`'s existing generic
-  `undoStack`/`redoStack: string[]` mechanism (~lines 509-515, 651-669, 802-803) works
-  automatically as long as the renderer serializes its whole document to one JSON
-  string on every committed change, exactly like every other type already does.
-- **Export starts free** by doing nothing special — falls into the existing generic
-  `html-to-image` DOM-screenshot fallback (`handleExport`, ~lines 1249-1357) that
-  tldraw already uses today. A pixel-perfect upgrade (matching the ECharts
-  `forwardRef`/`useImperativeHandle` pattern) is a later, optional improvement.
+### L4 — Konva renderer (human editing; keep Excalidraw's virtues sacred)
+Existing `freeform-renderer.tsx` (select/move/delete/nudge, ref-guard onChange) plus:
+resize/rotate via `Konva.Transformer`, contentEditable text overlay, bounds+handle
+snapping, arrow-binding UX, frames, sticky notes, zoom/pan. Undo/redo: zero new code —
+the editor's generic `undoStack` works because the renderer serializes the whole doc
+per committed change. Export: falls into the existing `html-to-image` fallback first.
 
-**AI integration:**
-- `update_diagram` (full rewrite) needs no new mechanism — just a new
-  `DIAGRAM_SYSTEM_PROMPTS.freeform` entry (`packages/core/src/diagram-types.ts`) that
-  emits the section-2 schema directly, and a new `FreeformCanvasSchema` (Zod) in
-  `apps/web/lib/diagrams/validate-output.ts`, following the exact pattern already used
-  for every other JSON-based type.
-- New tool `update_shape`: an id-addressed "patch one shape's properties" tool,
-  generalizing the existing `update_node` (currently hardcoded to reactflow only,
-  `agent/route.ts` ~line 312) instead of reusing the naive string-based `apply_patch`
-  (confirmed to be a pure `split/join` with zero structural awareness —
-  `apps/web/lib/agent-tools.ts:1-10` — a bad fit for a real scene graph). Applied
-  client-side in `editor-client.tsx`'s existing tool-effect-application `useEffect`
-  (~line 1095), same pattern as the current `update_node` branch, addressed by
-  `shapes[]` instead of `nodes[]`.
+## AI wiring
 
-**Type id: `"freeform"`**, label "Free Canvas", `category: "whiteboard"` (lands in the
-existing Art Board mode tab alongside Excalidraw), `aiOutputFormat: "freeform-json"`.
+- Generation: `DIAGRAM_SYSTEM_PROMPTS.freeform` emits the L1 document; Zod
+  `FreeformCanvasSchema` in `validate-output.ts` + `validateFreeformRefs` (mirrors the
+  reactflow pattern).
+- Agent mode: new `apply_ops` tool (server: `agent/route.ts` next to `update_node`;
+  client: the tool-effect `useEffect` in `editor-client.tsx`). Supersedes the v1 plan's
+  narrower `update_shape`. String-based `apply_patch` is explicitly the wrong tool here.
+- Both routes reuse `validateAndRepairOutput`.
 
-## New files
+## Build order (each step = one bounded Sonnet coding task; tsc + unit tests green after each)
 
-- `apps/web/components/diagrams/freeform-renderer.tsx` — `{source, onChange, readOnly}`
-  contract (same convention every renderer follows), dynamic-imported client-only,
-  same `isApplying`/`lastSource` ref-guard pattern as `tldraw-renderer.tsx:90-144` to
-  prevent update feedback loops, but driven by react-konva + local React state.
-- `apps/web/lib/diagrams/freeform-canvas.ts` — pure logic: types, `parseFreeformSource`,
-  `serializeFreeformDocument`, `resolveArrowEndpoint`, shape defaults, id generation,
-  hit-test/frame-membership helpers. Same architectural role as `xyflow-base.ts`.
-- `apps/web/lib/diagrams/freeform-canvas.test.ts` — unit tests (parse/serialize
-  round-trip, `resolveArrowEndpoint`, reference validation), added to `test:unit`.
-- `apps/web/components/diagrams/freeform/Shape.tsx`, `TextEditorOverlay.tsx`,
-  `SelectionTransformer.tsx`, `SnapGuides.tsx`, `Toolbar.tsx` — small focused pieces
-  instead of one large renderer file.
+- **A. Schema upgrade + parse hardening** (L1 above) — pure lib + tests. ✅ safe on
+  master (freeform unreachable in app). NOTE: `parseFreeformSource` → `{ doc, errors }`
+  and doc-aware arrow `getShapeBounds` are signature breaks — the same task must
+  migrate `freeform-renderer.tsx` (keep-last-good lives there) and
+  `freeform-canvas.test.ts`, or tsc/tests can't go green.
+- **B. Ops engine** (`freeform-ops.ts` + tests): apply/validate/repair, relative placement, auto-size, cascade delete.
+- **C. Model-facing serialization** (compact read view, palette resolution) + tests.
+- **D. Renderer: resize + rotate** (`Konva.Transformer`).
+- **E. Text editing** (contentEditable overlay, commit on blur/Escape).
+- **F. Snapping + arrow tool + binding UX** (bound arrow follows its shape).
+- **G. Frames + sticky + insertion toolbar + zoom/pan.**
+- **H. AI generation wiring** (system prompt + Zod + `update_diagram` path).
+- **I. `apply_ops` agent tool** (server + client).
+- **J. App wiring checklist** (`DiagramType`, `VALID_TYPES`, `TYPE_LABELS` ×2,
+  share/embed viewers, suggestion chips, Source panel, **`w-full` wrapper gotcha**).
+  (`THIRD_PARTY_LICENSES.md` is created the moment the first Excalidraw-adapted
+  module lands — likely milestone F — not deferred to J.)
+- **K. tldraw removal** (own revertible commit): repoint Art Board at freeform (+
+  Excalidraw), handle existing `diagramType: "tldraw"` saves (read-only or convert),
+  drop the dependency. This resolves the commercial-license risk — mandatory before
+  charging subscribers.
 
-## Modified files (existing "add a diagram type" checklist, applied to `"freeform"`)
+Interactive milestones (D–G) can be click-tested via the `/freeform-lab` harness in
+`~/FLOWSTUDIO-canvas-lab`; pure-lib milestones (A–C) run entirely on unit tests here.
 
-- `packages/core/src/diagram-types.ts` — add `"freeform"` to `DiagramType`, add
-  `"freeform-json"` to `aiOutputFormat`, one `DIAGRAM_TYPE_META` entry, one mandatory
-  `DIAGRAM_SYSTEM_PROMPTS.freeform` entry (TS requires it — it's a `Record` over the
-  full union).
-- `apps/web/lib/diagrams/validate-output.ts` — `FreeformCanvasSchema` + a
-  `validateFreeformRefs()` helper (mirrors `validateReactFlowEdgeRefs`, lines 171-178)
-  checking for dangling `frameId`/arrow `shapeId` references and duplicate ids; add
-  `"freeform"` to the JSON-types dispatch array (~line 194) and a new branch (~220).
-- `apps/web/app/api/ai/agent/route.ts` — add the `update_shape` tool next to
-  `update_node` (~line 312), mention it in the STRATEGY prompt text the same way
-  `update_node` is currently called out as reactflow-only (~lines 254-273).
-- `apps/web/components/editor-client.tsx` — dynamic import (~line 118 region), render
-  branch with **mandatory `w-full`** on the wrapper (documented CLAUDE.md gotcha —
-  Group-A canvases collapse to 0px in the flex parent without it, ~line 2823 region),
-  `update_shape` tool-effect branch (~line 1095), suggestion chips entry (~line 1624),
-  Source-panel-visibility list (~line 2646, recommend including for parity).
-- `apps/web/app/app/editor/page.tsx` — add `"freeform"` to `VALID_TYPES` (line 19).
-- `apps/web/app/s/[token]/page.tsx` + `og/route.tsx` — add `freeform: "Free Canvas"`
-  to each `TYPE_LABELS`.
-- `apps/web/components/share-viewer.tsx` + `embed-viewer.tsx` — each needs its own
-  dynamic import + `TYPE_LABELS` entry + render branch (standalone viewers, don't
-  reuse `editor-client.tsx`).
-- `apps/web/app/page.tsx` — cosmetic marketing copy, optional.
-- `packages/core/src/templates.ts` — 1-2 starter templates once stable, optional.
-- `apps/web/package.json` — add `konva` + `react-konva`.
+## Deferred (explicit, not silently dropped)
+Freehand pen (perfect-freehand — dep is ready), sketchy render mode (roughjs),
+tiered-fidelity reads, multiplayer (yjs; schema stays flat-record/id-ref so the door
+stays open), image shapes, nested frames, pixel-perfect export.
 
-**Flagged decision, not to be made silently:** once freeform is stable, do we (a) fully
-remove tldraw (deps, renderer, prompt entry) and repoint Art Board at freeform only —
-cleanest, resolves the license risk completely — or (b) keep the tldraw renderer
-present-but-hidden from new-diagram creation for a while, since **existing saved
-projects/share-links in the database already have `diagramType: "tldraw"`** and
-ripping it out breaks opening those unless there's also a migration step. Revisit this
-at merge-back time, not now.
+## Launch risks (tracked, not part of this build)
+- **Unverified revenue funnel**: signup → generate → checkout → plan flip has not been
+  click-tested on production since the Neon/Supabase move. Do before launch.
+- Billing UX: market churn evidence says billing betrayal (seat traps, surprise
+  renewals) drives churn more than price — keep ours boring and honest.
 
-## Build order (each step independently testable — `tsc --noEmit` + manual click-through)
-
-0. Set up the isolated workspace (below).
-1. Static rendering: schema + pure functions + unit tests; renderer draws a hardcoded
-   fixture (no interactivity yet). Proves the schema and render pipeline.
-2. Selection + move + delete + keyboard nudge. Wire `onChange`. **Explicitly verify**
-   the existing undo/redo stack works with zero new code (move a shape, Cmd+Z, confirm
-   revert) — a claim to test, not assume.
-3. Resize + rotate (`Konva.Transformer`).
-4. Text editing (contentEditable overlay, commit on blur/Escape).
-5. Snapping (bounds + handle).
-6. Arrow tool + binding; verify a bound arrow follows when its shape moves/resizes.
-7. Frames (drag-into assigns `frameId`, moving a frame moves children).
-8. Sticky notes + insertion toolbar + tool-mode state machine.
-9. Zoom/pan ergonomics (wheel-zoom around cursor, space-drag pan, fit-to-content).
-10. AI generation: system prompt + Zod schema + `update_diagram` wiring; test with
-    real prompts.
-11. `update_shape` tool: server + client wiring; test with an agent-mode prompt like
-    "make the second box red."
-12. Full wiring checklist (`VALID_TYPES`, `TYPE_LABELS` ×2, share/embed viewers,
-    suggestion chips, Source-panel toggle) — pure plumbing, done last.
-13. Optional post-MVP polish: copy/paste, alignment/distribute toolbar, equal-gap
-    snapping, pixel-perfect export, hand-drawn render mode, gallery templates.
-14. Merge-back (below).
-
-## Isolated workspace setup
-
-A literal full copy of the project — not a git worktree (the user asked for "a
-backup," specifically). This keeps the live app/deploy completely untouched.
-
-```bash
-rsync -a --exclude node_modules --exclude .next \
-  /Users/redforman/FLOWSTUDIO/ /Users/redforman/FLOWSTUDIO-canvas-lab/
-cd /Users/redforman/FLOWSTUDIO-canvas-lab
-git remote remove origin        # belt-and-suspenders: no path to push to the real repo
-pnpm install
-pnpm --filter @flowchart/web dev   # Next.js auto-picks a free port if 3040 is busy
-```
-
-All milestone work happens in `FLOWSTUDIO-canvas-lab`. Commit there after each
-milestone as a checkpoint. The live `/Users/redforman/FLOWSTUDIO` repo is not touched
-until merge-back.
-
-## Merge-back (once the build order above reaches milestone 12 and is dogfooded)
-
-1. Diff the lab copy's touched files against the *current* state of the live repo
-   (it will likely have moved on in the meantime) rather than assuming nothing changed.
-2. Port by hand: copy wholly-new files directly; re-apply the small additive edits
-   (new entries in existing dispatch tables/records/render chains) onto the live
-   repo's current versions — don't blindly overwrite, to avoid reverting unrelated
-   live-repo changes made during the build.
-3. Do the tldraw coexist-vs-replace decision (flagged above) as its own separate,
-   independently revertible commit, after the "add freeform" commit lands and passes
-   verification.
-4. Run `pnpm --filter @flowchart/web exec tsc --noEmit`, `pnpm --filter @flowchart/web
-   build`, `pnpm test:unit`, and a manual click-through of Art Board mode before
-   committing.
-5. CLAUDE.md currently documents working directly on master for this repo — given the
-   size of this change, ask the user at merge-back time whether they still want that,
-   or a feature branch/PR instead, rather than assuming.
-
-## Verification (throughout the build, in the lab workspace)
-
-- `pnpm --filter @flowchart/web exec tsc --noEmit` after each milestone.
-- `pnpm --filter @flowchart/web build` after UI-affecting milestones.
-- `pnpm test:unit` stays green (freeform-canvas tests added incrementally).
-- Manual pass via `pnpm --filter @flowchart/web dev`: draw shapes, move/resize/rotate,
-  type labels, draw arrows and confirm they bind and follow, group into a frame,
-  undo/redo through a sequence of edits, zoom/pan, then a full AI-generation round
-  trip ("draw me a simple org chart" → confirm valid output) and a targeted edit
-  ("make the second box red" → confirm `update_shape` applies correctly).
+## Verification per milestone
+`pnpm --filter @flowchart/web exec tsc --noEmit` · `pnpm test:unit` · UI milestones
+additionally `pnpm --filter @flowchart/web build` + manual click-through.

@@ -19,7 +19,7 @@ pnpm --filter @flowchart/web exec tsc --noEmit
 pnpm --filter @flowchart/web build
 
 # Unit tests (node --test, no framework)
-pnpm test:unit                            # all 12 suites
+pnpm test:unit                            # all 13 suites
 
 # Run a single test file
 node --experimental-strip-types apps/web/lib/diagrams/social-cards.test.ts
@@ -47,11 +47,12 @@ share / embed / export.
 
 ## Stack
 
-- **Next.js 15** (App Router) + TypeScript + Tailwind CSS
-- **Drizzle ORM** on Postgres (Supabase)
-- **Vercel AI SDK** (`ai`, `@ai-sdk/react`) — multi-provider (OpenAI / Anthropic / Google / Groq / Mistral)
+- **Next.js 16** (App Router) + React 19 + TypeScript + Tailwind CSS
+- **Drizzle ORM** on Postgres (Neon via `DATABASE_URL`)
+- **Vercel AI SDK v6** (`ai`, `@ai-sdk/react`) — multi-provider (OpenAI / Anthropic / Google / Groq / Mistral / OpenRouter)
 - **Auth.js** (Supabase) — mock-auth mode for local
-- Monorepo (pnpm): `apps/web` (Next app) + `packages/core` (shared types, prompts, themes)
+- **Stripe** billing — checkout + portal routes under `app/api/billing/`, webhook at `app/api/webhooks/stripe/route.ts`, UI at `/app/billing`
+- Monorepo (pnpm): `apps/web` (Next app) + `packages/core` (shared types, prompts, themes) + `packages/cli` + `packages/mcp-server` (root script `pnpm mcp:dev`)
 - Mermaid + Excalidraw + ReactFlow (@xyflow) + ECharts + Nivo + tldraw + bpmn-js for diagram rendering
 
 ## Diagram types supported (22)
@@ -87,14 +88,20 @@ All renderers live in `apps/web/components/diagrams/*-renderer.tsx`. The cloud, 
 `apps/web/components/editor-client.tsx` (one big file — every diagram type
 branches inside its render section).
 
-## In progress: custom canvas engine (replacing tldraw)
+## In progress: agent-native canvas engine (replacing tldraw)
 
 tldraw's license requires a separate paid commercial agreement for production use —
-not free for a product we sell. Decision: build our own freeform canvas engine from
-scratch (original code, Konva.js — MIT licensed, confirmed) to eventually replace the
-tldraw-powered Art Board mode. Full plan: `docs/planning/freeform-canvas-engine-plan.md`.
+not free for a product we sell. Direction (re-scoped 2026-08-16 after a research
+pass): build an **agent-native** freeform canvas — a compact JSON scene graph that
+AI agents edit via id/name-addressed patch ops and humans edit via the Konva canvas,
+same document, no translation layer. The differentiator is the ops/schema layer, not
+rebuilt drawing primitives. Excalidraw (MIT) is the codebase to mine with attribution;
+tldraw is ideas-from-docs only, never code. Full plan (v2, single source of truth):
+`docs/planning/freeform-canvas-engine-plan.md`.
 
-**Status: Milestones 1–2 of 12 done, not yet wired into the app.**
+**Status: v1 milestones 1–2 done (schema, tests, renderer with select/move/delete),
+not yet wired into the app. Next step: plan-v2 milestone A (schema upgrade + parse
+hardening — pure lib work, safe on master).**
 - `apps/web/lib/diagrams/freeform-canvas.ts` — scene-graph schema (`CanvasDocument`/
   `CanvasShape`) + pure functions (parse/serialize/resolveArrowEndpoint/validateRefs).
 - `apps/web/lib/diagrams/freeform-canvas.test.ts` — unit tests, in `test:unit`.
@@ -110,8 +117,7 @@ tldraw-powered Art Board mode. Full plan: `docs/planning/freeform-canvas-engine-
 - An isolated working copy lives at `~/FLOWSTUDIO-canvas-lab` (separate directory,
   not part of this git history) with a throwaway `/freeform-lab` test harness page
   for manually clicking through interactions before porting stable pieces back here.
-- Next step on resume: milestone 3 (resize + rotate via `Konva.Transformer`) — see
-  the build order in the plan doc.
+  Pure-lib milestones (A–C) don't need it — they run on unit tests in this repo.
 
 ## Status — what's shipped
 
@@ -197,6 +203,11 @@ tldraw-powered Art Board mode. Full plan: `docs/planning/freeform-canvas-engine-
 
 ## Conventions
 
+### Product constraints
+- **WYSIWYG is the core value**: the preview canvas must always show exactly what the export will look like — correct aspect ratio, correct density, no surprises.
+- Changes to `DIAGRAM_SYSTEM_PROMPTS` and the intent pipeline must not break existing saved projects.
+- The intent-planning LLM call must stay ≤ 2s; don't add sequential LLM calls to the generation path.
+
 ### Branching / commits
 - **Work directly on `master`** — the user authorized this in the "make it legendary" session. Push after each completed phase / fix.
 - Commit messages: `feat(scope): subject` / `fix(scope): subject` / `chore(scope): subject`. Body explains the *why*, not just the *what*.
@@ -219,7 +230,7 @@ tldraw-powered Art Board mode. Full plan: `docs/planning/freeform-canvas-engine-
 ### Verification
 - After every fix: `pnpm --filter @flowchart/web exec tsc --noEmit` (filter `.test.ts` errors, those are pre-existing).
 - After every UI change: `pnpm --filter @flowchart/web build` (catches issues tsc misses).
-- `pnpm test:unit` — 12 test files (node --test, no framework). Should stay green.
+- `pnpm test:unit` — 13 test files (node --test, no framework). Should stay green.
 
 ### Lint warnings to ignore
 There are ~41 pre-existing `@typescript-eslint/no-unused-vars` warnings in `editor-client.tsx` from old state that was never wired (e.g. `setShowTypePanel`, `setEchartsUiTheme`, `setShowStylePanel`). Don't fix unless explicitly asked — could break implicit dependencies.
