@@ -6,6 +6,7 @@ import {
   type RectShape,
   type CardShape,
   type TableShape,
+  type ImageShape,
   resolveArrowRenderEndpoints,
   getShapeBounds,
   resolveColor,
@@ -36,66 +37,66 @@ function escapeXml(str: string): string {
     .replace(/'/g, "&apos;");
 }
 
-// ─── SVG Vector Icons Library ───────────────────────────────────────────────
+// ─── Real Multi-Color Cloud & Tech Brand Icons ──────────────────────────────
 export function getSvgIcon(iconName: string, size = 16, color = "#6366f1"): string {
   const norm = iconName.toLowerCase().replace(/[^a-z0-9-]/g, "");
   switch (norm) {
+    // ─── Cloud & Infra ────────────────────────────────────────────────────────
+    case "aws":
+      return `<path d="M18.8 15.5c-2.4 1.8-5.8 2.7-8.8 2.7-4.2 0-8-1.5-10.9-4-.2-.2 0-.5.3-.3 3.1 1.8 6.9 2.8 10.7 2.8 2.7 0 5.6-.6 8.3-1.8.4-.2.7.2.4.6z" fill="#FF9900"/><path d="M19.8 14.3c-.3-.4-2-.2-3 0-.3.1-.3-.2 0-.4 1.8-1.3 4.7-.9 5-.4.3.4-.2 3.3-1.8 4.7-.3.2-.5.1-.4-.2.5-.9.4-3.3.2-3.7z" fill="#FF9900"/>`;
+    case "lambda":
+      return `<path d="M7 21l6-18h4l-6 18h-4z" fill="#FF9900"/><path d="M4 21l4.5-10.5 3 4.5-3 6H4z" fill="#FF9900"/>`;
+    case "s3":
+      return `<path d="M12 2L3 6v12l9 4 9-4V6l-9-4zm0 2.2l6.5 2.9L12 10 5.5 7.1 12 4.2zM5 8.7l6 2.7v7.9l-6-2.7V8.7zm8 10.6v-7.9l6-2.7v7.9l-6 2.7z" fill="#E25822"/>`;
+    case "kubernetes":
+    case "k8s":
+      return `<path d="M12 2l8.5 4.9v9.8L12 21.6l-8.5-4.9V6.9L12 2z" fill="none" stroke="#326CE5" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="#326CE5"/><path d="M12 5v4M12 15v4M6 8.5l3.5 2M14.5 13.5l3.5 2M6 15.5l3.5-2M14.5 10.5l3.5-2" stroke="#326CE5" stroke-width="1.5"/>`;
+    case "docker":
+      return `<path d="M22 13c-.3-1.8-1.5-3-3.2-3.5-.3-.1-.5-.1-.8-.1-.4-.8-1.1-1.4-2-1.6-.2 0-.4-.1-.6-.1-.5-1.5-1.9-2.7-3.6-2.7h-1v5H2v6c0 3.3 2.7 6 6 6h8c3.9 0 7-3.1 7-7 0-.3 0-.7-.1-1.1.7-.4 1.1-.9 1.1-1.5z" fill="#2496ED"/><rect x="4" y="9" width="2" height="2" fill="#fff"/><rect x="7" y="9" width="2" height="2" fill="#fff"/><rect x="10" y="9" width="2" height="2" fill="#fff"/><rect x="7" y="6.5" width="2" height="2" fill="#fff"/><rect x="10" y="6.5" width="2" height="2" fill="#fff"/>`;
+    case "cloudflare":
+      return `<path d="M18.2 16.5H6.5a4 4 0 0 1-.3-8 5.5 5.5 0 0 1 10.8-1.5A4.5 4.5 0 0 1 21 11.5a4.5 4.5 0 0 1-2.8 5z" fill="#F38020"/>`;
+    case "react":
+      return `<ellipse cx="12" cy="12" rx="3.5" ry="9" transform="rotate(30 12 12)" fill="none" stroke="#61DAFB" stroke-width="1.5"/><ellipse cx="12" cy="12" rx="3.5" ry="9" transform="rotate(90 12 12)" fill="none" stroke="#61DAFB" stroke-width="1.5"/><ellipse cx="12" cy="12" rx="3.5" ry="9" transform="rotate(150 12 12)" fill="none" stroke="#61DAFB" stroke-width="1.5"/><circle cx="12" cy="12" r="1.8" fill="#61DAFB"/>`;
+    case "nextjs":
+      return `<circle cx="12" cy="12" r="10" fill="#000"/><path d="M15 8v8M9 8v8l7.5-9" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>`;
+    case "postgres":
+    case "postgresql":
+      return `<path d="M12 3c-4.5 0-8 3-8 7 0 3 2 5.5 5 6.5v2.5l3-1.5 3 1.5V16.5c3-1 5-3.5 5-6.5 0-4-3.5-7-8-7z" fill="#336791"/><circle cx="9.5" cy="9.5" r="1" fill="#fff"/><circle cx="14.5" cy="9.5" r="1" fill="#fff"/>`;
+    case "redis":
+      return `<path d="M3 8l9-4 9 4-9 4-9-4zm0 5l9 4 9-4M3 17l9 4 9-4" fill="none" stroke="#DC382D" stroke-width="2" stroke-linejoin="round"/>`;
+    case "kafka":
+      return `<circle cx="12" cy="12" r="9" fill="#231F20"/><circle cx="12" cy="7" r="2" fill="#fff"/><circle cx="7.5" cy="14.5" r="2" fill="#fff"/><circle cx="16.5" cy="14.5" r="2" fill="#fff"/><path d="M12 7l-4.5 7.5M12 7l4.5 7.5" stroke="#fff" stroke-width="1.5"/>`;
+    case "snowflake":
+      return `<path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5" stroke="#29B5E8" stroke-width="2" stroke-linecap="round"/><circle cx="12" cy="12" r="2" fill="#29B5E8"/>`;
+    case "graphql":
+      return `<path d="M12 2l8.7 5v10L12 22l-8.7-5V7L12 2z" fill="none" stroke="#E10098" stroke-width="1.5"/><circle cx="12" cy="2" r="2" fill="#E10098"/><circle cx="20.7" cy="7" r="2" fill="#E10098"/><circle cx="20.7" cy="17" r="2" fill="#E10098"/><circle cx="12" cy="22" r="2" fill="#E10098"/><circle cx="3.3" cy="17" r="2" fill="#E10098"/><circle cx="3.3" cy="7" r="2" fill="#E10098"/><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7" stroke="#E10098" stroke-width="1"/>`;
+    case "stripe":
+      return `<rect x="2" y="4" width="20" height="16" rx="4" fill="#635BFF"/><path d="M10.8 11.2c0-.6.5-.9 1.4-.9 1.2 0 2.5.4 3.4 1v-2.7c-1.1-.4-2.3-.6-3.4-.6-2.7 0-4.6 1.4-4.6 3.9 0 3.7 5.1 3.1 5.1 4.7 0 .8-.7 1-1.6 1-1.4 0-3-.6-4.1-1.3v2.8c1.3.6 2.7.8 4.1.8 2.8 0 4.8-1.4 4.8-4 0-4-5.1-3.3-5.1-4.7z" fill="#fff"/>`;
+    case "openai":
+      return `<path d="M12 2a4 4 0 0 1 3.8 2.7l.2.8.8-.2a4 4 0 0 1 4.7 2.7l.2.8.7.4a4 4 0 0 1 1.7 5l-.4.7.4.7a4 4 0 0 1-1.7 5l-.7.4-.2.8a4 4 0 0 1-4.7 2.7l-.8-.2-.2.8a4 4 0 0 1-7.6 0l-.2-.8-.8.2a4 4 0 0 1-4.7-2.7l-.2-.8-.7-.4a4 4 0 0 1-1.7-5l.4-.7-.4-.7a4 4 0 0 1 1.7-5l.7-.4.2-.8a4 4 0 0 1 4.7-2.7l.8.2.2-.8A4 4 0 0 1 12 2z" fill="none" stroke="#10A37F" stroke-width="1.8"/>`;
+    case "python":
+      return `<path d="M11.9 2C8.6 2 8.7 3.4 8.7 3.4l.01 1.5h3.3v.5H4.8S2 5.1 2 8.4s1.6 3.3 1.6 3.3h1v-1.5c0-1.7 1.4-3.1 3.1-3.1h4.8c1.4 0 2.5-1.1 2.5-2.5V3.8c0-1.8-1.5-1.8-3.1-1.8zm-2 1.2a.7.7 0 1 1 0 1.4.7.7 0 0 1 0-1.4z" fill="#3776AB"/><path d="M12.1 22c3.3 0 3.2-1.4 3.2-1.4l-.01-1.5h-3.3v-.5h7.2s2.8.3 2.8-3-1.6-3.3-1.6-3.3h-1v1.5c0 1.7-1.4 3.1-3.1 3.1H11.5c-1.4 0-2.5 1.1-2.5 2.5v4.3c0 1.8 1.5 1.8 3.1 1.8zm2-1.2a.7.7 0 1 1 0-1.4.7.7 0 0 1 0 1.4z" fill="#FFD438"/>`;
+    case "golang":
+    case "go":
+      return `<circle cx="12" cy="12" r="9" fill="#00ADD8"/><text x="12" y="16" text-anchor="middle" font-family="'JetBrains Mono', sans-serif" font-weight="900" font-size="11" fill="#fff">GO</text>`;
     case "database":
     case "db":
-    case "postgres":
-    case "redis":
     case "sql":
       return `<path d="M4 6c0 1.66 3.58 3 8 3s8-1.34 8-3M4 6c0-1.66 3.58-3 8-3s8 1.34 8 3M4 6v12c0 1.66 3.58 3 8 3s8-1.34 8-3V6M4 12c0 1.66 3.58 3 8 3s8-1.34 8-3" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
     case "server":
     case "service":
-    case "node":
-    case "backend":
       return `<rect x="2" y="3" width="20" height="7" rx="2" fill="none" stroke="${color}" stroke-width="2"/><rect x="2" y="14" width="20" height="7" rx="2" fill="none" stroke="${color}" stroke-width="2"/><line x1="6" y1="6.5" x2="6.01" y2="6.5" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="17.5" x2="6.01" y2="17.5" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
-    case "cloud":
-    case "aws":
-    case "gcp":
-    case "azure":
-    case "saas":
-      return `<path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
     case "shield":
     case "auth":
     case "security":
-    case "jwt":
       return `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "lock":
-      return `<rect x="3" y="11" width="18" height="11" rx="2" ry="2" fill="none" stroke="${color}" stroke-width="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4" fill="none" stroke="${color}" stroke-width="2"/>`;
-    case "cpu":
-    case "processor":
-    case "engine":
-      return `<rect x="4" y="4" width="16" height="16" rx="2" fill="none" stroke="${color}" stroke-width="2"/><rect x="9" y="9" width="6" height="6" fill="none" stroke="${color}" stroke-width="1.5"/><path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
-    case "queue":
-    case "kafka":
-    case "rabbitmq":
-    case "stream":
-      return `<path d="m22 7-9-5-9 5 9 5 9-5ZM2 17l9 5 9-5M2 12l9 5 9-5" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "api":
-    case "code":
-    case "gateway":
-      return `<polyline points="16 18 22 12 16 6" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="8 6 2 12 8 18" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "globe":
-    case "web":
-    case "cdn":
-      return `<circle cx="12" cy="12" r="10" fill="none" stroke="${color}" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke="${color}" stroke-width="2"/>`;
-    case "credit-card":
-    case "stripe":
-    case "billing":
-    case "bank":
-      return `<rect x="2" y="5" width="20" height="14" rx="2" fill="none" stroke="${color}" stroke-width="2"/><line x1="2" y1="10" x2="22" y2="10" stroke="${color}" stroke-width="2"/>`;
     case "activity":
     case "analytics":
-    case "metrics":
       return `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
-    case "users":
-    case "crm":
-    case "team":
-      return `<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" fill="none" stroke="${color}" stroke-width="2"/><circle cx="9" cy="7" r="4" fill="none" stroke="${color}" stroke-width="2"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" fill="none" stroke="${color}" stroke-width="2"/>`;
+    case "globe":
+    case "web":
+      return `<circle cx="12" cy="12" r="10" fill="none" stroke="${color}" stroke-width="2"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" fill="none" stroke="${color}" stroke-width="2"/>`;
     default:
-      // Modern spark / diamond star icon
       return `<path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
   }
 }
@@ -143,7 +144,6 @@ function generateSmoothOrthogonalPath(
   }
   points.push({ x: end.x, y: end.y });
 
-  // Convert waypoints to rounded bezier path
   let pathStr = `M ${points[0].x} ${points[0].y}`;
   for (let i = 1; i < points.length - 1; i++) {
     const pPrev = points[i - 1];
@@ -202,7 +202,7 @@ export function freeformToSvg(doc: CanvasDocument): string {
 
   const defs = `
   <defs>
-    <!-- Figma / Linear Style Multi-layer Soft Physical Drop Shadows -->
+    <!-- Multi-layer Soft Physical Drop Shadows -->
     <filter id="soft-card-shadow" x="-10%" y="-10%" width="125%" height="125%">
       <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.08" />
       <feDropShadow dx="0" dy="2" stdDeviation="4" flood-color="#0f172a" flood-opacity="0.04" />
@@ -210,7 +210,6 @@ export function freeformToSvg(doc: CanvasDocument): string {
     <filter id="pill-shadow" x="-15%" y="-15%" width="130%" height="130%">
       <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#0f172a" flood-opacity="0.06" />
     </filter>
-    <!-- Arrow Markers -->
     <marker id="arrowhead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse">
       <path d="M 0 1.5 L 8.5 5 L 0 8.5 z" fill="#64748b" />
     </marker>
@@ -289,7 +288,25 @@ export function freeformToSvg(doc: CanvasDocument): string {
     const y = shape.y;
     const shadowFilter = shape.type === "sticky" ? 'filter="url(#soft-card-shadow)"' : shape.type !== "frame" ? 'filter="url(#soft-card-shadow)"' : "";
 
-    // ─── 1. World-Class Architecture Card Shape (`type: "card"`) ──────────────
+    // ─── 1. Embedded Image / Picture Shape (`type: "image"`) ─────────────────
+    if (shape.type === "image") {
+      const img = shape as ImageShape;
+      const rx = img.cornerRadius ?? 10;
+      const clipId = `clip-${img.id}`;
+      elements.push(
+        `<g ${shadowFilter} ${opacity}>
+          <clipPath id="${clipId}">
+            <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" />
+          </clipPath>
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="#f1f5f9" />
+          <image href="${img.src}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid slice" clip-path="url(#${clipId})" />
+          <rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" />
+        </g>`
+      );
+      continue;
+    }
+
+    // ─── 2. World-Class Architecture Card Shape (`type: "card"`) ──────────────
     if (shape.type === "card") {
       const card = shape as CardShape;
       const iconName = card.icon ?? "server";
@@ -336,7 +353,7 @@ export function freeformToSvg(doc: CanvasDocument): string {
       continue;
     }
 
-    // ─── 2. Database Schema / ERD Table Shape (`type: "table"`) ────────────────
+    // ─── 3. Database Schema / ERD Table Shape (`type: "table"`) ────────────────
     if (shape.type === "table") {
       const table = shape as TableShape;
       const headerBg = table.headerBg ? resolveColor(table.headerBg) ?? table.headerBg : "#f1f5f9";

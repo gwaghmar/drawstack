@@ -37,6 +37,7 @@ const CanvasOpSchema = z.union([
         "frame",
         "card",
         "table",
+        "image",
         "arrow",
         "line",
       ]),

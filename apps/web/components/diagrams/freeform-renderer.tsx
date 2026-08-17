@@ -26,6 +26,9 @@ import {
   type StickyShape,
   type TextShape,
   type FrameShape,
+  type CardShape,
+  type TableShape,
+  type ImageShape,
 } from "@/lib/diagrams/freeform-canvas";
 
 import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
@@ -595,6 +598,179 @@ function renderShape(
             />
           </Fragment>
         );
+
+      case "card": {
+        const card = shape as CardShape;
+        return (
+          <Group
+            key={shape.id}
+            id={shape.id}
+            x={shape.x}
+            y={shape.y}
+            rotation={commonProps.rotation}
+            opacity={commonProps.opacity}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          >
+            <Rect
+              x={0}
+              y={0}
+              width={w}
+              height={h}
+              cornerRadius={card.cornerRadius ?? 10}
+              fill="#ffffff"
+              stroke={commonProps.stroke}
+              strokeWidth={commonProps.strokeWidth}
+              shadowColor="#0f172a"
+              shadowBlur={10}
+              shadowOpacity={0.08}
+              shadowOffsetY={4}
+            />
+            {/* Header bar */}
+            <Rect
+              x={0}
+              y={0}
+              width={w}
+              height={38}
+              cornerRadius={[card.cornerRadius ?? 10, card.cornerRadius ?? 10, 0, 0]}
+              fill={commonProps.fill === "transparent" ? "#f8fafc" : commonProps.fill}
+            />
+            <Line points={[0, 38, w, 38]} stroke="#e2e8f0" strokeWidth={1} />
+            <Text
+              x={12}
+              y={12}
+              text={card.title}
+              fontSize={13}
+              fontStyle="bold"
+              fontFamily="Inter, Arial, sans-serif"
+              fill="#0f172a"
+              listening={false}
+            />
+            {card.subtitle && (
+              <Text
+                x={12}
+                y={46}
+                text={card.subtitle}
+                fontSize={11}
+                fontFamily="Inter, Arial, sans-serif"
+                fill="#64748b"
+                listening={false}
+              />
+            )}
+          </Group>
+        );
+      }
+
+      case "table": {
+        const table = shape as TableShape;
+        return (
+          <Group
+            key={shape.id}
+            id={shape.id}
+            x={shape.x}
+            y={shape.y}
+            rotation={commonProps.rotation}
+            opacity={commonProps.opacity}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          >
+            <Rect
+              x={0}
+              y={0}
+              width={w}
+              height={h}
+              cornerRadius={table.cornerRadius ?? 8}
+              fill="#ffffff"
+              stroke={commonProps.stroke}
+              strokeWidth={commonProps.strokeWidth}
+              shadowColor="#0f172a"
+              shadowBlur={8}
+              shadowOpacity={0.06}
+              shadowOffsetY={3}
+            />
+            <Rect
+              x={0}
+              y={0}
+              width={w}
+              height={32}
+              cornerRadius={[table.cornerRadius ?? 8, table.cornerRadius ?? 8, 0, 0]}
+              fill={table.headerBg ? resolveColor(table.headerBg) ?? table.headerBg : "#f1f5f9"}
+            />
+            <Line points={[0, 32, w, 32]} stroke="#cbd5e1" strokeWidth={1} />
+            <Text
+              x={12}
+              y={10}
+              text={table.tableName}
+              fontSize={12}
+              fontStyle="bold"
+              fontFamily="'JetBrains Mono', monospace"
+              fill="#0f172a"
+              listening={false}
+            />
+            {table.columns.map((col, idx) => (
+              <Fragment key={`${col.name}-${idx}`}>
+                <Text
+                  x={12}
+                  y={42 + idx * 20}
+                  text={`${col.isPk ? "PK " : col.isFk ? "FK " : "• "}${col.name}`}
+                  fontSize={11}
+                  fontFamily="'JetBrains Mono', monospace"
+                  fill={col.isPk ? "#b45309" : col.isFk ? "#0369a1" : "#1e293b"}
+                  listening={false}
+                />
+                <Text
+                  x={w - 12}
+                  y={42 + idx * 20}
+                  text={col.type}
+                  align="right"
+                  fontSize={10.5}
+                  fontFamily="'JetBrains Mono', monospace"
+                  fill="#64748b"
+                  listening={false}
+                />
+              </Fragment>
+            ))}
+          </Group>
+        );
+      }
+
+      case "image": {
+        return (
+          <Group
+            key={shape.id}
+            id={shape.id}
+            x={shape.x}
+            y={shape.y}
+            rotation={commonProps.rotation}
+            opacity={commonProps.opacity}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          >
+            <Rect
+              x={0}
+              y={0}
+              width={w}
+              height={h}
+              cornerRadius={8}
+              fill="#e2e8f0"
+              stroke={commonProps.stroke}
+              strokeWidth={commonProps.strokeWidth}
+            />
+          </Group>
+        );
+      }
 
       case "ellipse":
         return (

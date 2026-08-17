@@ -63,6 +63,16 @@ export type TableShape = BaseShape & {
   cornerRadius?: number;
 };
 
+export type ImageShape = BaseShape & {
+  type: "image";
+  src: string;
+  width: number;
+  height: number;
+  alt?: string;
+  cornerRadius?: number;
+  objectFit?: "cover" | "contain" | "fill";
+};
+
 export type PathShape = BaseShape & {
   type: "path";
   points: [number, number][];
@@ -96,6 +106,7 @@ export type CanvasShape =
   | FrameShape
   | CardShape
   | TableShape
+  | ImageShape
   | PathShape
   | ArrowShape;
 
