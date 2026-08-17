@@ -1439,6 +1439,11 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const [arrowEditDraft, setArrowEditDraft] = useState<ArrowEditDraft | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
+  // Present Mode frame-stepping position — ephemeral UI/viewport state only,
+  // deliberately NOT part of `doc` (never runs through commitChanges). Doc
+  // changes go through undo history and sync to Yjs collaborators; stepping
+  // through slides during a presentation must do neither.
+  const [presentFrameIndex, setPresentFrameIndex] = useState(0);
 
   const [activeColor, setActiveColor] = useState<string>("5");
   const [activeStrokeWidth, setActiveStrokeWidth] = useState<number>(2);
@@ -1446,6 +1451,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const isApplyingRef = useRef(false);
   const lastSourceRef = useRef(source);
   const stageRef = useRef<Konva.Stage>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
@@ -1783,6 +1789,72 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     });
   };
 
+  // Shared by the Present Mode hotspot click (handleShapeClick) and the
+  // Present Mode next/prev stepping below — one frame-fit computation, two
+  // callers, so they never drift out of sync.
+  const navigateViewportToFrame = (frame: FrameShape) => {
+    const scaleX = (STAGE_WIDTH - 80) / frame.width;
+    const scaleY = (STAGE_HEIGHT - 80) / frame.height;
+    const scale = Math.min(scaleX, scaleY);
+    const finalScale = Math.min(Math.max(scale, MIN_SCALE), MAX_SCALE);
+    const x = STAGE_WIDTH / 2 - (frame.x + frame.width / 2) * finalScale;
+    const y = STAGE_HEIGHT / 2 - (frame.y + frame.height / 2) * finalScale;
+    setViewport({ scale: finalScale, x, y });
+  };
+
+  const getPresentationFrames = (): FrameShape[] =>
+    docRef.current.shapes.filter((s): s is FrameShape => s.type === "frame");
+
+  // Clamps at the ends (no wraparound) — less surprising mid-presentation
+  // than looping back to slide one. `presentFrameIndex` is local component
+  // state only; it never touches `doc`/commitChanges (see its declaration).
+  const stepPresentation = (delta: number) => {
+    const frames = getPresentationFrames();
+    if (frames.length === 0) return;
+    setPresentFrameIndex((prev) => {
+      const next = Math.min(Math.max(prev + delta, 0), frames.length - 1);
+      navigateViewportToFrame(frames[next]);
+      return next;
+    });
+  };
+
+  const goToPresentationFrame = (index: number) => {
+    const frames = getPresentationFrames();
+    if (frames.length === 0) return;
+    const clamped = Math.min(Math.max(index, 0), frames.length - 1);
+    navigateViewportToFrame(frames[clamped]);
+    setPresentFrameIndex(clamped);
+  };
+
+  const exitPresentationMode = () => {
+    const newDoc = { ...docRef.current, presentationMode: false };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    try {
+      if (typeof document !== "undefined" && document.fullscreenElement) {
+        document.exitFullscreen?.()?.catch(() => {});
+      }
+    } catch {
+      // Same defensive posture as entering fullscreen — must never block
+      // presentation mode from turning off.
+    }
+  };
+
+  const enterPresentationMode = () => {
+    const newDoc = { ...docRef.current, presentationMode: true };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    setPresentFrameIndex(0);
+    const frames = newDoc.shapes.filter((s): s is FrameShape => s.type === "frame");
+    if (frames.length > 0) navigateViewportToFrame(frames[0]);
+    try {
+      containerRef.current?.requestFullscreen?.()?.catch(() => {});
+    } catch {
+      // Fullscreen API can reject/throw in embedded/iframe contexts with no
+      // permission — presentation mode must still enter successfully.
+    }
+  };
+
   const commitEditing = (cancel: boolean) => {
     const shapeId = editingShapeId;
     if (!shapeId) return;
@@ -1870,6 +1942,11 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     if (readOnly || editingShapeId) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Present Mode owns Left/Right/Space/Escape while active (see the
+      // dedicated presentation-stepping effect below) — bail here so this
+      // handler's 1px arrow-nudge never fires mid-presentation.
+      if (doc.presentationMode) return;
+
       const activeElement = document.activeElement;
       if (activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA") {
         return;
@@ -2048,6 +2125,20 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         return;
       }
 
+      // Present Mode owns every single-key shortcut while active — Escape
+      // exits the presentation instead of resetting the draw/arrow tool, and
+      // none of v/p/a/r/d/o/s/t/f/0 should switch tools mid-presentation.
+      // Left/Right/Space stepping is handled by the dedicated effect below;
+      // read via docRef (this effect doesn't depend on `doc`) so it stays
+      // current without re-binding the listener on every doc edit.
+      if (docRef.current.presentationMode) {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          exitPresentationMode();
+        }
+        return;
+      }
+
       if (e.key === "Escape") {
         if (modeRef.current !== "select") {
           arrowDraftRef.current = null;
@@ -2117,6 +2208,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     if (readOnly) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Space steps to the next frame in Present Mode instead of arming pan.
+      if (docRef.current.presentationMode) return;
       if (e.code !== "Space" || editingShapeId) return;
       const activeElement = document.activeElement;
       if (activeElement?.tagName === "INPUT" || activeElement?.tagName === "TEXTAREA") return;
@@ -2138,19 +2231,50 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     };
   }, [readOnly, editingShapeId]);
 
+  // Present Mode frame-stepping: Right Arrow / Space = next frame,
+  // Left Arrow = previous, clamped at both ends (no wraparound — less
+  // surprising mid-presentation than looping). Deliberately separate from
+  // the tool-mode shortcut effect above so it works even when `readOnly`
+  // (a shared/embedded canvas can still be presented, just not edited) —
+  // matches handleShapeClick's presentation branch, which also runs ahead
+  // of its own readOnly check.
+  useEffect(() => {
+    if (!doc.presentationMode) return;
+
+    const handlePresentationKeyDown = (e: KeyboardEvent) => {
+      if (editingShapeId) return;
+      const activeElement = document.activeElement as HTMLElement | null;
+      if (
+        activeElement?.tagName === "INPUT" ||
+        activeElement?.tagName === "TEXTAREA" ||
+        activeElement?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowRight" || e.code === "Space" || e.key === " ") {
+        e.preventDefault();
+        stepPresentation(1);
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        stepPresentation(-1);
+      }
+    };
+
+    window.addEventListener("keydown", handlePresentationKeyDown);
+    return () => window.removeEventListener("keydown", handlePresentationKeyDown);
+  }, [doc.presentationMode, editingShapeId]);
+
   const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
     if (doc.presentationMode) {
       const shape = doc.shapes.find((s) => s.id === shapeId);
       if (shape?.onClickNavigateToFrameId) {
         const targetFrame = doc.shapes.find((s) => s.id === shape.onClickNavigateToFrameId && s.type === "frame");
-        if (targetFrame && "width" in targetFrame && targetFrame.width && "height" in targetFrame && targetFrame.height) {
-          const scaleX = (STAGE_WIDTH - 80) / targetFrame.width;
-          const scaleY = (STAGE_HEIGHT - 80) / targetFrame.height;
-          const scale = Math.min(scaleX, scaleY);
-          const finalScale = Math.min(Math.max(scale, MIN_SCALE), MAX_SCALE);
-          const x = STAGE_WIDTH / 2 - (targetFrame.x + targetFrame.width / 2) * finalScale;
-          const y = STAGE_HEIGHT / 2 - (targetFrame.y + targetFrame.height / 2) * finalScale;
-          setViewport({ scale: finalScale, x, y });
+        if (targetFrame && targetFrame.type === "frame") {
+          navigateViewportToFrame(targetFrame);
+          const frames = getPresentationFrames();
+          const idx = frames.findIndex((f) => f.id === targetFrame.id);
+          if (idx >= 0) setPresentFrameIndex(idx);
         }
       }
       return;
@@ -2837,6 +2961,9 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const editingShape = editingShapeId ? doc.shapes.find((s) => s.id === editingShapeId) : null;
   const editingRect = editingShape ? getShapeBounds(doc, editingShape) : null;
   const stageContainerRect = stageRef.current?.container().getBoundingClientRect();
+  const presentationFrames = doc.presentationMode
+    ? doc.shapes.filter((s): s is FrameShape => s.type === "frame")
+    : [];
   // Rebind-target highlight is shared between drawing a brand new arrow
   // (arrowDraft) and dragging an existing one's endpoint (arrowEditDraft) —
   // same visual meaning either way: "release here to bind to this shape."
@@ -2965,6 +3092,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
 
   return (
     <div
+      ref={containerRef}
       className="w-full h-full relative overflow-hidden select-none bg-slate-50 dark:bg-slate-950"
       style={{
         backgroundPosition: `${viewport.x}px ${viewport.y}px`,
@@ -3039,9 +3167,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           <button
             type="button"
             onClick={() => {
-              const newDoc = { ...doc, presentationMode: !doc.presentationMode };
-              setDoc(newDoc);
-              commitChanges(newDoc);
+              if (doc.presentationMode) exitPresentationMode();
+              else enterPresentationMode();
             }}
             className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all ${
               doc.presentationMode
@@ -3171,6 +3298,35 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           <Maximize className="h-4 w-4" />
         </button>
       </div>
+
+      {/* ─── Present Mode frame counter ─────────────────────────────────── */}
+      {doc.presentationMode && presentationFrames.length > 0 && (
+        <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-2xl border border-white/50 bg-white/50 p-1 shadow-xl shadow-slate-900/10 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-slate-900/50">
+          <button
+            type="button"
+            onClick={() => stepPresentation(-1)}
+            disabled={presentFrameIndex === 0}
+            title="Previous frame (Left Arrow)"
+            aria-label="Previous frame"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <span className="min-w-[3.25rem] px-1.5 text-center text-xs font-medium text-slate-600 dark:text-slate-300">
+            {Math.min(presentFrameIndex + 1, presentationFrames.length)} / {presentationFrames.length}
+          </span>
+          <button
+            type="button"
+            onClick={() => stepPresentation(1)}
+            disabled={presentFrameIndex >= presentationFrames.length - 1}
+            title="Next frame (Right Arrow / Space)"
+            aria-label="Next frame"
+            className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 hover:bg-slate-100 disabled:opacity-30 disabled:hover:bg-transparent dark:text-slate-300 dark:hover:bg-slate-800"
+          >
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {/* ─── Floating Quick-Style & Format Bar ────────────────────────────── */}
       {!readOnly && selBounds && selectedShapes.length > 0 && !editingShapeId && (
