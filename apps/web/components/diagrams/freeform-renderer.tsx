@@ -57,7 +57,7 @@ import {
   type ImageShape,
 } from "@/lib/diagrams/freeform-canvas";
 
-import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
+import { freeformToSvg, getSvgIcon } from "@/lib/diagrams/freeform-svg";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
 import { YjsCanvasStore } from "@/lib/diagrams/yjs-store";
 
@@ -115,9 +115,70 @@ const MAX_SCALE = 4;
 const ZOOM_FACTOR = 1.05;
 const ZOOM_STEP = 1.2;
 
+// Card copy stacks under the 42px header: subtitle, then metadata rows, then
+// the body paragraph. Both renderers must agree on these offsets or the canvas
+// and the SVG export disagree.
+function cardMetaTop(card: CardShape): number {
+  return (card.subtitle ? 78 : 60);
+}
+
+function cardBodyTop(card: CardShape): number {
+  const metaRows = card.metadata?.length ?? 0;
+  if (metaRows > 0) return cardMetaTop(card) + metaRows * 18 + 6;
+  return card.subtitle ? 74 : 54;
+}
+
+// getSvgIcon returns bare SVG markup; wrapping it in a data URI is what lets the
+// same icon registry the SVG export uses also paint onto the Konva canvas,
+// instead of maintaining a second set of icons for the interactive path.
+function CardIcon({ name, x, y }: { name: string; x: number; y: number }) {
+  const [img, setImg] = useState<HTMLImageElement | null>(null);
+
+  useEffect(() => {
+    const markup = getSvgIcon(name, 16, "#4A85F6");
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">${markup}</svg>`;
+    const image = new window.Image();
+    image.onload = () => setImg(image);
+    image.src = `data:image/svg+xml;base64,${window.btoa(unescape(encodeURIComponent(svg)))}`;
+  }, [name]);
+
+  if (!img) return null;
+  return <KonvaImage image={img} x={x} y={y} width={16} height={16} listening={false} />;
+}
+
 function stagePointFromEvent(stage: Konva.Stage | null): { x: number; y: number } | null {
   if (!stage) return null;
   return stage.getRelativePointerPosition();
+}
+
+// Midpoint measured along the drawn polyline, not the straight start→end chord.
+// Orthogonal arrows bend away from that chord, which left labels floating in
+// empty space beside the line they belong to.
+function polylineMidpoint(points: number[]): { x: number; y: number } {
+  if (points.length < 4) return { x: points[0] ?? 0, y: points[1] ?? 0 };
+
+  const segments: { x0: number; y0: number; x1: number; y1: number; len: number }[] = [];
+  let total = 0;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    const [x0, y0, x1, y1] = [points[i], points[i + 1], points[i + 2], points[i + 3]];
+    const len = Math.hypot(x1 - x0, y1 - y0);
+    segments.push({ x0, y0, x1, y1, len });
+    total += len;
+  }
+  if (total === 0) return { x: points[0], y: points[1] };
+
+  let walked = 0;
+  for (const seg of segments) {
+    if (walked + seg.len >= total / 2) {
+      const t = seg.len === 0 ? 0 : (total / 2 - walked) / seg.len;
+      return {
+        x: Math.round(seg.x0 + (seg.x1 - seg.x0) * t),
+        y: Math.round(seg.y0 + (seg.y1 - seg.y0) * t),
+      };
+    }
+    walked += seg.len;
+  }
+  return { x: Math.round(segments[segments.length - 1].x1), y: Math.round(segments[segments.length - 1].y1) };
 }
 
 function getShapeIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): string | null {
@@ -462,8 +523,7 @@ function renderShape(
       points = [startPoint.x, startPoint.y, endPoint.x, endPoint.y];
     }
 
-    const midX = Math.round((startPoint.x + endPoint.x) / 2);
-    const midY = Math.round((startPoint.y + endPoint.y) / 2);
+    const { x: midX, y: midY } = polylineMidpoint(points);
 
     const arrowNode =
       shape.type === "arrow" ? (
@@ -771,34 +831,98 @@ function renderShape(
               shadowOpacity={0.08}
               shadowOffsetY={4}
             />
-            {/* Header bar */}
+            {/* Header bar — 42px to match the SVG export layout */}
             <Rect
               x={0}
               y={0}
               width={w}
-              height={38}
+              height={42}
               cornerRadius={[card.cornerRadius ?? 10, card.cornerRadius ?? 10, 0, 0]}
               fill={commonProps.fill === "transparent" ? "#f8fafc" : commonProps.fill}
             />
-            <Line points={[0, 38, w, 38]} stroke="#e2e8f0" strokeWidth={1} />
+            <Line points={[0, 42, w, 42]} stroke="#e2e8f0" strokeWidth={1} />
+            <Rect x={10} y={9} width={24} height={24} cornerRadius={6} fill="#ffffff" stroke="#e2e8f0" strokeWidth={1} />
+            <CardIcon name={card.icon ?? card.role ?? card.title} x={14} y={13} />
             <Text
-              x={12}
-              y={12}
+              x={40}
+              y={14}
+              width={Math.max(20, w - 52 - (card.badge?.text ? card.badge.text.length * 6 + 16 : 0))}
               text={card.title}
               fontSize={13}
               fontStyle="bold"
               fontFamily="Inter, Arial, sans-serif"
               fill="#0f172a"
+              ellipsis
+              wrap="none"
               listening={false}
             />
+            {card.badge?.text && (
+              <>
+                <Rect
+                  x={w - 12 - (card.badge.text.length * 6 + 12)}
+                  y={12}
+                  width={card.badge.text.length * 6 + 12}
+                  height={18}
+                  cornerRadius={4}
+                  fill={card.badge.bg ?? "#eff6ff"}
+                />
+                <Text
+                  x={w - 12 - (card.badge.text.length * 6 + 12)}
+                  y={17}
+                  width={card.badge.text.length * 6 + 12}
+                  text={card.badge.text}
+                  fontSize={9.5}
+                  fontStyle="bold"
+                  align="center"
+                  fontFamily="Inter, Arial, sans-serif"
+                  fill={card.badge.color ?? "#1d4ed8"}
+                  listening={false}
+                />
+              </>
+            )}
             {card.subtitle && (
               <Text
                 x={12}
-                y={46}
+                y={52}
+                width={Math.max(20, w - 24)}
                 text={card.subtitle}
                 fontSize={11}
                 fontFamily="Inter, Arial, sans-serif"
                 fill="#64748b"
+                wrap="word"
+                listening={false}
+              />
+            )}
+            {(card.metadata ?? []).map((m, idx) => (
+              <Fragment key={`${shape.id}-meta-${idx}`}>
+                <Ellipse x={15} y={cardMetaTop(card) + idx * 18} radiusX={2} radiusY={2} fill="#94a3b8" />
+                <Text
+                  x={22}
+                  y={cardMetaTop(card) + idx * 18 - 5}
+                  width={Math.max(20, w - 34)}
+                  text={`${m.label}: ${m.value}`}
+                  fontSize={10.5}
+                  fontFamily="Inter, Arial, sans-serif"
+                  fill="#475569"
+                  ellipsis
+                  wrap="none"
+                  listening={false}
+                />
+              </Fragment>
+            ))}
+            {shape.text?.content && (
+              <Text
+                x={12}
+                y={cardBodyTop(card)}
+                width={Math.max(20, w - 24)}
+                height={Math.max(12, h - cardBodyTop(card) - 10)}
+                text={shape.text.content}
+                fontSize={shape.text.fontSize ?? 11.5}
+                fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
+                fill={shape.text.color ?? "#475569"}
+                lineHeight={1.35}
+                wrap="word"
+                ellipsis
                 listening={false}
               />
             )}
@@ -998,8 +1122,11 @@ function renderShape(
 
   const nodes: React.ReactNode[] = [shapeNode];
 
-  // Overlay text label inside shape
-  if (!isEditingThis && shape.type !== "text" && shape.text?.content) {
+  // Overlay text label inside shape. Card and table lay out their own copy
+  // (title, subtitle, body, rows) at fixed offsets — adding the centered
+  // overlay on top of that printed two blocks of text over each other.
+  const laysOutOwnText = shape.type === "card" || shape.type === "table";
+  if (!isEditingThis && shape.type !== "text" && !laysOutOwnText && shape.text?.content) {
     const labelBounds = getShapeBounds(doc, shape);
     nodes.push(
       <Text

@@ -1,3 +1,4 @@
+import { resolveBrandIcon } from "./brand-icons.ts";
 import {
   type CanvasDocument,
   type CanvasShape,
@@ -20,6 +21,8 @@ import {
   type TechHudPanelShape,
   type LayeredProcessMapShape,
   type DotMatrixShape,
+  type PictogramShape,
+  type PictogramRowShape,
   resolveArrowRenderEndpoints,
   getShapeBounds,
   resolveColor,
@@ -59,6 +62,17 @@ function darkenHex(hex: string, amount = 0.25): string {
   const g = Math.round(parseInt(full.slice(2, 4), 16) * (1 - amount));
   const b = Math.round(parseInt(full.slice(4, 6), 16) * (1 - amount));
   return `#${[r, g, b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("")}`;
+}
+
+// WCAG relative luminance — picks readable text color per treemap cell fill.
+function textColorForFill(hex: string): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return "#1e2a3a";
+  const full = m[1].length === 3 ? m[1].split("").map((c) => c + c).join("") : m[1];
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(full.slice(i, i + 2), 16) / 255);
+  const lin = [r, g, b].map((c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+  const luminance = 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2];
+  return luminance > 0.5 ? "#1e2a3a" : "#ffffff";
 }
 
 // ─── Real Multi-Color Cloud & Tech Brand Icons ──────────────────────────────
@@ -102,8 +116,103 @@ export function getSvgIcon(iconName: string, size = 16, color = "#4A85F6"): stri
       return `<polyline points="22 12 18 12 15 21 9 3 6 12 2 12" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
     case "chart":
       return `<line x1="18" y1="20" x2="18" y2="10" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="12" y1="20" x2="12" y2="4" stroke="${color}" stroke-width="2" stroke-linecap="round"/><line x1="6" y1="20" x2="6" y2="14" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
+    default: {
+      // 56 real vendor logos (Databricks, Snowflake, Kubernetes, Postgres, …)
+      // drawn in their own brand color, so an unrecognized service name lands on
+      // its actual mark instead of a meaningless generic glyph.
+      const brand = resolveBrandIcon(iconName);
+      if (brand) return `<path d="${brand.path}" fill="#${brand.hex}"/>`;
+      return `<rect x="3" y="3" width="18" height="18" rx="4" fill="none" stroke="${color}" stroke-width="2"/><circle cx="12" cy="12" r="3" fill="${color}"/>`;
+    }
+  }
+}
+
+// Card body copy sits below the header, subtitle and metadata rows. Offsets are
+// mirrored in freeform-renderer.tsx so canvas and export stay in agreement.
+function cardBodyTspans(
+  card: CardShape,
+  content: string | undefined,
+  x: number,
+  y: number,
+  w: number,
+  color: string
+): string {
+  if (!content) return "";
+  const metaRows = card.metadata?.length ?? 0;
+  const metaTop = card.subtitle ? 78 : 60;
+  const top = metaRows > 0 ? metaTop + metaRows * 18 + 6 : card.subtitle ? 74 : 54;
+
+  const fontSize = 11.5;
+  const maxChars = Math.max(4, Math.floor((w - 24) / (fontSize * 0.55)));
+  const lines = content.split("\n").flatMap((raw) => {
+    if (raw.length <= maxChars) return [raw];
+    const out: string[] = [];
+    let cur = "";
+    for (const word of raw.split(" ")) {
+      const candidate = cur ? `${cur} ${word}` : word;
+      if (candidate.length > maxChars && cur) {
+        out.push(cur);
+        cur = word;
+      } else {
+        cur = candidate;
+      }
+    }
+    if (cur) out.push(cur);
+    return out;
+  });
+
+  const tspans = lines
+    .map((line, idx) => `<tspan x="${x + 12}" y="${Math.round(y + top + fontSize + idx * fontSize * 1.35)}">${escapeXml(line)}</tspan>`)
+    .join("");
+  return `<text xml:space="preserve" font-family="Inter, -apple-system, sans-serif" font-size="${fontSize}" fill="${color}">${tspans}</text>`;
+}
+
+// ─── Pictogram Icon Set (Lucide-style, 24x24, stroke-based fragments) ───────
+function getPictogram(name: string): string {
+  const norm = name.toLowerCase().replace(/[^a-z0-9-]/g, "");
+  switch (norm) {
+    case "person":
+      return `<circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/>`;
+    case "people":
+      return `<circle cx="9" cy="7" r="4"/><path d="M1 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/>`;
+    case "lightbulb":
+      return `<path d="M9 18h6"/><path d="M10 22h4"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>`;
+    case "gear":
+      return `<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>`;
+    case "target":
+      return `<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>`;
+    case "book":
+      return `<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>`;
+    case "chart":
+      return `<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>`;
+    case "palette":
+      return `<path d="M12 22a10 10 0 1 1 10-10 4 4 0 0 1-4 4h-1.5a1.5 1.5 0 0 0-1.5 1.5 1.5 1.5 0 0 0 .5 1.1 1.5 1.5 0 0 1 .5 1.1c0 1-1 1.9-2 2Z"/><circle cx="6.5" cy="11.5" r="1.5"/><circle cx="9.5" cy="7.5" r="1.5"/><circle cx="14.5" cy="7.5" r="1.5"/><circle cx="17.5" cy="11.5" r="1.5"/>`;
+    case "pyramid":
+      return `<path d="M12 3L3 21h18L12 3z"/><path d="M7.2 15h9.6M5.4 18.5h13.2"/>`;
+    case "grid":
+      return `<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/>`;
+    case "cursor":
+      return `<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/>`;
+    case "monitor":
+      return `<rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/>`;
+    case "phone":
+      return `<rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/>`;
+    case "search":
+      return `<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>`;
+    case "cycle":
+      return `<path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>`;
+    case "star":
+      return `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>`;
+    case "shield":
+      return `<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>`;
+    case "clock":
+      return `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`;
+    case "dollar":
+      return `<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>`;
+    case "speech":
+      return `<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>`;
     default:
-      return `<path d="M12 2v20M2 12h20M5 5l14 14M5 19 19 5" stroke="${color}" stroke-width="2" stroke-linecap="round"/>`;
+      return `<circle cx="12" cy="8" r="4"/><path d="M6 21v-2a6 6 0 0 1 12 0v2"/>`;
   }
 }
 
@@ -1478,6 +1587,7 @@ export function freeformToSvg(
             <text x="10" y="0" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="600" fill="${textColorMuted}">${escapeXml(m.label)}:</text>
             <text x="${12 + m.label.length * 6.5}" y="0" font-family="Inter, -apple-system, sans-serif" font-size="10.5" font-weight="500" fill="${textColorPrimary}">${escapeXml(m.value)}</text>
           </g>`).join("")}
+          ${cardBodyTspans(card, shape.text?.content, x, y, w, textColorMuted)}
         </g>`
       );
       continue;
