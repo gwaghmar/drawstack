@@ -17,6 +17,7 @@ export type BaseShape = {
   strokeDash?: "solid" | "dashed" | "dotted";
   opacity?: number;
   frameId?: string | null;
+  parentId?: string | null;
   locked?: boolean;
   text?: {
     content: string;
