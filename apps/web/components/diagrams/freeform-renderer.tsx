@@ -30,7 +30,46 @@ import {
   ZoomIn,
   ZoomOut,
   Maximize,
+  AlignLeft,
+  AlignCenter,
+  AlignRight,
+  AlignHorizontalDistributeCenter,
+  BringToFront,
+  SendToBack,
+  Bold,
+  Minus,
+  IdCard,
+  Table2,
+  ListOrdered,
+  Monitor,
+  Gauge,
+  LayoutDashboard,
+  BarChart3,
+  GitBranch,
+  TrendingUp,
+  ListChecks,
+  Box,
+  CircleDot,
+  LayoutGrid,
+  Workflow,
+  Shapes,
+  Users,
+  Grid3x3,
+  Search,
+  X,
+  Layers,
+  type LucideIcon,
 } from "lucide-react";
+
+// Maps the catalog's plain icon-name strings to their component, so the shape
+// catalog (shared data, no JSX) stays framework-agnostic while this file is
+// the one place that knows how to draw a lucide icon.
+const CATALOG_ICONS: Record<string, LucideIcon> = {
+  Square, Diamond, Circle, Triangle, Database, Cloud, Hexagon, Star,
+  StickyNote, Type, Frame: FrameIcon, ImagePlus, IdCard, Table2, ListOrdered,
+  Monitor, Gauge, LayoutDashboard, BarChart3, GitBranch, TrendingUp,
+  ListChecks, Box, CircleDot, LayoutGrid, Workflow, Shapes, Users, Grid3x3,
+};
 import {
   parseFreeformSource,
   serializeFreeformDocument,
@@ -58,6 +97,7 @@ import {
 } from "@/lib/diagrams/freeform-canvas";
 
 import { freeformToSvg, getSvgIcon } from "@/lib/diagrams/freeform-svg";
+import { SHAPE_CATEGORIES, catalogByCategory, type ShapeCatalogEntry } from "@/lib/diagrams/freeform-shape-catalog";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
 import { YjsCanvasStore } from "@/lib/diagrams/yjs-store";
 
@@ -179,6 +219,14 @@ function polylineMidpoint(points: number[]): { x: number; y: number } {
     walked += seg.len;
   }
   return { x: Math.round(segments[segments.length - 1].x1), y: Math.round(segments[segments.length - 1].y1) };
+}
+
+function polylineLength(points: number[]): number {
+  let total = 0;
+  for (let i = 0; i + 3 < points.length; i += 2) {
+    total += Math.hypot(points[i + 2] - points[i], points[i + 3] - points[i + 1]);
+  }
+  return total;
 }
 
 function getShapeIdAtPointer(doc: CanvasDocument, stage: Konva.Stage | null): string | null {
@@ -592,31 +640,42 @@ function renderShape(
         />
       );
 
-    const labelNode = arrowShape.label ? (
-      <Group key={`${shape.id}-label-group`} x={midX} y={midY - 14} listening={false}>
-        <Rect
-          x={-Math.max(20, arrowShape.label.length * 4)}
-          y={-2}
-          width={Math.max(40, arrowShape.label.length * 8)}
-          height={20}
-          fill="#ffffff"
-          cornerRadius={4}
-          stroke="#cbd5e1"
-          strokeWidth={1}
-          opacity={0.9}
-        />
-        <Text
-          x={-Math.max(20, arrowShape.label.length * 4)}
-          y={2}
-          width={Math.max(40, arrowShape.label.length * 8)}
-          text={arrowShape.label}
-          fontSize={11}
-          fontFamily="Inter, Arial, sans-serif"
-          fill="#475569"
-          align="center"
-        />
-      </Group>
-    ) : null;
+    // Cap label width to the gap actually available along the path — an
+    // unclamped label on a short segment (two shapes placed close together)
+    // spilled past its own line and onto whichever shape was nearest.
+    const labelNode = arrowShape.label ? (() => {
+      const desiredWidth = Math.max(40, arrowShape.label.length * 8);
+      const availableWidth = Math.max(30, polylineLength(points) - 16);
+      const labelWidth = Math.min(desiredWidth, availableWidth);
+      const halfWidth = labelWidth / 2;
+      return (
+        <Group key={`${shape.id}-label-group`} x={midX} y={midY - 14} listening={false}>
+          <Rect
+            x={-halfWidth}
+            y={-2}
+            width={labelWidth}
+            height={20}
+            fill="#ffffff"
+            cornerRadius={4}
+            stroke="#cbd5e1"
+            strokeWidth={1}
+            opacity={0.9}
+          />
+          <Text
+            x={-halfWidth}
+            y={2}
+            width={labelWidth}
+            text={arrowShape.label}
+            fontSize={11}
+            fontFamily="Inter, Arial, sans-serif"
+            fill="#475569"
+            align="center"
+            wrap="none"
+            ellipsis
+          />
+        </Group>
+      );
+    })() : null;
 
     return (
       <Fragment key={shape.id}>
@@ -1242,6 +1301,8 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
   const [drawDraft, setDrawDraft] = useState<DrawDraft | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null });
   const [placeKind, setPlaceKind] = useState<ShapeKind | null>(null);
+  const [shapePickerOpen, setShapePickerOpen] = useState(false);
+  const [shapePickerQuery, setShapePickerQuery] = useState("");
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
 
@@ -1412,6 +1473,26 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
     commitChanges(newDoc);
     setSelectedIds(new Set([id]));
     setModeSynced("select");
+  };
+
+  // Places any of the 29 catalog shapes — including the 18 that had no toolbar
+  // button at all (card, dashboard, chart, mindmap, timelines, …) and were
+  // previously reachable only by asking the AI to emit one.
+  const insertCatalogShapeAt = (entry: ShapeCatalogEntry, cx: number, cy: number) => {
+    const shape = entry.build(cx, cy);
+    const baseDoc = docRef.current;
+    const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, shape] };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+    setSelectedIds(new Set([shape.id]));
+    setModeSynced("select");
+    setShapePickerOpen(false);
+  };
+
+  const insertCatalogShapeAtCenter = (entry: ShapeCatalogEntry) => {
+    const cx = (STAGE_WIDTH / 2 - viewportRef.current.x) / viewportRef.current.scale;
+    const cy = (STAGE_HEIGHT / 2 - viewportRef.current.y) / viewportRef.current.scale;
+    insertCatalogShapeAt(entry, cx, cy);
   };
 
   const handleImageFileChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -2330,6 +2411,25 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
 
   const toolbarDivider = <div className="h-6 w-[1px] shrink-0 bg-slate-200 dark:bg-slate-700 mx-1" />;
 
+  const styleDivider = <div className="h-4 w-[1px] shrink-0 bg-slate-900/10 dark:bg-white/10 mx-0.5" />;
+
+  const styleIconButton = (icon: ReactNode, active: boolean, onClick: () => void, title: string) => (
+    <button
+      key={title}
+      type="button"
+      title={title}
+      aria-label={title}
+      onClick={onClick}
+      className={`flex h-6 w-6 items-center justify-center rounded-md transition-colors ${
+        active
+          ? "bg-indigo-600 text-white"
+          : "text-slate-600 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/10"
+      }`}
+    >
+      {icon}
+    </button>
+  );
+
   const orderedShapes = [
     ...doc.shapes.filter((s) => s.type === "frame"),
     ...doc.shapes.filter((s) => s.type !== "frame"),
@@ -2373,6 +2473,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
           {toolbarButton(<Type className="h-4 w-4" />, mode === "place" && placeKind === "text", () => enterPlaceMode("text"), "Text")}
           {toolbarButton(<FrameIcon className="h-4 w-4" />, mode === "place" && placeKind === "frame", () => enterPlaceMode("frame"), "Frame")}
           {toolbarButton(<ImagePlus className="h-4 w-4" />, false, () => fileInputRef.current?.click(), "Add image")}
+          {toolbarButton(<Layers className="h-4 w-4" />, shapePickerOpen, () => setShapePickerOpen((v) => !v), "More shapes — cards, charts, dashboards, timelines…")}
 
           {toolbarDivider}
 
@@ -2430,6 +2531,72 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
         </div>
       )}
 
+      {/* ─── Shape Picker Flyout ─────────────────────────────────────────────
+          draw.io-style library covering all 29 shapes the canvas can render —
+          the 11 toolbar buttons above only reach the basic primitives; cards,
+          tables, dashboards, charts, mindmaps, timelines and every other macro
+          shape were previously reachable only by asking the AI for one. */}
+      {!readOnly && shapePickerOpen && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setShapePickerOpen(false)} />
+          <div className="absolute bottom-16 left-1/2 z-40 flex max-h-[60%] w-[420px] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/50 bg-white/85 shadow-2xl shadow-slate-900/20 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-slate-900/85">
+            <div className="flex shrink-0 items-center gap-2 border-b border-slate-900/5 p-2.5 dark:border-white/5">
+              <Search className="h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <input
+                autoFocus
+                value={shapePickerQuery}
+                onChange={(e) => setShapePickerQuery(e.target.value)}
+                placeholder="Search shapes…"
+                className="min-w-0 flex-1 bg-transparent text-xs text-slate-700 outline-none placeholder:text-slate-400 dark:text-slate-200"
+              />
+              <button
+                type="button"
+                onClick={() => setShapePickerOpen(false)}
+                aria-label="Close"
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded text-slate-400 hover:bg-slate-900/5 dark:hover:bg-white/10"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2.5">
+              {(() => {
+                const q = shapePickerQuery.trim().toLowerCase();
+                const matches = (e: ShapeCatalogEntry) =>
+                  !q || e.label.toLowerCase().includes(q) || e.description.toLowerCase().includes(q);
+                const visibleCategories = SHAPE_CATEGORIES
+                  .map((cat) => ({ cat, entries: catalogByCategory(cat.id).filter(matches) }))
+                  .filter((g) => g.entries.length > 0);
+                if (visibleCategories.length === 0) {
+                  return <p className="px-1 py-6 text-center text-xs text-slate-400">No shapes match “{shapePickerQuery}”.</p>;
+                }
+                return visibleCategories.map(({ cat, entries }) => (
+                  <div key={cat.id} className="mb-3 last:mb-0">
+                    <div className="mb-1.5 px-1 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-400">{cat.label}</div>
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {entries.map((entry) => {
+                        const Icon = CATALOG_ICONS[entry.icon] ?? Shapes;
+                        return (
+                          <button
+                            key={entry.type}
+                            type="button"
+                            title={entry.description}
+                            onClick={() => insertCatalogShapeAtCenter(entry)}
+                            className="flex flex-col items-center gap-1 rounded-lg p-2 text-center transition-colors hover:bg-indigo-500/10"
+                          >
+                            <Icon className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                            <span className="text-[9.5px] leading-tight text-slate-500 dark:text-slate-400">{entry.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ));
+              })()}
+            </div>
+          </div>
+        </>
+      )}
+
       {/* ─── Zoom Controls ───────────────────────────────────────────────── */}
       <div className="absolute bottom-4 left-4 z-20 flex items-center gap-0.5 rounded-2xl border border-white/50 bg-white/50 p-1 shadow-xl shadow-slate-900/10 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-slate-900/50">
         <button
@@ -2473,7 +2640,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
       {/* ─── Floating Quick-Style & Format Bar ────────────────────────────── */}
       {!readOnly && selBounds && selectedShapes.length > 0 && !editingShapeId && (
         <div
-          className="absolute z-30 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"
+          className="absolute z-30 flex items-center gap-1.5 rounded-xl border border-white/50 bg-white/70 px-2 py-1.5 shadow-xl shadow-slate-900/10 backdrop-blur-xl backdrop-saturate-150 dark:border-white/10 dark:bg-slate-900/70"
           style={{
             left: Math.max(12, viewport.x + selBounds.x * viewport.scale),
             top: Math.max(56, viewport.y + (selBounds.y - 48) * viewport.scale),
@@ -2502,7 +2669,7 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
             })}
           </div>
 
-          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+          {styleDivider}
 
           {/* Stroke Width Toggle */}
           <div className="flex items-center gap-0.5">
@@ -2514,10 +2681,11 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
                   setActiveStrokeWidth(w);
                   updateSelectedProps({ strokeWidth: w });
                 }}
-                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                title={`${w}px stroke`}
+                className={`rounded-md px-1.5 py-1 text-[10px] font-semibold transition-colors ${
                   primarySelected?.strokeWidth === w
                     ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                    : "text-slate-600 hover:bg-slate-900/5 dark:text-slate-300 dark:hover:bg-white/10"
                 }`}
               >
                 {w}px
@@ -2525,110 +2693,43 @@ export function FreeformRenderer({ source, onChange, readOnly, roomId }: Props) 
             ))}
           </div>
 
-          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+          {styleDivider}
 
-          {/* Dash style */}
-          <button
-            type="button"
-            onClick={() =>
-              updateSelectedProps((s) => ({
-                ...s,
-                strokeDash: s.strokeDash === "dashed" ? "solid" : "dashed",
-              }))
-            }
-            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
-              primarySelected?.strokeDash === "dashed"
-                ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-            }`}
-            title="Toggle Dashed Line"
-          >
-            Dash
-          </button>
+          {styleIconButton(
+            <Minus className="h-3.5 w-3.5" style={primarySelected?.strokeDash === "dashed" ? { strokeDasharray: 3 } : undefined} />,
+            primarySelected?.strokeDash === "dashed",
+            () => updateSelectedProps((s) => ({ ...s, strokeDash: s.strokeDash === "dashed" ? "solid" : "dashed" })),
+            "Toggle dashed line"
+          )}
 
-          {/* Text Bold */}
-          <button
-            type="button"
-            onClick={() =>
-              updateSelectedProps((s) => ({
-                ...s,
-                text: { ...(s.text ?? { content: "" }), bold: !s.text?.bold },
-              }))
-            }
-            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-              primarySelected?.text?.bold
-                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
-                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-            }`}
-            title="Toggle Bold"
-          >
-            B
-          </button>
+          {styleIconButton(
+            <Bold className="h-3.5 w-3.5" />,
+            Boolean(primarySelected?.text?.bold),
+            () => updateSelectedProps((s) => ({ ...s, text: { ...(s.text ?? { content: "" }), bold: !s.text?.bold } })),
+            "Toggle bold"
+          )}
 
           {/* Multi-Selection Alignment Tools */}
           {selectedShapes.length >= 2 && (
             <>
-              <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
-              <button
-                type="button"
-                onClick={() => alignSelected("left")}
-                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-                title="Align Left"
-              >
-                ⫷ L
-              </button>
-              <button
-                type="button"
-                onClick={() => alignSelected("center")}
-                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-                title="Align Center"
-              >
-                | C |
-              </button>
-              <button
-                type="button"
-                onClick={() => alignSelected("right")}
-                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-                title="Align Right"
-              >
-                R ⫸
-              </button>
-              <button
-                type="button"
-                onClick={() => alignSelected("distribute-h")}
-                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-                title="Distribute Horizontally"
-              >
-                ↔
-              </button>
+              {styleDivider}
+              {styleIconButton(<AlignLeft className="h-3.5 w-3.5" />, false, () => alignSelected("left"), "Align left")}
+              {styleIconButton(<AlignCenter className="h-3.5 w-3.5" />, false, () => alignSelected("center"), "Align center")}
+              {styleIconButton(<AlignRight className="h-3.5 w-3.5" />, false, () => alignSelected("right"), "Align right")}
+              {styleIconButton(<AlignHorizontalDistributeCenter className="h-3.5 w-3.5" />, false, () => alignSelected("distribute-h"), "Distribute horizontally")}
             </>
           )}
 
-          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+          {styleDivider}
 
-          {/* Layer Arrange */}
-          <button
-            type="button"
-            onClick={bringSelectionToFront}
-            className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-            title="Bring to Front"
-          >
-            Front
-          </button>
-          <button
-            type="button"
-            onClick={sendSelectionToBack}
-            className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
-            title="Send to Back"
-          >
-            Back
-          </button>
+          {styleIconButton(<BringToFront className="h-3.5 w-3.5" />, false, bringSelectionToFront, "Bring to front")}
+          {styleIconButton(<SendToBack className="h-3.5 w-3.5" />, false, sendSelectionToBack, "Send to back")}
 
           {primarySelected && selectedShapes.length === 1 && primarySelected.type !== "frame" && (
             <>
-              <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+              {styleDivider}
               <select
-                className="text-[10px] p-0.5 rounded border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 w-28"
+                className="text-[10px] py-1 px-1.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 w-28"
                 value={primarySelected.onClickNavigateToFrameId || ""}
                 onChange={(e) => {
                   const val = e.target.value;
