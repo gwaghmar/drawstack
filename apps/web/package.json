@@ -38,7 +38,7 @@
     "konva": "^10.3.0",
     "lucide-react": "^1.17.0",
     "nanoid": "^5.1.11",
-    "next": "16.2.7",
+    "next": "16.2.11",
     "next-auth": "5.0.0-beta.25",
     "pdfkit": "^0.18.0",
     "perfect-freehand": "^1.2.3",
