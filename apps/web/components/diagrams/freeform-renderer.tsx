@@ -468,6 +468,86 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "mesh_connector",
 ]);
 
+// ─── Table cell editing (Konva-side only) ─────────────────────────────────
+// The "table" shape is a DB-schema table (tableName + columns[{name,type}]),
+// NOT a generic spreadsheet grid — there is no `cells` field. Cell geometry
+// below is keyed to the constants the Konva `case "table"` branch renders
+// with (header 32px, row pitch 20px) so hit-testing and the edit overlay
+// line up with what's actually drawn. Note: freeform-svg.ts's table export
+// renderer uses slightly different constants (header 34px, row pitch 22px,
+// rows starting at 54 vs 42) — pre-existing drift between the two render
+// paths, not introduced here. Left alone; flagged for a future unification.
+type TableCellCoord =
+  | { kind: "tableName" }
+  | { kind: "column"; index: number; field: "name" | "type" };
+
+const TABLE_CELL_HEADER_HEIGHT = 32;
+const TABLE_CELL_ROW_HEIGHT = 20;
+
+function tableCellKey(cell: TableCellCoord): string {
+  return cell.kind === "tableName" ? "tableName" : `col-${cell.index}-${cell.field}`;
+}
+
+function computeTableCellRects(
+  table: TableShape
+): Array<{ coord: TableCellCoord; x: number; y: number; width: number; height: number }> {
+  const w = table.width;
+  const rects: Array<{ coord: TableCellCoord; x: number; y: number; width: number; height: number }> = [
+    { coord: { kind: "tableName" }, x: 0, y: 0, width: w, height: TABLE_CELL_HEADER_HEIGHT },
+  ];
+  table.columns.forEach((_, index) => {
+    const rowY = TABLE_CELL_HEADER_HEIGHT + index * TABLE_CELL_ROW_HEIGHT;
+    rects.push({ coord: { kind: "column", index, field: "name" }, x: 0, y: rowY, width: w / 2, height: TABLE_CELL_ROW_HEIGHT });
+    rects.push({ coord: { kind: "column", index, field: "type" }, x: w / 2, y: rowY, width: w / 2, height: TABLE_CELL_ROW_HEIGHT });
+  });
+  return rects;
+}
+
+function hitTestTableCell(table: TableShape, point: { x: number; y: number }): TableCellCoord | null {
+  const rects = computeTableCellRects(table);
+  const hit = rects.find(
+    (r) => point.x >= r.x && point.x < r.x + r.width && point.y >= r.y && point.y < r.y + r.height
+  );
+  return hit ? hit.coord : null;
+}
+
+function nextTableCell(table: TableShape, cell: TableCellCoord, reverse: boolean): TableCellCoord | null {
+  const seq = computeTableCellRects(table).map((r) => r.coord);
+  const curIdx = seq.findIndex((c) => tableCellKey(c) === tableCellKey(cell));
+  if (curIdx === -1) return null;
+  const nextIdx = reverse ? curIdx - 1 : curIdx + 1;
+  return nextIdx >= 0 && nextIdx < seq.length ? seq[nextIdx] : null;
+}
+
+function readTableCellValue(table: TableShape, cell: TableCellCoord): string {
+  if (cell.kind === "tableName") return table.tableName;
+  const col = table.columns[cell.index];
+  if (!col) return "";
+  return cell.field === "name" ? col.name : col.type;
+}
+
+function applyTableCellEdit(
+  doc: CanvasDocument,
+  shapeId: string,
+  cell: TableCellCoord,
+  content: string
+): CanvasDocument {
+  const newShapes = doc.shapes.map((s) => {
+    if (s.id !== shapeId || s.type !== "table") return s;
+    const t = s as TableShape;
+    if (cell.kind === "tableName") {
+      return { ...t, tableName: content.trim() === "" ? t.tableName : content };
+    }
+    const columns = t.columns.map((col, idx) => {
+      if (idx !== cell.index) return col;
+      const trimmed = content.trim() === "" ? (cell.field === "name" ? col.name : col.type) : content;
+      return cell.field === "name" ? { ...col, name: trimmed } : { ...col, type: trimmed };
+    });
+    return { ...t, columns };
+  });
+  return { ...doc, shapes: newShapes };
+}
+
 type MacroShapeNodeProps = {
   shape: CanvasShape;
   renderMode: CanvasDocument["renderMode"];
@@ -659,7 +739,8 @@ function renderShape(
   readOnly?: boolean,
   onShapeDblClick?: (shapeId: string) => void,
   editingShapeId?: string | null,
-  mode: ToolMode = "select"
+  mode: ToolMode = "select",
+  onTableCellDblClick?: (shapeId: string, cell: TableCellCoord) => void
 ): React.ReactNode {
   const isEditingThis = editingShapeId === shape.id;
   const draggable = !readOnly && mode === "select";
@@ -1174,7 +1255,16 @@ function renderShape(
             opacity={commonProps.opacity}
             draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
-            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDblClick={(e) => {
+              const pt = e.currentTarget.getRelativePointerPosition();
+              const cell = pt ? hitTestTableCell(table, pt) : null;
+              // A miss (e.g. dead space below the last row, when `height`
+              // exceeds header + rows) must still route into table-cell
+              // editing — falling through to the generic onShapeDblClick
+              // would edit `text.content`, a field the table branch never
+              // renders, silently swallowing the edit.
+              onTableCellDblClick?.(shape.id, cell ?? { kind: "tableName" });
+            }}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
@@ -1420,6 +1510,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
   const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
   const [editingValue, setEditingValue] = useState("");
+  const [editingTableCell, setEditingTableCell] = useState<TableCellCoord | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mode, setMode] = useState<ToolMode>("select");
   const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
@@ -1609,7 +1700,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     if (!el) return;
     el.focus();
     el.select();
-  }, [editingShapeId]);
+  }, [editingShapeId, editingTableCell]);
 
   const startEditing = (shapeId: string) => {
     if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
@@ -1617,6 +1708,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     if (!shape || shape.type === "line" || shape.type === "path" || shape.locked) return;
     setSelectedIds(new Set());
     setEditingShapeId(shapeId);
+    setEditingTableCell(null);
     setEditingValue(
       shape.type === "frame"
         ? shape.name ?? ""
@@ -1624,6 +1716,19 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
           ? (shape as ArrowShape).label ?? ""
           : shape.text?.content ?? ""
     );
+  };
+
+  // Double-clicking a cell inside a table shape enters edit mode scoped to
+  // just that cell (tableName header, or a column's name/type) rather than
+  // the whole shape's (unused, for tables) `text` block.
+  const startEditingTableCell = (shapeId: string, cell: TableCellCoord) => {
+    if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
+    const shape = doc.shapes.find((s) => s.id === shapeId);
+    if (!shape || shape.type !== "table" || shape.locked) return;
+    setSelectedIds(new Set());
+    setEditingShapeId(shapeId);
+    setEditingTableCell(cell);
+    setEditingValue(readTableCellValue(shape as TableShape, cell));
   };
 
   const insertShapeAt = (kind: ShapeKind, cx: number, cy: number) => {
@@ -1858,12 +1963,21 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const commitEditing = (cancel: boolean) => {
     const shapeId = editingShapeId;
     if (!shapeId) return;
+    const cell = editingTableCell;
     setEditingShapeId(null);
+    setEditingTableCell(null);
     if (cancel) return;
 
     const shape = doc.shapes.find((s) => s.id === shapeId);
     if (!shape) return;
     const content = editingValue;
+
+    if (shape.type === "table" && cell) {
+      const newDoc = applyTableCellEdit(doc, shapeId, cell, content);
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      return;
+    }
 
     if (shape.type === "frame") {
       const name = content.trim() === "" ? shape.name : content;
@@ -2064,7 +2178,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         return;
       }
 
-      // No image on the clipboard — fall back to our own shape clipboard
+      // No image — fall back to our own shape clipboard
       // (populated by Cmd+C above). Works with no live selection.
       if (clipboardRef.current.length === 0) return;
       e.preventDefault();
@@ -2959,7 +3073,19 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     : null;
 
   const editingShape = editingShapeId ? doc.shapes.find((s) => s.id === editingShapeId) : null;
-  const editingRect = editingShape ? getShapeBounds(doc, editingShape) : null;
+  const editingTableCellRect =
+    editingShape && editingShape.type === "table" && editingTableCell
+      ? (() => {
+          const table = editingShape as TableShape;
+          const match = computeTableCellRects(table).find(
+            (r) => tableCellKey(r.coord) === tableCellKey(editingTableCell)
+          );
+          return match
+            ? { x: table.x + match.x, y: table.y + match.y, width: match.width, height: match.height }
+            : null;
+        })()
+      : null;
+  const editingRect = editingTableCellRect ?? (editingShape ? getShapeBounds(doc, editingShape) : null);
   const stageContainerRect = stageRef.current?.container().getBoundingClientRect();
   const presentationFrames = doc.presentationMode
     ? doc.shapes.filter((s): s is FrameShape => s.type === "frame")
@@ -3603,7 +3729,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
               readOnly,
               startEditing,
               editingShapeId,
-              mode
+              mode,
+              startEditingTableCell
             )
           )}
 
@@ -3831,7 +3958,32 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
             if (e.key === "Escape") {
               e.preventDefault();
               commitEditing(true);
-            } else if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            } else if (editingTableCell && editingShape.type === "table" && e.key === "Tab") {
+              // Tab commits the current cell and hops to the next one (name ->
+              // type -> next row's name), wrapping across rows; Shift+Tab goes
+              // backward. Falling off either end exits edit mode entirely.
+              e.preventDefault();
+              const table = editingShape as TableShape;
+              const newDoc = applyTableCellEdit(doc, table.id, editingTableCell, editingValue);
+              setDoc(newDoc);
+              commitChanges(newDoc);
+              const updatedTable = newDoc.shapes.find((s) => s.id === table.id) as TableShape | undefined;
+              const next = updatedTable ? nextTableCell(updatedTable, editingTableCell, e.shiftKey) : null;
+              if (updatedTable && next) {
+                setEditingTableCell(next);
+                setEditingValue(readTableCellValue(updatedTable, next));
+              } else {
+                setEditingShapeId(null);
+                setEditingTableCell(null);
+              }
+            } else if (
+              editingTableCell
+                ? e.key === "Enter" && !e.shiftKey
+                : e.key === "Enter" && (e.metaKey || e.ctrlKey)
+            ) {
+              // Table cells are single-line fields, so plain Enter commits and
+              // exits (matching every other single-line commit in this file);
+              // other shapes keep the multi-line Cmd/Ctrl+Enter convention.
               e.preventDefault();
               commitEditing(false);
             }
@@ -3843,11 +3995,19 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
             top: (stageContainerRect?.top ?? 0) + viewport.y + editingRect.y * viewport.scale,
             width: editingRect.width * viewport.scale,
             height: editingRect.height * viewport.scale,
-            fontSize: (editingShape.text?.fontSize ?? 14) * viewport.scale,
-            fontFamily: editingShape.text?.fontFamily ?? "Inter, Arial, sans-serif",
+            fontSize: editingTableCell
+              ? 11 * viewport.scale
+              : (editingShape.text?.fontSize ?? 14) * viewport.scale,
+            fontFamily: editingTableCell
+              ? "'JetBrains Mono', monospace"
+              : editingShape.text?.fontFamily ?? "Inter, Arial, sans-serif",
             color: editingShape.text?.color ?? "#1e293b",
-            textAlign: editingShape.text?.align ?? (editingShape.type === "text" ? "left" : "center"),
-            fontWeight: editingShape.text?.bold ? "bold" : "normal",
+            textAlign: editingTableCell
+              ? editingTableCell.kind === "column" && editingTableCell.field === "type"
+                ? "right"
+                : "left"
+              : editingShape.text?.align ?? (editingShape.type === "text" ? "left" : "center"),
+            fontWeight: editingTableCell?.kind === "tableName" || editingShape.text?.bold ? "bold" : "normal",
             background: editingShape.type === "sticky" ? "#fef08a" : "rgba(255,255,255,0.95)",
             border: "2px solid #4f46e5",
             borderRadius: 4,
