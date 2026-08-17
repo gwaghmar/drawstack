@@ -57,6 +57,8 @@ const DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
   sticky: { width: 180, height: 180 },
   text: { width: 120, height: 30 },
   frame: { width: 400, height: 300 },
+  card: { width: 220, height: 120 },
+  table: { width: 240, height: 160 },
 };
 
 class OpError extends Error {}

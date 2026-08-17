@@ -41,6 +41,28 @@ export type StickyShape = BaseShape & { type: "sticky"; width: number; height: n
 export type TextShape = BaseShape & { type: "text"; width: number; height: number };
 export type FrameShape = BaseShape & { type: "frame"; width: number; height: number; name?: string };
 
+export type CardShape = BaseShape & {
+  type: "card";
+  width: number;
+  height: number;
+  icon?: string;
+  badge?: { text: string; color?: string; bg?: string };
+  title: string;
+  subtitle?: string;
+  metadata?: { label: string; value: string }[];
+  cornerRadius?: number;
+};
+
+export type TableShape = BaseShape & {
+  type: "table";
+  width: number;
+  height: number;
+  tableName: string;
+  headerBg?: string;
+  columns: { name: string; type: string; isPk?: boolean; isFk?: boolean }[];
+  cornerRadius?: number;
+};
+
 export type PathShape = BaseShape & {
   type: "path";
   points: [number, number][];
@@ -72,6 +94,8 @@ export type CanvasShape =
   | StickyShape
   | TextShape
   | FrameShape
+  | CardShape
+  | TableShape
   | PathShape
   | ArrowShape;
 

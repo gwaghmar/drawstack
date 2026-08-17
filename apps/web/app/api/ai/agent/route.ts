@@ -23,7 +23,23 @@ const CanvasOpSchema = z.union([
   z.object({
     op: z.literal("add"),
     shape: z.looseObject({
-      type: z.enum(["rectangle", "ellipse", "diamond", "sticky", "text", "frame", "arrow", "line"]),
+      type: z.enum([
+        "rectangle",
+        "ellipse",
+        "diamond",
+        "triangle",
+        "cylinder",
+        "cloud",
+        "hexagon",
+        "star",
+        "sticky",
+        "text",
+        "frame",
+        "card",
+        "table",
+        "arrow",
+        "line",
+      ]),
     }).describe("Partial shape; type is required"),
   }),
   z.object({
