@@ -37,11 +37,11 @@ function serializeShapeLine(shape: CanvasShape): string {
   if (shape.name !== undefined) out.name = shape.name;
   if (shape.role !== undefined) out.role = shape.role;
   out.type = shape.type;
-  out.x = round(shape.x);
-  out.y = round(shape.y);
 
   const isArrow = shape.type === "arrow" || shape.type === "line";
   if (!isArrow) {
+    out.x = round(shape.x);
+    out.y = round(shape.y);
     const sized = shape as Exclude<CanvasShape, ArrowShape>;
     out.width = round(sized.width);
     out.height = round(sized.height);
@@ -131,6 +131,8 @@ export const MODEL_VIEW_GUIDE = `Canvas model view format:
 - Line order = z-order (later lines render on top).
 - Colors may be a palette key "1"-"6" (1 red, 2 orange, 3 yellow, 4 green, 5 blue,
   6 purple, light-theme meanings) or a literal hex string — left unresolved here.
+- Arrow/line shapes omit "x"/"y" — their position is derived from their "start"/"end"
+  endpoints, not a standalone coordinate.
 - Arrow "start"/"end" are either {"shapeId","anchor"} bound endpoints (anchor omitted
   when "auto") or free {"x","y"} points.
 - To edit the canvas, do not rewrite this text — express changes as ops

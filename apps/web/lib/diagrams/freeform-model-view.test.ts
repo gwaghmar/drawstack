@@ -123,6 +123,8 @@ describe("serializeForModel", () => {
     const doc: CanvasDocument = { version: 1, shapes: [rectA, rectB, arrow] };
 
     const parsed = JSON.parse(serializeForModel(doc).split("\n")[3]);
+    assert.equal("x" in parsed, false);
+    assert.equal("y" in parsed, false);
     assert.deepEqual(parsed.start, { shapeId: "a" });
     assert.deepEqual(parsed.end, { shapeId: "b", anchor: "left" });
   });

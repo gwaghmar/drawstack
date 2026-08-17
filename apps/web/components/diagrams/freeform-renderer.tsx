@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Ellipse, Line, Text } from "react-konva";
+import { Stage, Layer, Rect, Ellipse, Line, Text, Transformer } from "react-konva";
 import Konva from "konva";
 import {
   parseFreeformSource,
@@ -131,6 +131,7 @@ function renderShape(
         return (
           <Rect
             key={shape.id}
+            id={shape.id}
             {...commonProps}
             width={shape.width}
             height={shape.height}
@@ -147,6 +148,7 @@ function renderShape(
         return (
           <Ellipse
             key={shape.id}
+            id={shape.id}
             x={shape.x + shape.width / 2}
             y={shape.y + shape.height / 2}
             radiusX={shape.width / 2}
@@ -172,6 +174,7 @@ function renderShape(
         return (
           <Rect
             key={shape.id}
+            id={shape.id}
             {...commonProps}
             width={shape.width}
             height={shape.height}
@@ -187,6 +190,7 @@ function renderShape(
         return (
           <Text
             key={shape.id}
+            id={shape.id}
             x={shape.x}
             y={shape.y}
             width={shape.width}
@@ -270,6 +274,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const lastSourceRef = useRef(source);
   const stageRef = useRef<Konva.Stage>(null);
   const marqueeStartRef = useRef<{ x: number; y: number } | null>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
+  const docRef = useRef(doc);
+  docRef.current = doc;
 
   // Sync external source prop to local state
   useEffect(() => {
@@ -279,6 +286,8 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     if (errors.length === 0) {
       const newDoc = parsed.shapes.length > 0 ? parsed : FIXTURE_DOCUMENT;
       setDoc(newDoc);
+      const ids = new Set(newDoc.shapes.map((s) => s.id));
+      setSelectedIds((prev) => new Set([...prev].filter((id) => ids.has(id))));
     }
     lastSourceRef.current = source;
     queueMicrotask(() => {
@@ -464,6 +473,61 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     setDragState(null);
   };
 
+  useEffect(() => {
+    if (readOnly) return;
+    const tr = transformerRef.current;
+    const stage = stageRef.current;
+    if (!tr || !stage) return;
+
+    const eligibleIds = Array.from(selectedIds).filter((id) => {
+      const shape = docRef.current.shapes.find((s) => s.id === id);
+      return !!shape && shape.type !== "arrow" && shape.type !== "line" && !shape.locked;
+    });
+    const nodes = eligibleIds
+      .map((id) => stage.findOne(`#${id}`))
+      .filter((node): node is Konva.Node => !!node);
+
+    tr.nodes(nodes);
+    tr.getLayer()?.batchDraw();
+  }, [selectedIds, readOnly]);
+
+  const handleTransformEnd = () => {
+    const tr = transformerRef.current;
+    if (!tr) return;
+
+    const updates = new Map<string, { x: number; y: number; width: number; height: number; rotation: number }>();
+    for (const node of tr.nodes()) {
+      const shape = doc.shapes.find((s) => s.id === node.id());
+      if (!shape || shape.type === "arrow" || shape.type === "line") continue;
+
+      const width = Math.round(node.width() * node.scaleX());
+      const height = Math.round(node.height() * node.scaleY());
+      const rotation = Math.round(node.rotation());
+      node.scaleX(1);
+      node.scaleY(1);
+
+      if (shape.type === "ellipse") {
+        const cx = Math.round(node.x());
+        const cy = Math.round(node.y());
+        updates.set(shape.id, { x: cx - width / 2, y: cy - height / 2, width, height, rotation });
+      } else {
+        updates.set(shape.id, { x: Math.round(node.x()), y: Math.round(node.y()), width, height, rotation });
+      }
+    }
+
+    if (updates.size === 0) return;
+
+    const newShapes = doc.shapes.map((s) => {
+      if (s.type === "arrow" || s.type === "line") return s;
+      const u = updates.get(s.id);
+      if (!u) return s;
+      return { ...s, x: u.x, y: u.y, width: u.width, height: u.height, rotation: u.rotation };
+    });
+    const newDoc = { ...doc, shapes: newShapes };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
   const marqueeRect = marquee
     ? {
         x: Math.min(marquee.x0, marquee.x1),
@@ -508,6 +572,21 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
               stroke="#4f46e5"
               strokeWidth={1}
               listening={false}
+            />
+          )}
+
+          {!readOnly && (
+            <Transformer
+              ref={transformerRef}
+              rotateEnabled={true}
+              anchorStroke="#6366f1"
+              anchorFill="#ffffff"
+              borderStroke="#6366f1"
+              boundBoxFunc={(oldBox, newBox) => {
+                if (newBox.width < 8 || newBox.height < 8) return oldBox;
+                return newBox;
+              }}
+              onTransformEnd={handleTransformEnd}
             />
           )}
         </Layer>

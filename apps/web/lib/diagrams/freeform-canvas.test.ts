@@ -96,11 +96,10 @@ describe("parseFreeformSource error handling", () => {
     assert.equal(errors.length, 1);
   });
 
-  it("returns empty document and an error for empty string", () => {
+  it("treats empty string as a blank canvas, not an error", () => {
     const { doc, errors } = parseFreeformSource("");
     assert.deepEqual(doc, createEmptyDocument());
-    assert.equal(errors.length, 1);
-    assert(errors[0].includes("Invalid JSON"));
+    assert.equal(errors.length, 0);
   });
 });
 

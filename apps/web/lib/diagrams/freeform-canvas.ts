@@ -48,6 +48,9 @@ export function createEmptyDocument(): CanvasDocument {
 }
 
 export function parseFreeformSource(source: string): { doc: CanvasDocument; errors: string[] } {
+  if (source.trim() === "") {
+    return { doc: createEmptyDocument(), errors: [] };
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(source);
