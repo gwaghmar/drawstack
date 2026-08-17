@@ -502,4 +502,22 @@ describe("Universal Shapes and Path bounds", () => {
     assert.deepEqual(errors, []);
     assert.deepEqual(parsed, doc);
   });
+
+  it("exports a rich CanvasDocument to pure SVG markup", async () => {
+    const { freeformToSvg } = await import("./freeform-svg.ts");
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        { id: "s1", type: "rectangle", x: 50, y: 50, width: 160, height: 80, text: { content: "Box 1" } },
+        { id: "s2", type: "cylinder", x: 300, y: 50, width: 140, height: 100, text: { content: "DB" } },
+        { id: "a1", type: "arrow", start: { shapeId: "s1" }, end: { shapeId: "s2" }, label: "calls" },
+      ],
+    };
+    const svg = freeformToSvg(doc);
+    assert.ok(svg.startsWith("<svg"));
+    assert.ok(svg.includes("Box 1"));
+    assert.ok(svg.includes("DB"));
+    assert.ok(svg.includes("calls"));
+    assert.ok(svg.endsWith("</svg>"));
+  });
 });

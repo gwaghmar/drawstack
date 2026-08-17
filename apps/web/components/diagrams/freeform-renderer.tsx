@@ -28,6 +28,8 @@ import {
   type FrameShape,
 } from "@/lib/diagrams/freeform-canvas";
 
+import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
+
 type Props = {
   source: string;
   onChange?: (source: string) => void;
@@ -769,6 +771,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const marqueeRef = useRef<MarqueeState | null>(null);
   const arrowDraftRef = useRef<ArrowDraft | null>(null);
   const drawDraftRef = useRef<DrawDraft | null>(null);
+  const clipboardRef = useRef<CanvasShape[]>([]);
 
   const setModeSynced = (next: ToolMode) => {
     modeRef.current = next;
@@ -927,6 +930,36 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         const newDoc = { ...doc, shapes: newShapes };
         setDoc(newDoc);
         setSelectedIds(new Set());
+        commitChanges(newDoc);
+        return;
+      }
+
+      // Copy (Ctrl+C / Cmd+C)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        clipboardRef.current = doc.shapes.filter((s) => selectedIds.has(s.id));
+        return;
+      }
+
+      // Paste (Ctrl+V / Cmd+V)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        if (clipboardRef.current.length === 0) return;
+        const newIds = new Set<string>();
+        const pasted: CanvasShape[] = clipboardRef.current.map((s) => {
+          const freshId = generateShapeId("copy");
+          newIds.add(freshId);
+          return {
+            ...s,
+            id: freshId,
+            name: s.name ? `${s.name}-copy` : undefined,
+            x: "x" in s ? s.x + 20 : 0,
+            y: "y" in s ? s.y + 20 : 0,
+          };
+        });
+        const newDoc = { ...doc, shapes: [...doc.shapes, ...pasted] };
+        setDoc(newDoc);
+        setSelectedIds(newIds);
         commitChanges(newDoc);
         return;
       }
@@ -1563,6 +1596,79 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     commitChanges(newDoc);
   };
 
+  const alignSelected = (alignment: "left" | "center" | "right" | "top" | "middle" | "bottom" | "distribute-h" | "distribute-v") => {
+    if (selectedShapes.length < 2) return;
+    const boundsList = selectedShapes.map((s) => ({ shape: s, bounds: getShapeBounds(doc, s) }));
+
+    const minX = Math.min(...boundsList.map((b) => b.bounds.x));
+    const maxX = Math.max(...boundsList.map((b) => b.bounds.x + b.bounds.width));
+    const minY = Math.min(...boundsList.map((b) => b.bounds.y));
+    const maxY = Math.max(...boundsList.map((b) => b.bounds.y + b.bounds.height));
+
+    if (alignment === "distribute-h" || alignment === "distribute-v") {
+      const isH = alignment === "distribute-h";
+      const sorted = [...boundsList].sort((a, b) => (isH ? a.bounds.x - b.bounds.x : a.bounds.y - b.bounds.y));
+      const totalSpan = isH ? maxX - minX : maxY - minY;
+      const totalShapeDim = sorted.reduce((sum, item) => sum + (isH ? item.bounds.width : item.bounds.height), 0);
+      const gap = sorted.length > 1 ? Math.max(10, (totalSpan - totalShapeDim) / (sorted.length - 1)) : 20;
+
+      let cursor = isH ? minX : minY;
+      const newPosMap = new Map<string, number>();
+      for (const item of sorted) {
+        newPosMap.set(item.shape.id, Math.round(cursor));
+        cursor += (isH ? item.bounds.width : item.bounds.height) + gap;
+      }
+
+      const distributed = doc.shapes.map((s) => {
+        if (!newPosMap.has(s.id)) return s;
+        return isH ? ({ ...s, x: newPosMap.get(s.id)! } as CanvasShape) : ({ ...s, y: newPosMap.get(s.id)! } as CanvasShape);
+      });
+
+      const newDoc: CanvasDocument = { ...doc, shapes: distributed };
+      setDoc(newDoc);
+      commitChanges(newDoc);
+      return;
+    }
+
+    const newDocShapes = doc.shapes.map((s) => {
+      if (!selectedIds.has(s.id) || s.type === "arrow" || s.type === "line") return s;
+      const b = getShapeBounds(doc, s);
+      switch (alignment) {
+        case "left":
+          return { ...s, x: minX } as CanvasShape;
+        case "center":
+          return { ...s, x: Math.round((minX + maxX) / 2 - b.width / 2) } as CanvasShape;
+        case "right":
+          return { ...s, x: Math.round(maxX - b.width) } as CanvasShape;
+        case "top":
+          return { ...s, y: minY } as CanvasShape;
+        case "middle":
+          return { ...s, y: Math.round((minY + maxY) / 2 - b.height / 2) } as CanvasShape;
+        case "bottom":
+          return { ...s, y: Math.round(maxY - b.height) } as CanvasShape;
+        default:
+          return s;
+      }
+    });
+
+    const newDoc: CanvasDocument = { ...doc, shapes: newDocShapes };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
+  const handleExportSvg = () => {
+    const svgString = freeformToSvg(doc);
+    const blob = new Blob([svgString], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "canvas-diagram.svg";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const marqueeRect = marquee
     ? {
         x: Math.min(marquee.x0, marquee.x1),
@@ -1650,6 +1756,15 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           >
             {doc.renderMode === "sketchy" ? "Sketchy Style" : "Clean Style"}
           </button>
+
+          <button
+            type="button"
+            onClick={handleExportSvg}
+            className="rounded px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
+            title="Download pure vector SVG"
+          >
+            Export SVG
+          </button>
         </div>
       )}
 
@@ -1729,7 +1844,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
             Dash
           </button>
 
-          {/* Text Bold & Align (if has text or is text) */}
+          {/* Text Bold */}
           <button
             type="button"
             onClick={() =>
@@ -1747,6 +1862,45 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           >
             B
           </button>
+
+          {/* Multi-Selection Alignment Tools */}
+          {selectedShapes.length >= 2 && (
+            <>
+              <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+              <button
+                type="button"
+                onClick={() => alignSelected("left")}
+                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                title="Align Left"
+              >
+                ⫷ L
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelected("center")}
+                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                title="Align Center"
+              >
+                | C |
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelected("right")}
+                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                title="Align Right"
+              >
+                R ⫸
+              </button>
+              <button
+                type="button"
+                onClick={() => alignSelected("distribute-h")}
+                className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                title="Distribute Horizontally"
+              >
+                ↔
+              </button>
+            </>
+          )}
 
           <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
 
