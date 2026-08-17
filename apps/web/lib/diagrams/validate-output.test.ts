@@ -104,3 +104,53 @@ test("freeform: shape with a contentless decorative text block is ok", async () 
   );
   assert.equal(r.ok, true);
 });
+
+test("freeform: shape with text as a bare string is coerced, not rejected", async () => {
+  // Reproduces a third live-production failure, found by curling the demo
+  // endpoint directly until the exact case reappeared: the model commonly
+  // emits `text: "some string"` on type:"text" shapes instead of the
+  // documented `text: { content: "some string" }`. This is an obviously-
+  // recoverable shorthand -- normalize it rather than reject the document.
+  const r = await validateAndRepairOutput(
+    "freeform",
+    JSON.stringify({
+      version: 1,
+      shapes: [
+        { id: "title", type: "text", text: "90-Day Startup Launch Plan", fontSize: 48, x: 50, y: 50 },
+      ],
+    })
+  );
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    const doc = JSON.parse(r.source);
+    assert.equal(doc.shapes[0].text.content, "90-Day Startup Launch Plan");
+  }
+});
+
+test("freeform: arrow x/y survive validation instead of being stripped", async () => {
+  // Caught while fixing the bare-string-text coercion above: switching the
+  // function to return the validated (coerced) data instead of the raw
+  // repaired string exposed that FreeformArrowShapeSchema/FreeformPathShapeSchema
+  // had no .passthrough(), so Zod's default strip-unknown-keys behavior silently
+  // dropped x/y (and anything else not explicitly listed) from every arrow and
+  // path shape it validated. BaseShape requires x/y on every shape including
+  // arrows -- this would have shipped arrows missing required fields.
+  const r = await validateAndRepairOutput(
+    "freeform",
+    JSON.stringify({
+      version: 1,
+      shapes: [
+        { id: "a", type: "rectangle", x: 0, y: 0, width: 10, height: 10 },
+        { id: "b", type: "rectangle", x: 100, y: 0, width: 10, height: 10 },
+        { id: "ar", type: "arrow", x: 0, y: 0, start: { shapeId: "a", anchor: "auto" }, end: { shapeId: "b", anchor: "auto" } },
+      ],
+    })
+  );
+  assert.equal(r.ok, true);
+  if (r.ok) {
+    const doc = JSON.parse(r.source);
+    const arrow = doc.shapes.find((s: { id: string }) => s.id === "ar");
+    assert.equal(arrow.x, 0);
+    assert.equal(arrow.y, 0);
+  }
+});

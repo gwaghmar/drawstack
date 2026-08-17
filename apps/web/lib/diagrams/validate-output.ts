@@ -165,7 +165,7 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
   cornerRadius: z.number().optional(),
 });
 
-const FreeformPathShapeSchema = FreeformBaseSchema.extend({
+const FreeformPathShapeSchema = FreeformBaseSchema.passthrough().extend({
   type: z.literal("path"),
   points: z.array(z.tuple([z.number(), z.number()])),
 });
@@ -178,7 +178,7 @@ const FreeformEndpointSchema = z.union([
   }),
 ]);
 
-const FreeformArrowShapeSchema = FreeformBaseSchema.extend({
+const FreeformArrowShapeSchema = FreeformBaseSchema.passthrough().extend({
   type: z.enum(["arrow", "line"]),
   start: FreeformEndpointSchema,
   end: FreeformEndpointSchema,
@@ -198,6 +198,21 @@ const FreeformCanvasSchema = z.object({
   shapes: z.array(FreeformShapeSchema).min(1, "Freeform canvas must have at least one shape"),
 });
 
+// The model frequently emits `text: "some string"` instead of the documented
+// `text: { content: "some string" }` -- an obviously-recoverable shorthand,
+// not malformed output. Rejecting the whole document over one shape's field
+// shape mismatch is worse than silently normalizing it. Mutates in place.
+function coerceStringTextBlocks(parsed: unknown): void {
+  if (!parsed || typeof parsed !== "object") return;
+  const shapes = (parsed as { shapes?: unknown }).shapes;
+  if (!Array.isArray(shapes)) return;
+  for (const shape of shapes) {
+    if (shape && typeof shape === "object" && typeof (shape as { text?: unknown }).text === "string") {
+      (shape as { text: unknown }).text = { content: (shape as { text: string }).text };
+    }
+  }
+}
+
 export async function validateAndRepairOutput(
   _diagramType: DiagramType,
   raw: string,
@@ -214,6 +229,8 @@ export async function validateAndRepairOutput(
     return { ok: false, reason: "Could not parse freeform canvas JSON after repair" };
   }
 
+  coerceStringTextBlocks(parsed);
+
   const result = FreeformCanvasSchema.safeParse(parsed);
   if (!result.success) {
     return { ok: false, reason: `Freeform canvas structure invalid: ${result.error.issues[0]?.message}` };
@@ -224,5 +241,8 @@ export async function validateAndRepairOutput(
     return { ok: false, reason: `Freeform canvas has broken references: ${refErrors.join("; ")}` };
   }
 
-  return { ok: true, source: repaired };
+  // Serialize the validated (and possibly coerced, e.g. text: "str" -> {content})
+  // data, not the raw repaired string -- otherwise a shape we silently fixed to
+  // pass validation would still reach the client in its original broken shape.
+  return { ok: true, source: JSON.stringify(result.data) };
 }
