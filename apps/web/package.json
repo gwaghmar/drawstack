@@ -39,7 +39,7 @@
     "lucide-react": "^1.17.0",
     "nanoid": "^5.1.11",
     "next": "16.2.7",
-    "next-auth": "5.0.0-beta.25",
+    "next-auth": "5.0.0-beta.32",
     "pdfkit": "^0.18.0",
     "perfect-freehand": "^1.2.3",
     "postgres": "^3.4.9",
