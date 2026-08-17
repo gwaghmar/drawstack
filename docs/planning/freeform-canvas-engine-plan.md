@@ -108,28 +108,53 @@ per committed change. Export: falls into the existing `html-to-image` fallback f
   narrower `update_shape`. String-based `apply_patch` is explicitly the wrong tool here.
 - Both routes reuse `validateAndRepairOutput`.
 
-## STATUS (2026-08-16, end of build session) — READ THIS FIRST ON RESUME
+## STATUS (2026-08-17, mid-session update) — READ THIS FIRST ON RESUME
 
-**Milestones A–J are DONE and committed on master** (commits `50fbe08`..`005502e`).
-186 unit tests green, tsc clean, build clean. D–G were click-verified in the
-browser via the `/freeform-lab` harness (drag/snap committed exact coords, frames
-adopt + carry children, zoom-space insertion exact, text editing, bound arrows).
+**Milestones A–J are DONE and committed on master** (commits `50fbe08`..`005502e`,
+plus fix `60cef6f`). 186 unit tests green, tsc clean, build clean. D–G were
+click-verified in the browser via `/freeform-lab`; **the AI round-trip is now
+ALSO verified** (below) — this is no longer an open risk, it's done.
+
+**AI round-trip test result (2026-08-17): PASSED.** Ran on the main repo dev
+server (port 3040) with a real OpenRouter key added to `apps/web/.env.local`
+(local-only, gitignored, not committed). Prompt: "draw a project kickoff board
+with a frame, three named boxes for research, design, and build, connected in
+order, and a sticky note reminder" → AI patched the diagram correctly: named
+shapes (`research`/`design`/`build`, `role: "step"`), palette shorthand fills,
+bound arrows with labels ("handoff"), frame membership, sticky note — the
+system prompt from milestone H produced exactly the schema it was taught.
+Zod validation + `validateFreeformRefs` passed on the first attempt, no retry
+needed. **Agent-mode `apply_ops` targeted-edit test (e.g. "make the second box
+red") was NOT yet run — do this next before considering H/I fully proven.**
+
+**Bug found and fixed during the test** (commit `60cef6f`): `defaultFill`/
+`defaultStroke` in `freeform-renderer.tsx` passed `shape.fill`/`shape.stroke`
+straight to Konva without calling `resolveColor()` — so AI-authored palette
+shorthand (`"1"`–`"6"`, exactly what the system prompt tells the AI to prefer)
+rendered as solid black instead of the intended color. Fixed: both helpers now
+resolve through `resolveColor()`. This is the kind of gap that only a real
+end-to-end AI test surfaces — schema tests and synthetic browser events never
+touch it because they don't independently exercise "AI output → renderer".
+
+**Two known environment gaps, unrelated to canvas code, found along the way:**
+- `apps/web/.env.local` had all three AI keys (`OPENAI_API_KEY`,
+  `GOOGLE_GENERATIVE_AI_API_KEY`, `AI_GATEWAY_KEY`) present but EMPTY. Govind
+  added a working `OPENROUTER_API_KEY` (both AI routes already support it as a
+  fallback provider) to unblock local testing. Local-only — do not commit `.env.local`.
+- Local mock-db project save 500s: `insert or update on table "project" violates
+  foreign key constraint` — the `dev-ws-id` workspace row doesn't exist in the
+  seeded dev DB. Unrelated to freeform; not yet investigated/fixed.
 
 **Pushed to origin: only through milestone G** (`6181dfe`). Commits for the PDF
-fix + H + I + J are LOCAL ONLY — deliberately unpushed because pushing deploys
-production and the AI round-trip has never been tested.
+fix + H + I + J + the color-fix are LOCAL ONLY — still unpushed pending the
+apply_ops agent-mode test above.
 
 ### Next steps, in order
-1. **AI round-trip verification (the gate for everything else).** Start the MAIN
-   repo dev server (`pnpm --filter @flowchart/web dev`, port 3040 — the lab copy
-   is stale on editor-client, don't use it for this). In the editor with
-   `diagramType=freeform` (explicit selection/URL — the intent pass deliberately
-   can't pick freeform yet): (a) generate "draw me a project kickoff board with
-   a frame, three named boxes and a sticky note" → must pass validation and
-   render; (b) in Agent Mode: "make the second box red" → `apply_ops` tool must
-   fire and apply. First-generation validation failures are prompt-quality
-   signal — fix `DIAGRAM_SYSTEM_PROMPTS.freeform`, not the validator.
-2. **Push** H+I+J (+ the PDF-export fix commit) once (1) passes.
+1. **Run the apply_ops agent-mode test** (the one piece of the round-trip not
+   yet done): in Agent Mode on a freeform board, ask for a targeted edit ("make
+   the research box red", "move the sticky note below the frame") and confirm
+   the `apply_ops` tool fires and the edit applies without a full regeneration.
+2. **Push** H+I+J+color-fix once (1) passes.
 3. **Milestone K — remove tldraw** (own revertible commit): VERIFIED 2026-08-16
    that the production DB has ZERO tldraw projects and ZERO tldraw share links
    (7 projects total: 3 cloud, 2 mermaid, 2 excalidraw) → clean removal, no
