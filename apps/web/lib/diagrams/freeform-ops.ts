@@ -61,7 +61,12 @@ const DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
   table: { width: 240, height: 160 },
   image: { width: 200, height: 150 },
   metric: { width: 220, height: 110 },
+  dashboard: { width: 1280, height: 800 },
   chart: { width: 360, height: 220 },
+  feed_table: { width: 380, height: 280 },
+  mindmap: { width: 500, height: 800 },
+  scurve_timeline: { width: 680, height: 850 },
+  isometric_block: { width: 680, height: 600 },
   mockup: { width: 640, height: 420 },
 };
 

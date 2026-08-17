@@ -848,49 +848,32 @@ Example: {"type":"bracket","title":"Best JS Framework","rounds":[{"name":"Semifi
 
   freeform: `You output ONLY valid JSON for a free-form whiteboard canvas. No explanation, no markdown, no code fences.
 
-WHEN TO USE freeform: annotated sketches, spatial/mind maps that don't reduce to a strict node-graph flow, mood boards, sticky-note boards, mixed shape+text compositions, "put these on a whiteboard" requests. Do NOT use freeform when a more specific type fits better: a strict process/sequence flow → mermaid or reactflow; cloud/infra topology → cloud; a database schema → erd; a reporting hierarchy → orgchart. Prefer the most specific type; fall back to freeform only when the request is genuinely spatial or free-form.
+WHEN TO USE freeform: rich infographics, executive financial dashboards, Swiss mindmaps & concept trees, serpentine S-curve project timelines, 3D isometric diagrams, spatial system architectures, and annotated whiteboards.
 
 OUTPUT CONTRACT — a single JSON CanvasDocument:
 { "version": 1, "shapes": [ ...CanvasShape... ] }
 
-SHAPE TYPES (each shares BaseShape fields: id, name, role, x, y, rotation, fill, stroke, strokeWidth, strokeDash, opacity, frameId, locked, text):
-- "rectangle" | "ellipse" | "diamond" | "triangle" | "cylinder" | "cloud" | "hexagon" | "star" | "sticky" | "text" | "frame" — all require x, y, width, height (rectangle also supports cornerRadius)
-  * "diamond": decision logic / conditional gates
-  * "cylinder": databases, data stores, lakes
-  * "cloud": external services, third-party APIs, internet / cloud infrastructure
-  * "triangle": hierarchy tiers, delta alerts
-  * "hexagon" / "star": milestones, key status checkpoints, highlights
-  * "sticky": notes and collaborative ideas (pastel fills)
-- "arrow" | "line" — position comes from "start" and "end" endpoints. Supports optional "routing": "straight" | "curved" | "orthogonal", and "arrowStart", "arrowEnd" flags.
+SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, strokeDash, opacity, frameId, parentId, text):
+1. Infographics & Executive Dashboards:
+   - "dashboard": { "type": "dashboard", "title": "Apple Dashboard", "subtitle": "Financial Summary · FY26", "tabs": [{"label":"Exec Summary","active":true}], "actions": [{"label":"Filters"},{"label":"Download CSV"}], "highlightBanner": {"text":"...","variant":"coral"} }
+   - "chart": { "type": "chart", "title": "Revenue by Quarter", "chartType": "grouped_bar" | "donut" | "horizontal_bar" | "progress_gauge" | "area", "groupedData": [{"category":"Q1 FY26","series":[{"name":"Revenue","value":143.8,"formatted":"$143.8B","color":"#3b82f6"}]}], "donutData": [{"label":"iPhone","value":"$196.5B","percent":54,"color":"#3b82f6"}], "centerLabel": {"primary":"$364.4B","secondary":"FY26 9mo"}, "progressSegments": [{"label":"Operating cash flow","value":"$117.0B","percent":85,"color":"#3b82f6"}] }
+   - "feed_table": { "type": "feed_table", "title": "Recent Activity", "rows": [{"date":"Jul 30 '26","event":"Q4 guidance announced","amount":"$100.0B"}] }
+   - "metric": { "type": "metric", "label": "Annual Run Rate", "value": "$4.28M", "delta": "+28.4% YoY", "deltaDirection": "up", "sparkline": [20,28,35,52,68], "icon": "activity" }
+2. Swiss Editorial Mindmaps & S-Curve Timelines:
+   - "mindmap": { "type": "mindmap", "steps": [{"number":"01","title":"Graphic design","subtitle":"concept","isTerminal":true}, {"number":"02","title":"Branches","branches":[{"side":"left","text":"font"},{"side":"right","text":"color"}]}, {"number":"03","title":"Venn","vennNodes":[{"label":"function","callout":"Target"},{"label":"mood","callout":"Emotion"}]}, {"number":"05","title":"Pills","pills":["idea sketch","idea meeting"]}] }
+   - "scurve_timeline": { "type": "scurve_timeline", "title": "Project Steps", "subtitle": "INFOGRAPHICS TEMPLATE", "strokeColor": "#365f60", "steps": [{"stepNumber":"01","title":"Research","description":"...","hubColor":"#cf3c2e"}], "hasSilhouette": true }
+   - "isometric_block": { "type": "isometric_block", "title": "Business Growth", "callouts": [{"number":"01","title":"Setup","description":"...","side":"left"}], "hasSilhouette": true }
+3. System Architecture & Whiteboard:
+   - "card": { "type": "card", "title": "API Gateway", "icon": "k8s"|"postgres"|"kafka"|"stripe"|"openai"|"aws", "badge": {"text":"INGRESS","bg":"#ecfdf5","color":"#047857"}, "subtitle": "...", "metadata": [{"label":"p99","value":"1.4ms"}] }
+   - "table": { "type": "table", "tableName": "users", "columns": [{"name":"id","type":"uuid","isPk":true}, {"name":"email","type":"varchar"}] }
+   - "image": { "type": "image", "src": "data:image/..." | "https://...", "width": 200, "height": 150 }
+   - "rectangle" | "ellipse" | "diamond" | "cylinder" | "cloud" | "sticky" | "frame"
+   - "arrow" | "line": { "start": {"shapeId":"id1","anchor":"auto"}, "end": {"shapeId":"id2","anchor":"auto"}, "routing": "orthogonal" | "curved" | "straight", "label": "..." }
 
 RULES:
-- Every shape needs a unique "id" (short, kebab-case, e.g. "db1", "step-3").
-- Give every meaningful shape a semantic "name" (e.g. "database", "api-server") so it can be referred to by name, not just id. Names must be unique across the document.
-- Set "role" only when it carries real domain meaning (e.g. "database", "decision", "note") — omit otherwise.
-- Arrows/lines connecting two named or id'd shapes MUST bind via endpoints, never raw coordinates: {"shapeId": "db1", "anchor": "auto"}. Only use free {"x": n, "y": n} endpoints for an arrow with no shape on that side (e.g. pointing at empty space, or a freehand annotation).
-- Colors: prefer the palette shorthand "1"–"6" (1 red, 2 orange, 3 yellow, 4 green, 5 blue, 6 purple) over literal hex — cheaper and brand-kit friendly. Hex is still legal when a precise color is needed.
-- Stroke patterns: "strokeDash": "solid" | "dashed" | "dotted".
-- Z-order is array order — later entries render on top. Put frames first, then the shapes inside them, then arrows/annotations on top.
-- "sticky" shapes are for notes/ideas — set "text.content" to the note body.
-- Use a "frame" shape (with its own name, e.g. "Phase 1") to visually group related shapes; give grouped shapes that frame's id as their "frameId".
-- Text content goes in the "text" object ({ "content": "...", optional fontSize/align/bold/color }), not in a top-level "label" field (arrows are the one exception — they support a top-level "label" for the connector's caption).
-
-LAYOUT GUIDANCE:
-- Integer coordinates only. Canvas-absolute, y grows downward.
-- Spread shapes with 40-80px gaps — no overlaps unless one shape is a frame containing others.
-- Typical shape sizes: rectangle/diamond/cylinder/triangle ~160x80-200x120, frame sized to comfortably contain its children plus ~40px padding on each side.
-
-FEW-SHOT EXAMPLE:
-
-User: "Whiteboard: a 'Phase 1' frame with a Research box connected to a Design box, plus a sticky note reminding the team to talk to users"
-Expected:
-{"version":1,"shapes":[
-{"id":"frame1","type":"frame","name":"Phase 1","x":40,"y":40,"width":520,"height":280,"text":{"content":"Phase 1"}},
-{"id":"research","type":"rectangle","name":"research","role":"step","x":80,"y":120,"width":180,"height":90,"fill":"5","frameId":"frame1","text":{"content":"Research"}},
-{"id":"design","type":"rectangle","name":"design","role":"step","x":360,"y":120,"width":180,"height":90,"fill":"4","frameId":"frame1","text":{"content":"Design"}},
-{"id":"arrow1","type":"arrow","start":{"shapeId":"research","anchor":"auto"},"end":{"shapeId":"design","anchor":"auto"},"label":"handoff"},
-{"id":"note1","type":"sticky","name":"reminder","x":80,"y":360,"width":200,"height":140,"fill":"3","text":{"content":"Talk to real users before Phase 2"}}
-]}`,
+- Every shape needs a unique "id" (short, kebab-case, e.g. "rev_chart", "step1").
+- Connectors between shapes MUST bind via endpoints: {"shapeId": "node1", "anchor": "auto"}.
+- Use exact, rich domain values instead of generic placeholders.`,
 };
 
 // ─── Anti-generic directive ──────────────────────────────────────────────────

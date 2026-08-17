@@ -86,14 +86,93 @@ export type MetricShape = BaseShape & {
   cornerRadius?: number;
 };
 
+export type DashboardShape = BaseShape & {
+  type: "dashboard";
+  width: number;
+  height: number;
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  tabs?: { label: string; active?: boolean }[];
+  actions?: { label: string; icon?: string }[];
+  highlightBanner?: { text: string; variant?: "coral" | "emerald" | "blue" };
+  cornerRadius?: number;
+};
+
 export type ChartShape = BaseShape & {
   type: "chart";
   width: number;
   height: number;
   title: string;
-  chartType: "area" | "bar" | "donut" | "line";
-  data: { label: string; value: number; color?: string }[];
   subtitle?: string;
+  chartType: "area" | "bar" | "grouped_bar" | "donut" | "horizontal_bar" | "progress_gauge" | "line";
+  data?: { label: string; value: number; color?: string; isEstimate?: boolean }[];
+  groupedData?: { category: string; series: { name: string; value: number; color?: string; formatted?: string; isEstimate?: boolean }[] }[];
+  donutData?: { label: string; value: string; percent: number; color: string }[];
+  centerLabel?: { primary: string; secondary?: string };
+  progressSegments?: { label: string; value: string; percent: number; color: string }[];
+  callouts?: { category: string; text: string; color?: string }[];
+  cornerRadius?: number;
+};
+
+export type FeedTableShape = BaseShape & {
+  type: "feed_table";
+  width: number;
+  height: number;
+  title: string;
+  subtitle?: string;
+  rows: { date: string; event: string; amount?: string; amountColor?: string }[];
+  cornerRadius?: number;
+};
+
+export type MindmapShape = BaseShape & {
+  type: "mindmap" | "fishbone";
+  width: number;
+  height: number;
+  title?: string;
+  steps: {
+    number: string;
+    title: string;
+    subtitle?: string;
+    isTerminal?: boolean;
+    branches?: { side: "left" | "right"; text: string }[];
+    vennNodes?: { label: string; callout?: string }[];
+    pills?: string[];
+  }[];
+  cornerRadius?: number;
+};
+
+export type SCurveTimelineShape = BaseShape & {
+  type: "scurve_timeline";
+  width: number;
+  height: number;
+  title: string;
+  subtitle?: string;
+  strokeColor?: string;
+  steps: {
+    stepNumber: string;
+    title: string;
+    description: string;
+    hubColor?: string;
+  }[];
+  hasSilhouette?: boolean;
+  cornerRadius?: number;
+};
+
+export type IsometricBlockShape = BaseShape & {
+  type: "isometric_block";
+  width: number;
+  height: number;
+  title: string;
+  subtitle?: string;
+  baseColor?: string;
+  callouts: {
+    number: string;
+    title: string;
+    description: string;
+    side?: "left" | "right";
+  }[];
+  hasSilhouette?: boolean;
   cornerRadius?: number;
 };
 
@@ -142,7 +221,12 @@ export type CanvasShape =
   | TableShape
   | ImageShape
   | MetricShape
+  | DashboardShape
   | ChartShape
+  | FeedTableShape
+  | MindmapShape
+  | SCurveTimelineShape
+  | IsometricBlockShape
   | MockupShape
   | PathShape
   | ArrowShape;
