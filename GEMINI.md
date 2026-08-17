@@ -1,4 +1,10 @@
 # Project: Gemini CLI Workspace
+
+Project facts, stack, architecture, and current work status live in `AGENTS.md`
+(tool-agnostic) and `docs/planning/freeform-canvas-engine-plan.md` (canvas work
+in progress — read its STATUS section before touching that area). This file is
+process/workflow guidance only.
+
 ## Operating Principles (do this every time)
 - Do NOT ask for code first. Start by creating a plan.
 - Use collaboration over YOLO:

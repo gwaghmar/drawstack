@@ -85,6 +85,10 @@ pnpm mcp:dev      # run the MCP server
 
 ## Project Status
 
-drawstack has shipped the core editor, AI generation, save/share/embed workflows, brand kit support, templates, real OG previews, streaming Mermaid preview, and cloud architecture diagrams.
+drawstack has shipped the core editor, AI generation, save/share/embed workflows, brand kit support, templates, real OG previews, streaming Mermaid preview, and cloud architecture diagrams. 22 diagram types total.
 
-Current polish focus: source editor ergonomics, more layout helpers, template recommendations, and public profile pages.
+**In progress**: an agent-native freeform canvas (AI + human co-editing the same
+JSON scene graph) to replace tldraw, whose license blocks commercial use. See
+`docs/planning/freeform-canvas-engine-plan.md` (STATUS section) for exact
+current status and next steps — also the entry point for any agent continuing
+this work.
