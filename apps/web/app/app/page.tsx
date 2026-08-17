@@ -78,7 +78,7 @@ export default async function DashboardPage() {
                 <div className="flex flex-wrap gap-2">
                   <select
                     name="type"
-                    defaultValue="mermaid"
+                    defaultValue="freeform"
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700"
                     aria-label="Diagram type"
                   >
@@ -183,7 +183,7 @@ export default async function DashboardPage() {
           <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {featuredTemplates.map((template) => {
               if (!template) return null;
-              const diagramType = (template.diagramType ?? "mermaid") as DiagramType;
+              const diagramType = (template.diagramType ?? "freeform") as DiagramType;
               const meta = getDiagramTypeMeta(diagramType);
               return (
                 <Link
@@ -234,7 +234,7 @@ export default async function DashboardPage() {
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => {
-                const diagramType = (project.diagramType as DiagramType) ?? "mermaid";
+                const diagramType = (project.diagramType as DiagramType) ?? "freeform";
                 const meta = getDiagramTypeMeta(diagramType);
                 return (
                   <div

@@ -58,7 +58,7 @@ export const projects = pgTable("project", {
   title: text("title").notNull(),
   source: text("source").notNull(),
   themeId: text("theme_id").notNull().default("stage_pipeline"),
-  diagramType: text("diagram_type").notNull().default("mermaid"),
+  diagramType: text("diagram_type").notNull().default("freeform"),
   createdAt: timestamp("created_at", { withTimezone: true, mode: "date" })
     .notNull()
     .defaultNow(),

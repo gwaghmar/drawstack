@@ -7,15 +7,7 @@ import {
   ListToolsRequestSchema,
   ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import {
-  MermaidSourceSchema,
-  THEMES,
-  TEMPLATES,
-  SOCIAL_PRESETS,
-  buildMermaidConfig,
-  getTheme,
-} from "@flowchart/core";
-import { z } from "zod";
+import { TEMPLATES, SOCIAL_PRESETS, getTemplateSource } from "@flowchart/core";
 
 const server = new Server(
   {
@@ -25,33 +17,10 @@ const server = new Server(
   { capabilities: { tools: {}, resources: {} } }
 );
 
-let lastSource = `flowchart LR\n  A[Start] --> B[End]`;
+let lastSource = JSON.stringify({ version: 1, shapes: [] });
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
-    {
-      name: "diagram_set_source",
-      description: "Set validated diagram text source",
-      inputSchema: {
-        type: "object",
-        properties: { source: { type: "string" } },
-        required: ["source"],
-      },
-    },
-    {
-      name: "diagram_apply_theme",
-      description: "Return renderer theme config for a theme id",
-      inputSchema: {
-        type: "object",
-        properties: { themeId: { type: "string" } },
-        required: ["themeId"],
-      },
-    },
-    {
-      name: "diagram_list_themes",
-      description: "List available theme ids and names",
-      inputSchema: { type: "object", properties: {} },
-    },
     {
       name: "templates_list",
       description: "List starter templates with diagram text bodies",
@@ -82,37 +51,6 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
   try {
-    if (name === "diagram_set_source") {
-      const source = MermaidSourceSchema.parse(
-        (args as { source?: string })?.source ?? ""
-      );
-      lastSource = source;
-      return { content: [{ type: "text", text: "Source updated (" + source.length + " chars)" }] };
-    }
-    if (name === "diagram_apply_theme") {
-      const themeId = z.string().parse((args as { themeId?: string })?.themeId);
-      const t = getTheme(themeId);
-      if (!t) {
-        return {
-          content: [{ type: "text", text: "Unknown theme: " + themeId }],
-          isError: true,
-        };
-      }
-      const cfg = buildMermaidConfig(t);
-      return {
-        content: [{ type: "text", text: JSON.stringify(cfg, null, 2) }],
-      };
-    }
-    if (name === "diagram_list_themes") {
-      return {
-        content: [
-          {
-            type: "text",
-            text: THEMES.map((t) => `${t.id}: ${t.name}`).join("\n"),
-          },
-        ],
-      };
-    }
     if (name === "templates_list") {
       return {
         content: [
@@ -123,7 +61,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 id: t.id,
                 title: t.title,
                 promptHint: t.promptHint,
-                mermaid: t.mermaid,
+                source: getTemplateSource(t),
               })),
               null,
               2

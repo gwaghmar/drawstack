@@ -7,7 +7,7 @@ export type FlowchartTemplate = {
   description: string;
   /** Short instruction for LLM / user */
   promptHint: string;
-  /** Diagram type for this template — defaults to "mermaid" */
+  /** Diagram type for this template — defaults to "freeform" */
   diagramType?: DiagramType;
   /** Source content for this template */
   source?: string;

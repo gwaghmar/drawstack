@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import mermaid from "mermaid";
-import { buildMermaidConfig, THEMES } from "@flowchart/core";
+import { freeformToSvg } from "@/lib/diagrams/freeform-svg";
+import type { CanvasDocument } from "@/lib/diagrams/freeform-canvas";
 
 const PLACEHOLDERS = [
   "Map the OAuth login flow",
@@ -11,18 +11,17 @@ const PLACEHOLDERS = [
   "Compare React vs Vue",
 ];
 
-const INITIAL_SOURCE = `sequenceDiagram
-  participant Browser as Browser
-  participant App as App Server
-  participant Auth as Auth Server
-  Browser->>App: GET /login
-  App-->>Browser: Redirect to Auth
-  Browser->>Auth: Username + password
-  Auth-->>Browser: Auth code
-  Browser->>App: POST auth code
-  App->>Auth: Exchange for tokens
-  Auth-->>App: Access + refresh token
-  App-->>Browser: Session cookie`;
+const INITIAL_DOC: CanvasDocument = {
+  version: 1,
+  shapes: [
+    { id: "browser", type: "rectangle", x: 20, y: 40, width: 150, height: 64, fill: "5", text: { content: "Browser" } },
+    { id: "app", type: "rectangle", x: 250, y: 40, width: 150, height: 64, fill: "4", text: { content: "App Server" } },
+    { id: "auth", type: "rectangle", x: 480, y: 40, width: 150, height: 64, fill: "3", text: { content: "Auth Server" } },
+    { id: "a1", type: "arrow", x: 0, y: 0, start: { shapeId: "browser", anchor: "right" }, end: { shapeId: "app", anchor: "left" }, label: "GET /login" },
+    { id: "a2", type: "arrow", x: 0, y: 0, start: { shapeId: "app", anchor: "right" }, end: { shapeId: "auth", anchor: "left" }, label: "redirect" },
+    { id: "a3", type: "arrow", x: 0, y: 0, start: { shapeId: "auth", anchor: "top" }, end: { shapeId: "app", anchor: "top" }, label: "auth code", routing: "curved" },
+  ],
+};
 
 export function LandingDemoSection() {
   const [prompt, setPrompt] = useState("");
@@ -31,13 +30,7 @@ export function LandingDemoSection() {
   const [limited, setLimited] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [svgDataUrl, setSvgDataUrl] = useState<string | null>(null);
-  const mermaidInitialized = useRef(false);
-  const idCounter = useRef(0);
-
-  function nextId() {
-    idCounter.current += 1;
-    return `ldemo-${idCounter.current}`;
-  }
+  const initialRendered = useRef(false);
 
   function svgToDataUrl(svg: string): string {
     return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -51,13 +44,13 @@ export function LandingDemoSection() {
   }, []);
 
   useEffect(() => {
-    if (mermaidInitialized.current) return;
-    mermaidInitialized.current = true;
-    const defaultTheme = THEMES[0];
-    mermaid.initialize({ ...buildMermaidConfig(defaultTheme), startOnLoad: false, suppressErrorRendering: true });
-    mermaid.render(nextId(), INITIAL_SOURCE)
-      .then(({ svg }) => setSvgDataUrl(svgToDataUrl(svg)))
-      .catch(() => {/* ignore initial render failure */});
+    if (initialRendered.current) return;
+    initialRendered.current = true;
+    try {
+      setSvgDataUrl(svgToDataUrl(freeformToSvg(INITIAL_DOC)));
+    } catch {
+      /* ignore initial render failure */
+    }
   }, []);
 
   async function handleGenerate() {
@@ -85,14 +78,9 @@ export function LandingDemoSection() {
 
       const data = await res.json() as { diagramType: string; source: string };
 
-      if (data.diagramType !== "mermaid") {
-        setErrorMsg("Could not render — open in editor to see full output.");
-        return;
-      }
-
       try {
-        const { svg } = await mermaid.render(nextId(), data.source);
-        setSvgDataUrl(svgToDataUrl(svg));
+        const doc = JSON.parse(data.source) as CanvasDocument;
+        setSvgDataUrl(svgToDataUrl(freeformToSvg(doc)));
         setErrorMsg(null);
       } catch {
         setErrorMsg("Could not render — open in editor to see full output.");
