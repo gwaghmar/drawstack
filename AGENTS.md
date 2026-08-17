@@ -23,7 +23,7 @@ Live: https://drawxyz.vercel.app · Repo: https://github.com/gwaghmar/drawstack
 - Stripe billing (checkout, portal, webhook)
 - pnpm monorepo: `apps/web` (Next app) + `packages/core` (shared types/prompts) +
   `packages/cli` + `packages/mcp-server`
-- Mermaid, Excalidraw, ReactFlow (@xyflow), ECharts, Nivo, tldraw, bpmn-js, Konva —
+- Mermaid, Excalidraw, ReactFlow (@xyflow), ECharts, Nivo, bpmn-js, Konva (Freeform canvas) —
   22 diagram types total, see `packages/core/src/diagram-types.ts`
 
 ## Commands
@@ -64,25 +64,18 @@ prompt per diagram type. Output is validated/repaired by
   projects. The intent-planning LLM call must stay ≤2s — no added sequential calls.
 - Preview canvas must always match the export exactly (WYSIWYG is the core value).
 
-## In progress: agent-native freeform canvas (replacing tldraw)
+## Shipped: agent-native freeform canvas (replaced tldraw)
 
-tldraw's license requires a paid commercial agreement for production/commercial
-use, which this product needs before it can sell subscriptions. Under active build:
-a custom JSON-scene-graph canvas (Konva-rendered) that both humans (drag-to-edit)
-and AI agents (id/name-addressed patch operations) edit as the same document —
+`tldraw` was removed to eliminate commercial licensing restrictions. In its place:
+our custom JSON-scene-graph canvas (Konva-rendered) that both humans (drag-to-edit)
+and AI agents (id/name-addressed patch operations via `apply_ops`) edit as the same document —
 no translation layer between what the AI writes and what the human sees.
 
-**Full plan, current status, and exact next steps: `docs/planning/freeform-canvas-engine-plan.md`
-— read the "STATUS" section at the top of the build order before touching this
-area.** It records what's done, what's tested, what's still open, and several
-hard-won implementation rules (Konva gesture state must live in refs, not React
-state; Transformer scale must be baked into width/height, never stored, etc.) —
-don't relearn these by re-breaking them.
-
-As of the last update: the schema, ops engine, model-facing AI serialization, full
-renderer, and AI generation/agent-tool wiring are built and committed; the type is
-reachable in the app. Read the STATUS section for exactly what's pushed vs. local,
-and what verification remains before tldraw itself gets removed.
+**Full plan, history, and deferred polish: `docs/planning/freeform-canvas-engine-plan.md`
+— read the "STATUS" section at the top of the build order.**
+Milestones A–K are complete, tested, and verified. Hard-won implementation rules
+(Konva gesture state must live in refs, not React state; Transformer scale must be
+baked into width/height, never stored, etc.) remain documented in the plan.
 
 ## Things not to do
 

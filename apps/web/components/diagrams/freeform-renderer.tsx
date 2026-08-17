@@ -1,8 +1,10 @@
 "use client";
 
 import { Fragment, useEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer } from "react-konva";
+import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group } from "react-konva";
 import Konva from "konva";
+import rough from "roughjs";
+import { getStroke } from "perfect-freehand";
 import {
   parseFreeformSource,
   serializeFreeformDocument,
@@ -13,6 +15,17 @@ import {
   type CanvasDocument,
   type CanvasShape,
   type ArrowShape,
+  type PathShape,
+  type RectShape,
+  type DiamondShape,
+  type TriangleShape,
+  type CylinderShape,
+  type CloudShape,
+  type HexagonShape,
+  type StarShape,
+  type StickyShape,
+  type TextShape,
+  type FrameShape,
 } from "@/lib/diagrams/freeform-canvas";
 
 type Props = {
@@ -28,9 +41,20 @@ type MarqueeState = {
   y1: number;
 };
 
-type ToolMode = "select" | "arrow" | "place";
+type ToolMode = "select" | "draw" | "arrow" | "place";
 
-type ShapeKind = "rectangle" | "ellipse" | "diamond" | "sticky" | "text" | "frame";
+type ShapeKind =
+  | "rectangle"
+  | "ellipse"
+  | "diamond"
+  | "triangle"
+  | "cylinder"
+  | "cloud"
+  | "hexagon"
+  | "star"
+  | "sticky"
+  | "text"
+  | "frame";
 
 type ArrowDraft = {
   startPoint: { x: number; y: number };
@@ -39,12 +63,18 @@ type ArrowDraft = {
   hoverShapeId: string | null;
 };
 
+type DrawDraft = {
+  points: [number, number][];
+  stroke: string;
+  strokeWidth: number;
+};
+
 type SnapCandidates = { verticals: number[]; horizontals: number[] };
 
 type Viewport = { scale: number; x: number; y: number };
 
-const STAGE_WIDTH = 800;
-const STAGE_HEIGHT = 500;
+const STAGE_WIDTH = 960;
+const STAGE_HEIGHT = 600;
 const SNAP_THRESHOLD = 6;
 const MIN_SCALE = 0.25;
 const MAX_SCALE = 4;
@@ -77,7 +107,7 @@ function defaultFill(shape: CanvasShape): string {
 function defaultStroke(shape: CanvasShape): string {
   if (shape.stroke) return resolveColor(shape.stroke) ?? shape.stroke;
   if (shape.type === "frame") return "#94a3b8";
-  return "#000000";
+  return "#1e293b";
 }
 
 function defaultSizeFor(kind: ShapeKind): { width: number; height: number } {
@@ -85,11 +115,23 @@ function defaultSizeFor(kind: ShapeKind): { width: number; height: number } {
     case "sticky":
       return { width: 180, height: 180 };
     case "text":
-      return { width: 120, height: 30 };
+      return { width: 140, height: 36 };
     case "frame":
-      return { width: 400, height: 300 };
+      return { width: 440, height: 320 };
+    case "triangle":
+      return { width: 160, height: 120 };
+    case "cylinder":
+      return { width: 160, height: 120 };
+    case "cloud":
+      return { width: 180, height: 110 };
+    case "hexagon":
+      return { width: 160, height: 110 };
+    case "star":
+      return { width: 130, height: 130 };
+    case "diamond":
+      return { width: 160, height: 100 };
     default:
-      return { width: 160, height: 80 };
+      return { width: 160, height: 90 };
   }
 }
 
@@ -112,65 +154,93 @@ function frameContaining(doc: CanvasDocument, x: number, y: number): string | nu
   return null;
 }
 
+function getSvgPathFromStroke(stroke: number[][]): string {
+  if (!stroke.length) return "";
+  const d = stroke.reduce(
+    (acc, [x0, y0], i, arr) => {
+      const [x1, y1] = arr[(i + 1) % arr.length];
+      acc.push(x0, y0, (x0 + x1) / 2, (y0 + y1) / 2);
+      return acc;
+    },
+    ["M", ...stroke[0], "Q"]
+  );
+  d.push("Z");
+  return d.join(" ");
+}
+
+function computeOrthogonalPoints(
+  start: { x: number; y: number },
+  end: { x: number; y: number }
+): number[] {
+  const midX = Math.round((start.x + end.x) / 2);
+  return [start.x, start.y, midX, start.y, midX, end.y, end.x, end.y];
+}
+
 const FIXTURE_DOCUMENT: CanvasDocument = {
   version: 1,
+  renderMode: "clean",
   shapes: [
     {
       id: "s1",
       type: "rectangle",
-      x: 50,
-      y: 50,
+      x: 60,
+      y: 80,
       width: 160,
       height: 90,
-      fill: "#e0e7ff",
-      stroke: "#4f46e5",
+      fill: "5",
+      stroke: "#2563eb",
       strokeWidth: 2,
+      cornerRadius: 8,
+      text: { content: "Client Request", fontSize: 14, color: "#1e293b", bold: true, align: "center" },
     },
     {
       id: "s2",
-      type: "ellipse",
-      x: 280,
-      y: 60,
-      width: 120,
-      height: 120,
-      fill: "#fef3c7",
+      type: "diamond",
+      x: 300,
+      y: 75,
+      width: 150,
+      height: 100,
+      fill: "3",
       stroke: "#d97706",
       strokeWidth: 2,
+      text: { content: "Authorized?", fontSize: 13, color: "#78350f", bold: true, align: "center" },
     },
     {
       id: "s3",
-      type: "text",
-      x: 60,
+      type: "cylinder",
+      x: 540,
       y: 70,
-      width: 140,
-      height: 50,
-      text: {
-        content: "Freeform canvas — Milestone 1",
-        fontSize: 14,
-        color: "#000000",
-        bold: true,
-        align: "center",
-      },
+      width: 150,
+      height: 110,
+      fill: "4",
+      stroke: "#16a34a",
+      strokeWidth: 2,
+      text: { content: "Database", fontSize: 14, color: "#14532d", bold: true, align: "center" },
     },
     {
-      id: "arrow1",
+      id: "a1",
       type: "arrow",
       x: 0,
       y: 0,
       start: { shapeId: "s1", anchor: "right" },
       end: { shapeId: "s2", anchor: "left" },
-      stroke: "#6b7280",
+      stroke: "#64748b",
       strokeWidth: 2,
+      label: "HTTP POST",
+    },
+    {
+      id: "a2",
+      type: "arrow",
+      x: 0,
+      y: 0,
+      start: { shapeId: "s2", anchor: "right" },
+      end: { shapeId: "s3", anchor: "left" },
+      stroke: "#64748b",
+      strokeWidth: 2,
+      label: "Yes",
     },
   ],
 };
-
-function aabbOverlap(
-  a: { x: number; y: number; width: number; height: number },
-  b: { x: number; y: number; width: number; height: number }
-): boolean {
-  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
-}
 
 function renderShape(
   shape: CanvasShape,
@@ -186,25 +256,70 @@ function renderShape(
   mode: ToolMode = "select"
 ): React.ReactNode {
   const isEditingThis = editingShapeId === shape.id;
-  const draggable = !readOnly && mode !== "arrow" && mode !== "place";
+  const draggable = !readOnly && mode === "select";
+  const isSketchy = doc.renderMode === "sketchy";
+
+  const strokeDash =
+    shape.strokeDash === "dashed" ? [8, 6] : shape.strokeDash === "dotted" ? [3, 4] : undefined;
+
   const commonProps = {
     x: shape.x,
     y: shape.y,
     rotation: shape.rotation ?? 0,
     fill: defaultFill(shape),
     stroke: defaultStroke(shape),
-    strokeWidth: shape.strokeWidth ?? 1,
+    strokeWidth: shape.strokeWidth ?? 2,
     opacity: shape.opacity ?? 1,
+    dash: strokeDash,
   };
 
+  // ─── Path (Freehand) ────────────────────────────────────────────────────────
+  if (shape.type === "path") {
+    const pathShape = shape as PathShape;
+    const strokePoints = getStroke(pathShape.points, {
+      size: (pathShape.strokeWidth ?? 2) * 3,
+      thinning: 0.5,
+      smoothing: 0.5,
+      streamline: 0.5,
+    });
+    const svgPath = getSvgPathFromStroke(strokePoints);
+    const strokeColor = defaultStroke(shape);
+
+    return (
+      <Path
+        key={shape.id}
+        id={shape.id}
+        data={svgPath}
+        fill={strokeColor}
+        opacity={commonProps.opacity}
+        draggable={draggable}
+        listening={!readOnly}
+        onClick={(e) => onShapeClick?.(e, shape.id)}
+        onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+        onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+        onDragEnd={() => onShapeDragEnd?.(shape.id)}
+      />
+    );
+  }
+
+  // ─── Arrow & Line ──────────────────────────────────────────────────────────
   if (shape.type === "arrow" || shape.type === "line") {
     const arrowShape = shape as ArrowShape;
     const { start: startPoint, end: endPoint } = resolveArrowRenderEndpoints(doc, arrowShape);
     const stroke = isSelected ? "#4f46e5" : commonProps.stroke;
-    const points = [startPoint.x, startPoint.y, endPoint.x, endPoint.y];
 
-    if (shape.type === "arrow") {
-      return (
+    let points: number[];
+    if (arrowShape.routing === "orthogonal") {
+      points = computeOrthogonalPoints(startPoint, endPoint);
+    } else {
+      points = [startPoint.x, startPoint.y, endPoint.x, endPoint.y];
+    }
+
+    const midX = Math.round((startPoint.x + endPoint.x) / 2);
+    const midY = Math.round((startPoint.y + endPoint.y) / 2);
+
+    const arrowNode =
+      shape.type === "arrow" ? (
         <Arrow
           key={shape.id}
           id={shape.id}
@@ -212,30 +327,68 @@ function renderShape(
           stroke={stroke}
           fill={stroke}
           strokeWidth={commonProps.strokeWidth}
+          dash={strokeDash}
           opacity={commonProps.opacity}
           pointerLength={10}
           pointerWidth={10}
+          pointerAtBeginning={arrowShape.arrowStart ?? false}
+          pointerAtEnding={arrowShape.arrowEnd !== false}
+          listening={!readOnly}
+          onClick={(e) => onShapeClick?.(e, shape.id)}
+        />
+      ) : (
+        <Line
+          key={shape.id}
+          id={shape.id}
+          points={points}
+          stroke={stroke}
+          strokeWidth={commonProps.strokeWidth}
+          dash={strokeDash}
+          opacity={commonProps.opacity}
           listening={!readOnly}
           onClick={(e) => onShapeClick?.(e, shape.id)}
         />
       );
-    }
+
+    const labelNode = arrowShape.label ? (
+      <Group key={`${shape.id}-label-group`} x={midX} y={midY - 14} listening={false}>
+        <Rect
+          x={-Math.max(20, arrowShape.label.length * 4)}
+          y={-2}
+          width={Math.max(40, arrowShape.label.length * 8)}
+          height={20}
+          fill="#ffffff"
+          cornerRadius={4}
+          stroke="#cbd5e1"
+          strokeWidth={1}
+          opacity={0.9}
+        />
+        <Text
+          x={-Math.max(20, arrowShape.label.length * 4)}
+          y={2}
+          width={Math.max(40, arrowShape.label.length * 8)}
+          text={arrowShape.label}
+          fontSize={11}
+          fontFamily="Inter, Arial, sans-serif"
+          fill="#475569"
+          align="center"
+        />
+      </Group>
+    ) : null;
 
     return (
-      <Line
-        key={shape.id}
-        id={shape.id}
-        points={points}
-        stroke={stroke}
-        strokeWidth={commonProps.strokeWidth}
-        opacity={commonProps.opacity}
-        listening={!readOnly}
-        onClick={(e) => onShapeClick?.(e, shape.id)}
-      />
+      <Fragment key={shape.id}>
+        {arrowNode}
+        {labelNode}
+      </Fragment>
     );
   }
 
+  // ─── Geometric Shapes ──────────────────────────────────────────────────────
   const shapeNode = (() => {
+    const w = (shape as RectShape).width;
+    const h = (shape as RectShape).height;
+
     switch (shape.type) {
       case "rectangle":
       case "sticky":
@@ -244,9 +397,15 @@ function renderShape(
             key={shape.id}
             id={shape.id}
             {...commonProps}
-            width={shape.width}
-            height={shape.height}
-            cornerRadius={shape.type === "sticky" ? 4 : "cornerRadius" in shape ? shape.cornerRadius : undefined}
+            width={w}
+            height={h}
+            cornerRadius={
+              shape.type === "sticky" ? 4 : "cornerRadius" in shape ? shape.cornerRadius ?? 4 : 4
+            }
+            shadowColor={shape.type === "sticky" ? "#000000" : undefined}
+            shadowBlur={shape.type === "sticky" ? 8 : 0}
+            shadowOpacity={shape.type === "sticky" ? 0.12 : 0}
+            shadowOffset={shape.type === "sticky" ? { x: 2, y: 3 } : undefined}
             draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
@@ -256,6 +415,153 @@ function renderShape(
           />
         );
 
+      case "diamond":
+        return (
+          <Line
+            key={shape.id}
+            id={shape.id}
+            {...commonProps}
+            points={[w / 2, 0, w, h / 2, w / 2, h, 0, h / 2]}
+            closed={true}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          />
+        );
+
+      case "triangle":
+        return (
+          <Line
+            key={shape.id}
+            id={shape.id}
+            {...commonProps}
+            points={[w / 2, 0, w, h, 0, h]}
+            closed={true}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          />
+        );
+
+      case "cylinder":
+        return (
+          <Group
+            key={shape.id}
+            id={shape.id}
+            x={shape.x}
+            y={shape.y}
+            rotation={commonProps.rotation}
+            opacity={commonProps.opacity}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          >
+            {/* Body */}
+            <Rect
+              x={0}
+              y={h * 0.15}
+              width={w}
+              height={h * 0.7}
+              fill={commonProps.fill}
+              stroke="transparent"
+            />
+            <Line points={[0, h * 0.15, 0, h * 0.85]} stroke={commonProps.stroke} strokeWidth={commonProps.strokeWidth} />
+            <Line points={[w, h * 0.15, w, h * 0.85]} stroke={commonProps.stroke} strokeWidth={commonProps.strokeWidth} />
+            {/* Bottom Cap */}
+            <Ellipse
+              x={w / 2}
+              y={h * 0.85}
+              radiusX={w / 2}
+              radiusY={h * 0.15}
+              fill={commonProps.fill}
+              stroke={commonProps.stroke}
+              strokeWidth={commonProps.strokeWidth}
+            />
+            {/* Top Cap */}
+            <Ellipse
+              x={w / 2}
+              y={h * 0.15}
+              radiusX={w / 2}
+              radiusY={h * 0.15}
+              fill={commonProps.fill}
+              stroke={commonProps.stroke}
+              strokeWidth={commonProps.strokeWidth}
+            />
+          </Group>
+        );
+
+      case "cloud": {
+        const pathData = `M ${w * 0.25} ${h * 0.75} C ${w * 0.05} ${h * 0.75} ${w * 0.05} ${h * 0.35} ${w * 0.3} ${h * 0.35} C ${w * 0.35} ${h * 0.1} ${w * 0.65} ${h * 0.1} ${w * 0.7} ${h * 0.35} C ${w * 0.95} ${h * 0.35} ${w * 0.95} ${h * 0.75} ${w * 0.75} ${h * 0.75} Z`;
+        return (
+          <Path
+            key={shape.id}
+            id={shape.id}
+            {...commonProps}
+            data={pathData}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          />
+        );
+      }
+
+      case "hexagon":
+        return (
+          <Line
+            key={shape.id}
+            id={shape.id}
+            {...commonProps}
+            points={[w * 0.25, 0, w * 0.75, 0, w, h * 0.5, w * 0.75, h, w * 0.25, h, 0, h * 0.5]}
+            closed={true}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          />
+        );
+
+      case "star": {
+        const cx = w / 2;
+        const cy = h / 2;
+        const outerR = Math.min(w, h) / 2;
+        const innerR = outerR * 0.45;
+        const starPoints: number[] = [];
+        for (let i = 0; i < 10; i++) {
+          const r = i % 2 === 0 ? outerR : innerR;
+          const angle = (i * Math.PI) / 5 - Math.PI / 2;
+          starPoints.push(cx + r * Math.cos(angle), cy + r * Math.sin(angle));
+        }
+        return (
+          <Line
+            key={shape.id}
+            id={shape.id}
+            {...commonProps}
+            points={starPoints}
+            closed={true}
+            draggable={draggable}
+            onClick={(e) => onShapeClick?.(e, shape.id)}
+            onDblClick={() => onShapeDblClick?.(shape.id)}
+            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
+            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
+            onDragEnd={() => onShapeDragEnd?.(shape.id)}
+          />
+        );
+      }
+
       case "frame":
         return (
           <Fragment key={shape.id}>
@@ -263,8 +569,10 @@ function renderShape(
               key={shape.id}
               id={shape.id}
               {...commonProps}
-              width={shape.width}
-              height={shape.height}
+              width={w}
+              height={h}
+              cornerRadius={6}
+              dash={[6, 4]}
               draggable={draggable}
               onClick={(e) => onShapeClick?.(e, shape.id)}
               onDblClick={() => onShapeDblClick?.(shape.id)}
@@ -278,6 +586,7 @@ function renderShape(
               y={shape.y - 18}
               text={shape.name ?? ""}
               fontSize={12}
+              fontFamily="Inter, Arial, sans-serif"
               fill="#64748b"
               listening={false}
             />
@@ -289,41 +598,25 @@ function renderShape(
           <Ellipse
             key={shape.id}
             id={shape.id}
-            x={shape.x + shape.width / 2}
-            y={shape.y + shape.height / 2}
-            radiusX={shape.width / 2}
-            radiusY={shape.height / 2}
+            x={shape.x + w / 2}
+            y={shape.y + h / 2}
+            radiusX={w / 2}
+            radiusY={h / 2}
             rotation={commonProps.rotation}
             fill={commonProps.fill}
             stroke={commonProps.stroke}
             strokeWidth={commonProps.strokeWidth}
+            dash={strokeDash}
             opacity={commonProps.opacity}
             draggable={draggable}
             onClick={(e) => onShapeClick?.(e, shape.id)}
             onDblClick={() => onShapeDblClick?.(shape.id)}
             onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
             onDragMove={(e) => {
-              const cx = e.target.x();
-              const cy = e.target.y();
-              onShapeDragMove?.(e, shape.id, cx - shape.width / 2, cy - shape.height / 2);
+              const centerNodeX = e.target.x();
+              const centerNodeY = e.target.y();
+              onShapeDragMove?.(e, shape.id, centerNodeX - w / 2, centerNodeY - h / 2);
             }}
-            onDragEnd={() => onShapeDragEnd?.(shape.id)}
-          />
-        );
-
-      case "diamond":
-        return (
-          <Rect
-            key={shape.id}
-            id={shape.id}
-            {...commonProps}
-            width={shape.width}
-            height={shape.height}
-            draggable={draggable}
-            onClick={(e) => onShapeClick?.(e, shape.id)}
-            onDblClick={() => onShapeDblClick?.(shape.id)}
-            onDragStart={() => onShapeDragStart?.(shape.id, shape.x, shape.y)}
-            onDragMove={(e) => onShapeDragMove?.(e, shape.id, e.target.x(), e.target.y())}
             onDragEnd={() => onShapeDragEnd?.(shape.id)}
           />
         );
@@ -336,12 +629,13 @@ function renderShape(
             id={shape.id}
             x={shape.x}
             y={shape.y}
-            width={shape.width}
-            height={shape.height}
+            width={w}
+            height={h}
             text={shape.text?.content ?? ""}
-            fontSize={shape.text?.fontSize ?? 12}
-            fontFamily={shape.text?.fontFamily ?? "Arial"}
-            fill={shape.text?.color ?? "#000000"}
+            fontSize={shape.text?.fontSize ?? 14}
+            fontFamily={shape.text?.fontFamily ?? "Inter, Arial, sans-serif"}
+            fontStyle={shape.text?.bold ? "bold" : "normal"}
+            fill={shape.text?.color ?? "#1e293b"}
             align={shape.text?.align ?? "left"}
             verticalAlign="top"
             rotation={commonProps.rotation}
@@ -364,19 +658,20 @@ function renderShape(
 
   const nodes: React.ReactNode[] = [shapeNode];
 
+  // Overlay text label inside shape
   if (!isEditingThis && shape.type !== "text" && shape.text?.content) {
     const labelBounds = getShapeBounds(doc, shape);
     nodes.push(
       <Text
         key={`${shape.id}-label`}
-        x={labelBounds.x}
-        y={labelBounds.y}
-        width={labelBounds.width}
-        height={labelBounds.height}
+        x={labelBounds.x + 8}
+        y={labelBounds.y + 8}
+        width={Math.max(20, labelBounds.width - 16)}
+        height={Math.max(20, labelBounds.height - 16)}
         text={shape.text.content}
-        fontSize={shape.text.fontSize ?? 12}
-        fontFamily={shape.text.fontFamily ?? "Arial"}
-        fill={shape.text.color ?? "#000000"}
+        fontSize={shape.text.fontSize ?? 13}
+        fontFamily={shape.text.fontFamily ?? "Inter, Arial, sans-serif"}
+        fill={shape.text.color ?? (shape.type === "sticky" ? "#713f12" : "#1e293b")}
         align={shape.text.align ?? "center"}
         verticalAlign="middle"
         fontStyle={shape.text.bold ? "bold" : "normal"}
@@ -386,6 +681,7 @@ function renderShape(
     );
   }
 
+  // Selected outline
   if (isSelected) {
     const attachedToTransformer = !readOnly && !shape.locked;
     if (!attachedToTransformer) {
@@ -437,10 +733,14 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [mode, setMode] = useState<ToolMode>("select");
   const [arrowDraft, setArrowDraft] = useState<ArrowDraft | null>(null);
+  const [drawDraft, setDrawDraft] = useState<DrawDraft | null>(null);
   const [snapGuides, setSnapGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null });
   const [placeKind, setPlaceKind] = useState<ShapeKind | null>(null);
   const [viewport, setViewport] = useState<Viewport>({ scale: 1, x: 0, y: 0 });
   const [isSpaceHeld, setIsSpaceHeld] = useState(false);
+
+  const [activeColor, setActiveColor] = useState<string>("5");
+  const [activeStrokeWidth, setActiveStrokeWidth] = useState<number>(2);
 
   const isApplyingRef = useRef(false);
   const lastSourceRef = useRef(source);
@@ -459,13 +759,6 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   const viewportRef = useRef(viewport);
   viewportRef.current = viewport;
 
-  // Whole-gesture bookkeeping lives in refs, written synchronously in the
-  // handler that starts the gesture. Same-event-burst dragmove/mouseup/dragend
-  // calls can fire before React flushes a setState from the previous handler
-  // in the burst, so any handler that only reads the state copy can see a
-  // stale (often still-null) value and silently no-op — the class of bug that
-  // broke fast drags. `marquee`/`arrowDraft` React state still exists purely
-  // to drive the live overlay rendering; all gating/logic reads the ref.
   const dragStateRef = useRef<{
     shapeId: string;
     startX: number;
@@ -475,6 +768,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   } | null>(null);
   const marqueeRef = useRef<MarqueeState | null>(null);
   const arrowDraftRef = useRef<ArrowDraft | null>(null);
+  const drawDraftRef = useRef<DrawDraft | null>(null);
 
   const setModeSynced = (next: ToolMode) => {
     modeRef.current = next;
@@ -527,9 +821,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   }, [editingShapeId]);
 
   const startEditing = (shapeId: string) => {
-    if (readOnly || modeRef.current === "arrow") return;
+    if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
     const shape = doc.shapes.find((s) => s.id === shapeId);
-    if (!shape || shape.type === "arrow" || shape.type === "line" || shape.locked) return;
+    if (!shape || shape.type === "arrow" || shape.type === "line" || shape.type === "path" || shape.locked) return;
     setSelectedIds(new Set());
     setEditingShapeId(shapeId);
     setEditingValue(shape.text?.content ?? "");
@@ -547,7 +841,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         ? { id, type: "frame", x, y, width, height, name: nextFrameName(baseDoc) }
         : kind === "text"
           ? { id, type: "text", x, y, width, height, text: { content: "", fontSize: 14, align: "left" } }
-          : { id, type: kind, x, y, width, height, stroke: "#334155", strokeWidth: 2 };
+          : kind === "sticky"
+            ? { id, type: "sticky", x, y, width, height, fill: "#fef08a", text: { content: "", fontSize: 14 } }
+            : { id, type: kind as any, x, y, width, height, fill: activeColor, stroke: "#334155", strokeWidth: 2 };
 
     const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, newShape] };
     setDoc(newDoc);
@@ -555,7 +851,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     setSelectedIds(new Set([id]));
     setModeSynced("select");
 
-    if (kind === "text") {
+    if (kind === "text" || kind === "sticky") {
       setEditingShapeId(id);
       setEditingValue("");
     }
@@ -602,9 +898,9 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       const updated = { ...s, text: textBlock };
       if (s.type === "text") {
         const lines = content.split("\n");
-        const fontSize = textBlock.fontSize ?? 12;
+        const fontSize = textBlock.fontSize ?? 14;
         const longest = Math.max(...lines.map((l) => l.length));
-        const width = Math.max(40, Math.round(longest * fontSize * 0.6 * 1.15));
+        const width = Math.max(50, Math.round(longest * fontSize * 0.6 * 1.15));
         const height = Math.round(lines.length * fontSize * 1.4);
         return { ...updated, width, height };
       }
@@ -631,6 +927,29 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         const newDoc = { ...doc, shapes: newShapes };
         setDoc(newDoc);
         setSelectedIds(new Set());
+        commitChanges(newDoc);
+        return;
+      }
+
+      // Duplicate (Ctrl+D / Cmd+D)
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "d") {
+        e.preventDefault();
+        const toDup = doc.shapes.filter((s) => selectedIds.has(s.id));
+        const newIds = new Set<string>();
+        const dupShapes: CanvasShape[] = toDup.map((s) => {
+          const freshId = generateShapeId("dup");
+          newIds.add(freshId);
+          return {
+            ...s,
+            id: freshId,
+            name: s.name ? `${s.name}-copy` : undefined,
+            x: "x" in s ? s.x + 20 : 0,
+            y: "y" in s ? s.y + 20 : 0,
+          };
+        });
+        const newDoc = { ...doc, shapes: [...doc.shapes, ...dupShapes] };
+        setDoc(newDoc);
+        setSelectedIds(newIds);
         commitChanges(newDoc);
         return;
       }
@@ -662,7 +981,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [doc, selectedIds, readOnly, editingShapeId]);
 
-  // Tool-mode shortcuts: v = select, a = arrow, r/o/d/s/t/f = place shape, 0 = reset zoom
+  // Tool-mode shortcuts: v = select, p = pen, a = arrow, r/o/d/t/s/f = place, 0 = reset zoom
   useEffect(() => {
     if (readOnly) return;
 
@@ -675,6 +994,8 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         if (modeRef.current !== "select") {
           arrowDraftRef.current = null;
           setArrowDraft(null);
+          drawDraftRef.current = null;
+          setDrawDraft(null);
           setModeSynced("select");
         }
         return;
@@ -684,17 +1005,20 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         case "v":
           setModeSynced("select");
           break;
+        case "p":
+          setModeSynced("draw");
+          break;
         case "a":
           setModeSynced("arrow");
           break;
         case "r":
           enterPlaceMode("rectangle");
           break;
-        case "o":
-          enterPlaceMode("ellipse");
-          break;
         case "d":
           enterPlaceMode("diamond");
+          break;
+        case "o":
+          enterPlaceMode("ellipse");
           break;
         case "s":
           enterPlaceMode("sticky");
@@ -744,15 +1068,12 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   }, [readOnly, editingShapeId]);
 
   const handleShapeClick = (e: Konva.KonvaEventObject<MouseEvent>, shapeId: string) => {
-    if (readOnly || modeRef.current === "arrow") return;
+    if (readOnly || modeRef.current === "arrow" || modeRef.current === "draw") return;
     if (e.evt.shiftKey) {
       setSelectedIds((prev) => {
         const newSet = new Set(prev);
-        if (newSet.has(shapeId)) {
-          newSet.delete(shapeId);
-        } else {
-          newSet.add(shapeId);
-        }
+        if (newSet.has(shapeId)) newSet.delete(shapeId);
+        else newSet.add(shapeId);
         return newSet;
       });
     } else {
@@ -766,20 +1087,16 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       suppressNextClickRef.current = false;
       return;
     }
-    if (modeRef.current === "place") {
-      const stage = e.target.getStage();
-      const pos = stagePointFromEvent(stage);
-      if (!pos) return;
-      const kind = placeKindRef.current;
-      if (!kind) {
-        setModeSynced("select");
-        return;
+
+    if (modeRef.current === "place" && placeKindRef.current) {
+      const pos = stagePointFromEvent(stageRef.current);
+      if (pos) {
+        insertShapeAt(placeKindRef.current, pos.x, pos.y);
       }
-      insertShapeAt(kind, pos.x, pos.y);
       return;
     }
-    if (modeRef.current === "arrow") return;
-    if (e.target === e.target.getStage()) {
+
+    if (e.target === stageRef.current) {
       setSelectedIds(new Set());
     }
   };
@@ -788,7 +1105,6 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     if (readOnly) return;
 
     if (spaceHeldRef.current || e.evt.button === 1) {
-      e.evt.preventDefault();
       panRef.current = {
         startX: e.evt.clientX,
         startY: e.evt.clientY,
@@ -798,255 +1114,277 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
       return;
     }
 
-    if (modeRef.current === "place") return;
+    const pos = stagePointFromEvent(stageRef.current);
+    if (!pos) return;
+
+    // Freehand Pen drawing
+    if (modeRef.current === "draw") {
+      const draft: DrawDraft = {
+        points: [[pos.x, pos.y]],
+        stroke: resolveColor(activeColor) ?? activeColor,
+        strokeWidth: activeStrokeWidth,
+      };
+      drawDraftRef.current = draft;
+      setDrawDraft(draft);
+      return;
+    }
 
     if (modeRef.current === "arrow") {
-      const stage = e.target.getStage();
-      const pos = stagePointFromEvent(stage);
-      if (!pos) return;
-      const startBinding = getShapeIdAtPointer(docRef.current, stage);
-      const draft: ArrowDraft = { startPoint: pos, startBinding, currentPoint: pos, hoverShapeId: null };
+      const clickedShapeId = getShapeIdAtPointer(docRef.current, stageRef.current);
+      const draft: ArrowDraft = {
+        startPoint: pos,
+        startBinding: clickedShapeId,
+        currentPoint: pos,
+        hoverShapeId: null,
+      };
       arrowDraftRef.current = draft;
       setArrowDraft(draft);
       return;
     }
 
-    if (marqueeRef.current !== null) return;
-    if (e.target !== e.target.getStage()) return;
-
-    const pos = stagePointFromEvent(e.target.getStage());
-    if (!pos) return;
-
-    marqueeStartRef.current = { x: pos.x, y: pos.y };
-    const draft: MarqueeState = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y };
-    marqueeRef.current = draft;
-    setMarquee(draft);
+    if (e.target === stageRef.current && modeRef.current === "select") {
+      marqueeStartRef.current = pos;
+      marqueeRef.current = { x0: pos.x, y0: pos.y, x1: pos.x, y1: pos.y };
+      setMarquee(marqueeRef.current);
+      if (!e.evt.shiftKey) {
+        setSelectedIds(new Set());
+      }
+    }
   };
 
   const handleStageMouseMove = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (panRef.current) {
-      const pan = panRef.current;
-      const dx = e.evt.clientX - pan.startX;
-      const dy = e.evt.clientY - pan.startY;
-      setViewport((prev) => ({ ...prev, x: pan.originX + dx, y: pan.originY + dy }));
+      const dx = e.evt.clientX - panRef.current.startX;
+      const dy = e.evt.clientY - panRef.current.startY;
+      setViewport({
+        scale: viewportRef.current.scale,
+        x: panRef.current.originX + dx,
+        y: panRef.current.originY + dy,
+      });
       return;
     }
 
-    if (modeRef.current === "arrow") {
-      const current = arrowDraftRef.current;
-      if (!current) return;
-      const stage = e.target.getStage();
-      const pos = stagePointFromEvent(stage);
-      if (!pos) return;
-      const hoverShapeId = getShapeIdAtPointer(docRef.current, stage);
-      const draft: ArrowDraft = { ...current, currentPoint: pos, hoverShapeId };
-      arrowDraftRef.current = draft;
-      setArrowDraft(draft);
-      return;
-    }
-
-    const current = marqueeRef.current;
-    if (!marqueeStartRef.current || !current) return;
-
-    const pos = stagePointFromEvent(e.target.getStage());
+    const pos = stagePointFromEvent(stageRef.current);
     if (!pos) return;
 
-    const draft: MarqueeState = { ...current, x1: pos.x, y1: pos.y };
-    marqueeRef.current = draft;
-    setMarquee(draft);
+    // Freehand drawing live points
+    if (modeRef.current === "draw" && drawDraftRef.current) {
+      const updated: DrawDraft = {
+        ...drawDraftRef.current,
+        points: [...drawDraftRef.current.points, [pos.x, pos.y]],
+      };
+      drawDraftRef.current = updated;
+      setDrawDraft(updated);
+      return;
+    }
+
+    if (modeRef.current === "arrow" && arrowDraftRef.current) {
+      const hoverShapeId = getShapeIdAtPointer(docRef.current, stageRef.current);
+      const nextDraft: ArrowDraft = {
+        ...arrowDraftRef.current,
+        currentPoint: pos,
+        hoverShapeId: hoverShapeId === arrowDraftRef.current.startBinding ? null : hoverShapeId,
+      };
+      arrowDraftRef.current = nextDraft;
+      setArrowDraft(nextDraft);
+      return;
+    }
+
+    if (marqueeRef.current && marqueeStartRef.current) {
+      const next: MarqueeState = {
+        x0: marqueeStartRef.current.x,
+        y0: marqueeStartRef.current.y,
+        x1: pos.x,
+        y1: pos.y,
+      };
+      marqueeRef.current = next;
+      setMarquee(next);
+    }
   };
 
-  const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
+  const handleStageMouseUp = () => {
     if (panRef.current) {
       panRef.current = null;
       return;
     }
 
-    if (modeRef.current === "arrow") {
-      const draft = arrowDraftRef.current;
-      if (!draft) return;
-      const stage = e.target.getStage();
-      const pos = stagePointFromEvent(stage) ?? draft.currentPoint;
-      const endBinding = getShapeIdAtPointer(docRef.current, stage);
-      const dist = Math.hypot(pos.x - draft.startPoint.x, pos.y - draft.startPoint.y);
+    // Freehand drawing commit
+    if (modeRef.current === "draw" && drawDraftRef.current) {
+      const draft = drawDraftRef.current;
+      drawDraftRef.current = null;
+      setDrawDraft(null);
 
+      if (draft.points.length > 1) {
+        const pathShape: PathShape = {
+          id: generateShapeId("p"),
+          type: "path",
+          x: 0,
+          y: 0,
+          points: draft.points,
+          stroke: draft.stroke,
+          strokeWidth: draft.strokeWidth,
+        };
+        const newDoc = { ...docRef.current, shapes: [...docRef.current.shapes, pathShape] };
+        setDoc(newDoc);
+        commitChanges(newDoc);
+      }
+      return;
+    }
+
+    if (modeRef.current === "arrow" && arrowDraftRef.current) {
+      const draft = arrowDraftRef.current;
       arrowDraftRef.current = null;
       setArrowDraft(null);
-      setModeSynced("select");
-      suppressNextClickRef.current = true;
 
-      if (dist < 8 && !draft.startBinding && !endBinding) return;
+      const dx = draft.currentPoint.x - draft.startPoint.x;
+      const dy = draft.currentPoint.y - draft.startPoint.y;
+      if (Math.hypot(dx, dy) >= 10) {
+        const id = generateShapeId("a");
+        const newArrow: CanvasShape = {
+          id,
+          type: "arrow",
+          x: 0,
+          y: 0,
+          start: draft.startBinding ? { shapeId: draft.startBinding, anchor: "auto" } : draft.startPoint,
+          end: draft.hoverShapeId ? { shapeId: draft.hoverShapeId, anchor: "auto" } : draft.currentPoint,
+          stroke: "#475569",
+          strokeWidth: 2,
+        };
 
-      const sameShape = !!draft.startBinding && !!endBinding && draft.startBinding === endBinding;
-      const start = draft.startBinding
-        ? { shapeId: draft.startBinding, anchor: "auto" as const }
-        : { x: draft.startPoint.x, y: draft.startPoint.y };
-      const end = endBinding && !sameShape ? { shapeId: endBinding, anchor: "auto" as const } : { x: pos.x, y: pos.y };
-
-      const newArrow: ArrowShape = {
-        id: generateShapeId("a"),
-        type: "arrow",
-        x: 0,
-        y: 0,
-        start,
-        end,
-        stroke: "#64748b",
-        strokeWidth: 2,
-      };
-      const baseDoc = docRef.current;
-      const newDoc = { ...baseDoc, shapes: [...baseDoc.shapes, newArrow] };
-      setDoc(newDoc);
-      commitChanges(newDoc);
-      setSelectedIds(new Set([newArrow.id]));
+        const newDoc = { ...docRef.current, shapes: [...docRef.current.shapes, newArrow] };
+        setDoc(newDoc);
+        commitChanges(newDoc);
+        setSelectedIds(new Set([id]));
+        setModeSynced("select");
+      }
       return;
     }
 
-    const finalMarquee = marqueeRef.current;
-    if (!finalMarquee || !marqueeStartRef.current) {
-      marqueeStartRef.current = null;
+    if (marqueeRef.current) {
+      const m = marqueeRef.current;
       marqueeRef.current = null;
-      return;
-    }
+      marqueeStartRef.current = null;
+      setMarquee(null);
 
-    const marqueeRect = {
-      x: Math.min(finalMarquee.x0, finalMarquee.x1),
-      y: Math.min(finalMarquee.y0, finalMarquee.y1),
-      width: Math.abs(finalMarquee.x1 - finalMarquee.x0),
-      height: Math.abs(finalMarquee.y1 - finalMarquee.y0),
-    };
+      const xMin = Math.min(m.x0, m.x1);
+      const xMax = Math.max(m.x0, m.x1);
+      const yMin = Math.min(m.y0, m.y1);
+      const yMax = Math.max(m.y0, m.y1);
 
-    const baseDoc = docRef.current;
-    const selected = new Set<string>();
-    for (const shape of baseDoc.shapes) {
-      if (shape.type === "arrow" || shape.type === "line") continue;
-      const bounds = getShapeBounds(baseDoc, shape);
-      if (aabbOverlap(marqueeRect, bounds)) {
-        selected.add(shape.id);
+      if (Math.abs(m.x1 - m.x0) > 4 || Math.abs(m.y1 - m.y0) > 4) {
+        suppressNextClickRef.current = true;
+        const inMarquee = docRef.current.shapes.filter((s) => {
+          if (s.locked) return false;
+          const b = getShapeBounds(docRef.current, s);
+          return b.x < xMax && b.x + b.width > xMin && b.y < yMax && b.y + b.height > yMin;
+        });
+        setSelectedIds(new Set(inMarquee.map((s) => s.id)));
       }
     }
-
-    setSelectedIds(selected);
-    marqueeRef.current = null;
-    setMarquee(null);
-    marqueeStartRef.current = null;
   };
 
   const handleShapeDragStart = (shapeId: string, x: number, y: number) => {
-    if (readOnly) return;
-    const idsToMove = new Set<string>();
-    const directIds = new Set<string>();
-
+    let directIds: Set<string>;
     if (selectedIds.has(shapeId)) {
-      // Move all selected shapes
-      for (const shape of doc.shapes) {
-        if (selectedIds.has(shape.id) && shape.type !== "arrow" && shape.type !== "line") {
-          idsToMove.add(shape.id);
-          directIds.add(shape.id);
-        }
-      }
+      directIds = new Set(selectedIds);
     } else {
-      // Single shape drag
-      idsToMove.add(shapeId);
-      directIds.add(shapeId);
-      setSelectedIds(new Set([shapeId]));
+      directIds = new Set([shapeId]);
+      setSelectedIds(directIds);
     }
 
-    // Dragging a frame moves its children with it
-    for (const id of Array.from(idsToMove)) {
-      const shape = doc.shapes.find((s) => s.id === id);
-      if (shape?.type !== "frame") continue;
-      for (const child of doc.shapes) {
-        if (child.frameId === id && child.type !== "arrow" && child.type !== "line") {
-          idsToMove.add(child.id);
-        }
+    const currentDoc = docRef.current;
+    const initialPositions = new Map<string, { x: number; y: number }>();
+    const allMovedIds = new Set(directIds);
+
+    const frameIds = Array.from(directIds).filter((id) => currentDoc.shapes.some((s) => s.id === id && s.type === "frame"));
+    for (const frameId of frameIds) {
+      for (const s of currentDoc.shapes) {
+        if (s.frameId === frameId) allMovedIds.add(s.id);
       }
     }
 
-    const initialPositions = new Map<string, { x: number; y: number }>();
-    for (const id of idsToMove) {
-      const shape = doc.shapes.find((s) => s.id === id);
-      if (shape) initialPositions.set(id, { x: shape.x, y: shape.y });
+    for (const s of currentDoc.shapes) {
+      if (allMovedIds.has(s.id) && s.type !== "arrow" && s.type !== "line") {
+        initialPositions.set(s.id, { x: s.x, y: s.y });
+      }
     }
 
-    dragStateRef.current = {
-      shapeId,
-      startX: x,
-      startY: y,
-      initialPositions,
-      directIds,
-    };
-    dragDocRef.current = docRef.current;
+    dragStateRef.current = { shapeId, startX: x, startY: y, initialPositions, directIds };
 
+    const candidateShapes = currentDoc.shapes.filter((s) => !allMovedIds.has(s.id));
     const verticals: number[] = [];
     const horizontals: number[] = [];
-    for (const s of docRef.current.shapes) {
-      if (s.type === "arrow" || s.type === "line") continue;
-      if (initialPositions.has(s.id)) continue;
-      const b = getShapeBounds(docRef.current, s);
+    for (const s of candidateShapes) {
+      const b = getShapeBounds(currentDoc, s);
       verticals.push(b.x, b.x + b.width / 2, b.x + b.width);
       horizontals.push(b.y, b.y + b.height / 2, b.y + b.height);
     }
     snapCandidatesRef.current = { verticals, horizontals };
   };
 
-  const handleShapeDragMove = (e: Konva.KonvaEventObject<DragEvent>, shapeId: string, x: number, y: number) => {
+  const handleShapeDragMove = (
+    e: Konva.KonvaEventObject<DragEvent>,
+    shapeId: string,
+    rawNewX: number,
+    rawNewY: number
+  ) => {
     const dragState = dragStateRef.current;
     if (!dragState) return;
-    const baseDoc = dragDocRef.current ?? docRef.current;
 
-    let dx = x - dragState.startX;
-    let dy = y - dragState.startY;
+    const baseDoc = docRef.current;
+    const draggedShape = baseDoc.shapes.find((s) => s.id === shapeId);
+    if (!draggedShape || draggedShape.type === "arrow" || draggedShape.type === "line") return;
 
-    let selLeft = Infinity;
-    let selRight = -Infinity;
-    let selTop = Infinity;
-    let selBottom = -Infinity;
-    for (const [id, initial] of dragState.initialPositions) {
-      const shape = baseDoc.shapes.find((s) => s.id === id);
-      if (!shape || shape.type === "arrow" || shape.type === "line") continue;
-      const w = "width" in shape ? shape.width : 0;
-      const h = "height" in shape ? shape.height : 0;
-      const nx = initial.x + dx;
-      const ny = initial.y + dy;
-      selLeft = Math.min(selLeft, nx);
-      selRight = Math.max(selRight, nx + w);
-      selTop = Math.min(selTop, ny);
-      selBottom = Math.max(selBottom, ny + h);
-    }
-    const selCenterX = (selLeft + selRight) / 2;
-    const selCenterY = (selTop + selBottom) / 2;
+    const bounds = getShapeBounds(baseDoc, draggedShape);
+    const candidateLefts = [rawNewX, rawNewX + bounds.width / 2, rawNewX + bounds.width];
+    const candidateTops = [rawNewY, rawNewY + bounds.height / 2, rawNewY + bounds.height];
 
-    let bestVDiff = SNAP_THRESHOLD;
-    let snapDx = 0;
-    let vLine: number | null = null;
-    for (const v of snapCandidatesRef.current.verticals) {
-      for (const edge of [selLeft, selCenterX, selRight]) {
-        const diff = Math.abs(edge - v);
-        if (diff < bestVDiff) {
-          bestVDiff = diff;
-          snapDx = v - edge;
-          vLine = v;
+    let snappedX = rawNewX;
+    let snapGuideV: number | null = null;
+    for (let i = 0; i < candidateLefts.length; i++) {
+      const c = candidateLefts[i];
+      let bestDist = SNAP_THRESHOLD;
+      let match: number | null = null;
+      for (const target of snapCandidatesRef.current.verticals) {
+        const dist = Math.abs(c - target);
+        if (dist < bestDist) {
+          bestDist = dist;
+          match = target;
         }
+      }
+      if (match !== null) {
+        const offset = i === 0 ? 0 : i === 1 ? bounds.width / 2 : bounds.width;
+        snappedX = match - offset;
+        snapGuideV = match;
+        break;
       }
     }
 
-    let bestHDiff = SNAP_THRESHOLD;
-    let snapDy = 0;
-    let hLine: number | null = null;
-    for (const h of snapCandidatesRef.current.horizontals) {
-      for (const edge of [selTop, selCenterY, selBottom]) {
-        const diff = Math.abs(edge - h);
-        if (diff < bestHDiff) {
-          bestHDiff = diff;
-          snapDy = h - edge;
-          hLine = h;
+    let snappedY = rawNewY;
+    let snapGuideH: number | null = null;
+    for (let i = 0; i < candidateTops.length; i++) {
+      const c = candidateTops[i];
+      let bestDist = SNAP_THRESHOLD;
+      let match: number | null = null;
+      for (const target of snapCandidatesRef.current.horizontals) {
+        const dist = Math.abs(c - target);
+        if (dist < bestDist) {
+          bestDist = dist;
+          match = target;
         }
+      }
+      if (match !== null) {
+        const offset = i === 0 ? 0 : i === 1 ? bounds.height / 2 : bounds.height;
+        snappedY = match - offset;
+        snapGuideH = match;
+        break;
       }
     }
 
-    dx += snapDx;
-    dy += snapDy;
-    setSnapGuides({ v: vLine, h: hLine });
+    setSnapGuides({ v: snapGuideV, h: snapGuideH });
+
+    const dx = Math.round(snappedX - dragState.startX);
+    const dy = Math.round(snappedY - dragState.startY);
 
     const newShapes = baseDoc.shapes.map((s) => {
       const initial = dragState.initialPositions.get(s.id);
@@ -1072,15 +1410,8 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     const dragState = dragStateRef.current;
     if (!dragState) return;
 
-    // Commit the final (possibly snapped) position exactly once, from the
-    // ref updated synchronously in handleShapeDragMove — not from `doc` state,
-    // which may not have caught up to the last dragmove yet (same-event-burst
-    // gestures can fire dragmove/dragend before React flushes in between).
     let finalDoc = dragDocRef.current ?? docRef.current;
 
-    // Directly-dragged (non-frame) shapes join/leave a frame based on where
-    // their center lands; children dragged along with a frame keep their
-    // membership as-is.
     const reassignments = new Map<string, string | null>();
     for (const id of dragState.directIds) {
       const shape = finalDoc.shapes.find((s) => s.id === id);
@@ -1106,6 +1437,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     setSnapGuides({ v: null, h: null });
   };
 
+  // Transformer synchronization
   useEffect(() => {
     if (readOnly) return;
     const tr = transformerRef.current;
@@ -1120,7 +1452,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
     const eligibleIds = Array.from(selectedIds).filter((id) => {
       const shape = docRef.current.shapes.find((s) => s.id === id);
-      return !!shape && shape.type !== "arrow" && shape.type !== "line" && !shape.locked;
+      return !!shape && shape.type !== "arrow" && shape.type !== "line" && shape.type !== "path" && !shape.locked;
     });
     const nodes = eligibleIds
       .map((id) => stage.findOne(`#${id}`))
@@ -1137,7 +1469,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     const updates = new Map<string, { x: number; y: number; width: number; height: number; rotation: number }>();
     for (const node of tr.nodes()) {
       const shape = doc.shapes.find((s) => s.id === node.id());
-      if (!shape || shape.type === "arrow" || shape.type === "line") continue;
+      if (!shape || shape.type === "arrow" || shape.type === "line" || shape.type === "path") continue;
 
       const width = Math.round(node.width() * node.scaleX());
       const height = Math.round(node.height() * node.scaleY());
@@ -1157,7 +1489,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     if (updates.size === 0) return;
 
     const newShapes = doc.shapes.map((s) => {
-      if (s.type === "arrow" || s.type === "line") return s;
+      if (s.type === "arrow" || s.type === "line" || s.type === "path") return s;
       const u = updates.get(s.id);
       if (!u) return s;
       return { ...s, x: u.x, y: u.y, width: u.width, height: u.height, rotation: u.rotation };
@@ -1193,6 +1525,44 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
     }
   };
 
+  // Selection bounding box for Floating Quick-Style Bar
+  const selectedShapes = doc.shapes.filter((s) => selectedIds.has(s.id));
+  const primarySelected = selectedShapes[0];
+
+  const updateSelectedProps = (updates: Partial<CanvasShape> | ((s: CanvasShape) => CanvasShape)) => {
+    const newShapes: CanvasShape[] = doc.shapes.map((s) => {
+      if (!selectedIds.has(s.id)) return s;
+      if (typeof updates === "function") return updates(s);
+      return { ...s, ...updates } as CanvasShape;
+    });
+    const newDoc: CanvasDocument = { ...doc, shapes: newShapes };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
+  const bringSelectionToFront = () => {
+    const without = doc.shapes.filter((s) => !selectedIds.has(s.id));
+    const selected = doc.shapes.filter((s) => selectedIds.has(s.id));
+    const newDoc = { ...doc, shapes: [...without, ...selected] };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
+  const sendSelectionToBack = () => {
+    const without = doc.shapes.filter((s) => !selectedIds.has(s.id));
+    const selected = doc.shapes.filter((s) => selectedIds.has(s.id));
+    const newDoc = { ...doc, shapes: [...selected, ...without] };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
+  const toggleRenderMode = () => {
+    const nextMode = doc.renderMode === "sketchy" ? "clean" : "sketchy";
+    const newDoc: CanvasDocument = { ...doc, renderMode: nextMode };
+    setDoc(newDoc);
+    commitChanges(newDoc);
+  };
+
   const marqueeRect = marquee
     ? {
         x: Math.min(marquee.x0, marquee.x1),
@@ -1204,18 +1574,33 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
 
   const editingShape = editingShapeId ? doc.shapes.find((s) => s.id === editingShapeId) : null;
   const editingRect = editingShape ? getShapeBounds(doc, editingShape) : null;
-  const stageContainerRect = editingShape ? stageRef.current?.container().getBoundingClientRect() : null;
+  const stageContainerRect = stageRef.current?.container().getBoundingClientRect();
   const hoverShape = arrowDraft?.hoverShapeId ? doc.shapes.find((s) => s.id === arrowDraft.hoverShapeId) : null;
   const hoverBounds = hoverShape ? getShapeBounds(doc, hoverShape) : null;
 
-  const toolbarButton = (label: string, active: boolean, onClick: () => void) => (
+  // Selected bounding box for floating toolbar
+  let selBounds: { x: number; y: number; width: number; height: number } | null = null;
+  if (selectedShapes.length > 0) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const s of selectedShapes) {
+      const b = getShapeBounds(doc, s);
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.width);
+      maxY = Math.max(maxY, b.y + b.height);
+    }
+    selBounds = { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+  }
+
+  const toolbarButton = (label: string, active: boolean, onClick: () => void, title?: string) => (
     <button
       key={label}
       type="button"
+      title={title}
       onClick={onClick}
-      className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+      className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
         active
-          ? "bg-indigo-600 text-white"
+          ? "bg-indigo-600 text-white shadow-sm"
           : "text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
       }`}
     >
@@ -1229,20 +1614,163 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
   ];
 
   return (
-    <div className="w-full h-full relative">
+    <div className="w-full h-full relative overflow-hidden select-none bg-slate-50 dark:bg-slate-950">
+      {/* ─── Top Main Toolbar ────────────────────────────────────────────── */}
       {!readOnly && (
-        <div className="absolute top-2 left-2 z-10 flex flex-wrap gap-1 rounded-md border border-slate-200 bg-white/95 p-1 shadow-sm dark:border-slate-700 dark:bg-slate-900/95 max-w-[240px]">
-          {toolbarButton("Select", mode === "select", () => setModeSynced("select"))}
-          {toolbarButton("Arrow", mode === "arrow", () => setModeSynced("arrow"))}
-          {toolbarButton("Rectangle", mode === "place" && placeKind === "rectangle", () => enterPlaceMode("rectangle"))}
-          {toolbarButton("Ellipse", mode === "place" && placeKind === "ellipse", () => enterPlaceMode("ellipse"))}
+        <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-1 rounded-lg border border-slate-200 bg-white/95 p-1.5 shadow-md backdrop-blur dark:border-slate-800 dark:bg-slate-900/95 max-w-[calc(100%-24px)]">
+          {toolbarButton("Select (V)", mode === "select", () => setModeSynced("select"))}
+          {toolbarButton("Pen (P)", mode === "draw", () => setModeSynced("draw"))}
+          {toolbarButton("Arrow (A)", mode === "arrow", () => setModeSynced("arrow"))}
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+          {toolbarButton("Rect", mode === "place" && placeKind === "rectangle", () => enterPlaceMode("rectangle"))}
           {toolbarButton("Diamond", mode === "place" && placeKind === "diamond", () => enterPlaceMode("diamond"))}
+          {toolbarButton("Ellipse", mode === "place" && placeKind === "ellipse", () => enterPlaceMode("ellipse"))}
+          {toolbarButton("Triangle", mode === "place" && placeKind === "triangle", () => enterPlaceMode("triangle"))}
+          {toolbarButton("Database", mode === "place" && placeKind === "cylinder", () => enterPlaceMode("cylinder"))}
+          {toolbarButton("Cloud", mode === "place" && placeKind === "cloud", () => enterPlaceMode("cloud"))}
+          {toolbarButton("Hexagon", mode === "place" && placeKind === "hexagon", () => enterPlaceMode("hexagon"))}
+          {toolbarButton("Star", mode === "place" && placeKind === "star", () => enterPlaceMode("star"))}
           {toolbarButton("Sticky", mode === "place" && placeKind === "sticky", () => enterPlaceMode("sticky"))}
           {toolbarButton("Text", mode === "place" && placeKind === "text", () => enterPlaceMode("text"))}
           {toolbarButton("Frame", mode === "place" && placeKind === "frame", () => enterPlaceMode("frame"))}
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+          <button
+            type="button"
+            onClick={toggleRenderMode}
+            className={`rounded px-2.5 py-1 text-xs font-medium transition-all ${
+              doc.renderMode === "sketchy"
+                ? "bg-amber-500 text-white shadow-sm"
+                : "border border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300"
+            }`}
+            title="Toggle between Clean Vector and Hand-Drawn Sketchy rendering"
+          >
+            {doc.renderMode === "sketchy" ? "Sketchy Style" : "Clean Style"}
+          </button>
         </div>
       )}
 
+      {/* ─── Floating Quick-Style & Format Bar ────────────────────────────── */}
+      {!readOnly && selBounds && selectedShapes.length > 0 && !editingShapeId && (
+        <div
+          className="absolute z-30 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white/95 px-2 py-1.5 shadow-lg backdrop-blur dark:border-slate-800 dark:bg-slate-900/95"
+          style={{
+            left: Math.max(12, viewport.x + selBounds.x * viewport.scale),
+            top: Math.max(56, viewport.y + (selBounds.y - 48) * viewport.scale),
+          }}
+        >
+          {/* Fill Palette Swatches */}
+          <div className="flex items-center gap-1">
+            {["transparent", "#ffffff", "5", "4", "3", "1", "6"].map((c) => {
+              const hex = resolveColor(c) ?? c;
+              const isActive = primarySelected?.fill === c;
+              return (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => {
+                    setActiveColor(c);
+                    updateSelectedProps({ fill: c });
+                  }}
+                  className={`h-4 w-4 rounded-full border border-slate-300 transition-transform ${
+                    isActive ? "scale-125 ring-2 ring-indigo-500" : "hover:scale-110"
+                  }`}
+                  style={{ background: hex === "transparent" ? "repeating-linear-gradient(45deg,#ccc,#ccc 2px,#fff 2px,#fff 4px)" : hex }}
+                  title={`Fill ${c}`}
+                />
+              );
+            })}
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+          {/* Stroke Width Toggle */}
+          <div className="flex items-center gap-0.5">
+            {[1, 2, 4].map((w) => (
+              <button
+                key={w}
+                type="button"
+                onClick={() => {
+                  setActiveStrokeWidth(w);
+                  updateSelectedProps({ strokeWidth: w });
+                }}
+                className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                  primarySelected?.strokeWidth === w
+                    ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                    : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+                }`}
+              >
+                {w}px
+              </button>
+            ))}
+          </div>
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+          {/* Dash style */}
+          <button
+            type="button"
+            onClick={() =>
+              updateSelectedProps((s) => ({
+                ...s,
+                strokeDash: s.strokeDash === "dashed" ? "solid" : "dashed",
+              }))
+            }
+            className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+              primarySelected?.strokeDash === "dashed"
+                ? "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            }`}
+            title="Toggle Dashed Line"
+          >
+            Dash
+          </button>
+
+          {/* Text Bold & Align (if has text or is text) */}
+          <button
+            type="button"
+            onClick={() =>
+              updateSelectedProps((s) => ({
+                ...s,
+                text: { ...(s.text ?? { content: "" }), bold: !s.text?.bold },
+              }))
+            }
+            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+              primarySelected?.text?.bold
+                ? "bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900"
+                : "text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            }`}
+            title="Toggle Bold"
+          >
+            B
+          </button>
+
+          <div className="h-4 w-[1px] bg-slate-200 dark:bg-slate-700 mx-0.5" />
+
+          {/* Layer Arrange */}
+          <button
+            type="button"
+            onClick={bringSelectionToFront}
+            className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            title="Bring to Front"
+          >
+            Front
+          </button>
+          <button
+            type="button"
+            onClick={sendSelectionToBack}
+            className="rounded px-1.5 py-0.5 text-[10px] text-slate-600 hover:bg-slate-100 dark:text-slate-300"
+            title="Send to Back"
+          >
+            Back
+          </button>
+        </div>
+      )}
+
+      {/* ─── Konva Canvas Stage ──────────────────────────────────────────── */}
       <Stage
         ref={stageRef}
         width={STAGE_WIDTH}
@@ -1251,7 +1779,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         scaleY={viewport.scale}
         x={viewport.x}
         y={viewport.y}
-        style={{ cursor: isSpaceHeld ? "grab" : undefined }}
+        style={{ cursor: isSpaceHeld ? "grab" : mode === "draw" ? "crosshair" : undefined }}
         onClick={handleStageClick}
         onMouseDown={handleStageMouseDown}
         onMouseMove={handleStageMouseMove}
@@ -1275,6 +1803,23 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
             )
           )}
 
+          {/* Freehand Live Stroke in Draw Mode */}
+          {drawDraft && drawDraft.points.length > 1 && (
+            <Path
+              data={getSvgPathFromStroke(
+                getStroke(drawDraft.points, {
+                  size: drawDraft.strokeWidth * 3,
+                  thinning: 0.5,
+                  smoothing: 0.5,
+                  streamline: 0.5,
+                })
+              )}
+              fill={drawDraft.stroke}
+              listening={false}
+            />
+          )}
+
+          {/* Marquee Box */}
           {marqueeRect && (
             <Rect
               x={marqueeRect.x}
@@ -1288,6 +1833,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
             />
           )}
 
+          {/* Alignment Snap Guides */}
           {snapGuides.v !== null && (
             <Line
               points={[snapGuides.v, 0, snapGuides.v, STAGE_HEIGHT]}
@@ -1307,6 +1853,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
             />
           )}
 
+          {/* Transformer */}
           {!readOnly && (
             <Transformer
               ref={transformerRef}
@@ -1323,6 +1870,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
           )}
         </Layer>
 
+        {/* Live Arrow Draft Layer */}
         <Layer listening={false}>
           {arrowDraft && (
             <Line
@@ -1362,6 +1910,7 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
         </Layer>
       </Stage>
 
+      {/* ─── Inline Text Editing Overlay ─────────────────────────────────── */}
       {editingShape && editingRect && (
         <textarea
           ref={textareaRef}
@@ -1384,16 +1933,17 @@ export function FreeformRenderer({ source, onChange, readOnly }: Props) {
             top: (stageContainerRect?.top ?? 0) + viewport.y + editingRect.y * viewport.scale,
             width: editingRect.width * viewport.scale,
             height: editingRect.height * viewport.scale,
-            fontSize: (editingShape.text?.fontSize ?? 12) * viewport.scale,
-            fontFamily: editingShape.text?.fontFamily ?? "Arial",
-            color: editingShape.text?.color ?? "#000000",
+            fontSize: (editingShape.text?.fontSize ?? 14) * viewport.scale,
+            fontFamily: editingShape.text?.fontFamily ?? "Inter, Arial, sans-serif",
+            color: editingShape.text?.color ?? "#1e293b",
             textAlign: editingShape.text?.align ?? (editingShape.type === "text" ? "left" : "center"),
             fontWeight: editingShape.text?.bold ? "bold" : "normal",
-            background: "rgba(255,255,255,0.95)",
-            border: "1px solid #4f46e5",
+            background: editingShape.type === "sticky" ? "#fef08a" : "rgba(255,255,255,0.95)",
+            border: "2px solid #4f46e5",
+            borderRadius: 4,
             outline: "none",
             resize: "none",
-            padding: 2,
+            padding: 4,
             margin: 0,
             boxSizing: "border-box",
             zIndex: 50,

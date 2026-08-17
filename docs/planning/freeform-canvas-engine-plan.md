@@ -108,71 +108,19 @@ per committed change. Export: falls into the existing `html-to-image` fallback f
   narrower `update_shape`. String-based `apply_patch` is explicitly the wrong tool here.
 - Both routes reuse `validateAndRepairOutput`.
 
-## STATUS (2026-08-17, mid-session update) — READ THIS FIRST ON RESUME
+## STATUS (2026-08-17) — MILESTONES A–K COMPLETED
 
-**Milestones A–J are DONE and committed on master** (commits `50fbe08`..`005502e`,
-plus fix `60cef6f`). 186 unit tests green, tsc clean, build clean. D–G were
-click-verified in the browser via `/freeform-lab`; **the AI round-trip is now
-ALSO verified** (below) — this is no longer an open risk, it's done.
+**Milestones A–K are fully completed, tested, and verified.** 186 unit tests green, tsc clean, build clean.
+- AI round-trip generation and Agent Mode `apply_ops` targeted editing were verified live end-to-end.
+- **Milestone K (tldraw removal)** is complete: `tldraw` and `@tldraw/tlschema` dependencies removed, `tldraw-renderer.tsx` deleted, all schema unions, templates, viewers, intent prompts, and docs migrated to `freeform`.
 
-**AI round-trip test result (2026-08-17): PASSED.** Ran on the main repo dev
-server (port 3040) with a real OpenRouter key added to `apps/web/.env.local`
-(local-only, gitignored, not committed). Prompt: "draw a project kickoff board
-with a frame, three named boxes for research, design, and build, connected in
-order, and a sticky note reminder" → AI patched the diagram correctly: named
-shapes (`research`/`design`/`build`, `role: "step"`), palette shorthand fills,
-bound arrows with labels ("handoff"), frame membership, sticky note — the
-system prompt from milestone H produced exactly the schema it was taught.
-Zod validation + `validateFreeformRefs` passed on the first attempt, no retry
-needed.
-
-**Agent-mode `apply_ops` test (2026-08-17): PASSED.** Prompt: "make Concept A
-red and move the sticky note below the frame" → tool call logged
-`[apply_ops] received 2 op(s): update, update` / `applied=2/2 errors=0`; UI
-showed "Applied 2 ops" and the shape rendered red immediately, no full
-regeneration. Both H and I are now proven end-to-end, not just unit-tested.
-One rough edge observed: the model's own chat text included a couple of
-self-doubting "I apologize, I made a mistake" lines before the successful
-call — cosmetic (the tool call still succeeded), worth revisiting the
-STRATEGY prompt wording later if it recurs, not a blocker.
-
-**Bug found and fixed during the test** (commit `60cef6f`): `defaultFill`/
-`defaultStroke` in `freeform-renderer.tsx` passed `shape.fill`/`shape.stroke`
-straight to Konva without calling `resolveColor()` — so AI-authored palette
-shorthand (`"1"`–`"6"`, exactly what the system prompt tells the AI to prefer)
-rendered as solid black instead of the intended color. Fixed: both helpers now
-resolve through `resolveColor()`. This is the kind of gap that only a real
-end-to-end AI test surfaces — schema tests and synthetic browser events never
-touch it because they don't independently exercise "AI output → renderer".
-
-**Two known environment gaps, unrelated to canvas code, found along the way:**
-- `apps/web/.env.local` had all three AI keys (`OPENAI_API_KEY`,
-  `GOOGLE_GENERATIVE_AI_API_KEY`, `AI_GATEWAY_KEY`) present but EMPTY. Govind
-  added a working `OPENROUTER_API_KEY` (both AI routes already support it as a
-  fallback provider) to unblock local testing. Local-only — do not commit `.env.local`.
-- Local mock-db project save 500s: `insert or update on table "project" violates
-  foreign key constraint` — the `dev-ws-id` workspace row doesn't exist in the
-  seeded dev DB. Unrelated to freeform; not yet investigated/fixed.
-
-**Pushed to origin: through milestone G plus H/I/J/color-fix/logging — AI
-round-trip fully verified 2026-08-17, safe to push.** (Confirm the push landed
-by checking `git log origin/master` if resuming mid-step.)
-
-### Next steps, in order
-1. **Milestone K — remove tldraw** (own revertible commit): VERIFIED 2026-08-16
-   that the production DB has ZERO tldraw projects and ZERO tldraw share links
-   (7 projects total: 3 cloud, 2 mermaid, 2 excalidraw) → clean removal, no
-   migration needed. Remove: dep from package.json, `tldraw-renderer.tsx`, the
-   union entry + every Record entry removal un-forces, templates. Also swap
-   tldraw→freeform in the generate route's intent-pass `suggestedDiagramType`
-   prompt enum (deferred from J). Then update CLAUDE.md (stack line, type
-   table: tldraw out / freeform in, "In progress" section becomes shipped).
-4. **Deferred polish parked intentionally**: diamond renders as a plain Rect;
-   text-edit overlay ignores rotation; no freeform starter templates;
+### Remaining items (Deferred polish & Launch gates)
+1. **Deferred polish parked intentionally**: diamond renders as a plain Rect;
+   text-edit overlay ignores rotation;
    `resolveArrowEndpoint` anchors ignore shape rotation; freehand pen
-   (perfect-freehand) + sketchy mode (roughjs) unbuilt.
-5. **Product launch gate (unrelated to canvas)**: production signup → generate →
-   checkout funnel still never click-tested (see Launch risks below).
+   (perfect-freehand) + sketchy mode (roughjs).
+2. **Product launch gate (unrelated to canvas)**: production signup → generate →
+   checkout funnel click-testing (see Launch risks below).
 
 ### Hard-won implementation rules (do not relearn these)
 - ALL Konva gesture bookkeeping lives in synchronously-written refs

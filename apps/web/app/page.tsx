@@ -8,7 +8,7 @@ const DIAGRAM_TYPES = [
   "Flowchart", "Sequence", "ER diagram", "Gantt", "Mindmap",
   "Class diagram", "BPMN", "Cloud arch", "Org chart", "Timeline",
   "Vs. comparison", "2×2 matrix", "Funnel", "Tier list", "Iceberg",
-  "Venn", "Excalidraw", "ECharts", "Nivo charts", "tldraw", "Budget", "Bracket",
+  "Venn", "Excalidraw", "ECharts", "Nivo charts", "Freeform canvas", "Budget", "Bracket",
 ];
 
 const FEATURED = new Set(["Flowchart", "Sequence", "Cloud arch"]);
@@ -79,7 +79,7 @@ export default async function HomePage() {
         {/* TRUST STRIP */}
         <div style={{ background: "var(--charcoal)", padding: "20px 40px", display: "flex", alignItems: "center", justifyContent: "center", gap: 32, flexWrap: "wrap" }}>
           <span style={{ fontFamily: "var(--font-mono-fs)", fontSize: 10, color: "#555", letterSpacing: "0.1em", textTransform: "uppercase" }}>Supports</span>
-          {["Mermaid", "Excalidraw", "ReactFlow", "ECharts", "BPMN", "tldraw", "+ 16 more"].map((t) => (
+          {["Mermaid", "Excalidraw", "ReactFlow", "ECharts", "BPMN", "Freeform", "+ 16 more"].map((t) => (
             <span key={t} style={{ fontFamily: "var(--font-mono-fs)", fontSize: 12, color: "#aaa", letterSpacing: "0.04em" }}>{t}</span>
           ))}
         </div>

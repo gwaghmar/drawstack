@@ -16,7 +16,7 @@ import { randomUUID } from "crypto";
 
 export const dynamic = "force-dynamic";
 
-const VALID_TYPES: DiagramType[] = ["mermaid", "excalidraw", "reactflow", "echarts", "nivo", "tldraw", "freeform", "bpmn", "cloud", "erd", "orgchart", "timeline", "versus", "matrix2x2", "funnel", "venn", "tierlist", "iceberg", "alignment", "budget", "habits", "bingo", "bracket"];
+const VALID_TYPES: DiagramType[] = ["mermaid", "excalidraw", "reactflow", "echarts", "nivo", "freeform", "bpmn", "cloud", "erd", "orgchart", "timeline", "versus", "matrix2x2", "funnel", "venn", "tierlist", "iceberg", "alignment", "budget", "habits", "bingo", "bracket"];
 
 function buildAiAssistantHint(ai: Awaited<ReturnType<typeof getAiSettingsForUser>>) {
   const serverOpenAiFallback = Boolean(

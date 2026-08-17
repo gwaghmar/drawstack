@@ -1,4 +1,8 @@
-export type CanvasDocument = { version: 1; shapes: CanvasShape[] };
+export type CanvasDocument = {
+  version: 1;
+  renderMode?: "clean" | "sketchy";
+  shapes: CanvasShape[];
+};
 
 export type BaseShape = {
   id: string;
@@ -10,6 +14,7 @@ export type BaseShape = {
   fill?: string;
   stroke?: string;
   strokeWidth?: number;
+  strokeDash?: "solid" | "dashed" | "dotted";
   opacity?: number;
   frameId?: string | null;
   locked?: boolean;
@@ -26,9 +31,19 @@ export type BaseShape = {
 export type RectShape = BaseShape & { type: "rectangle"; width: number; height: number; cornerRadius?: number };
 export type EllipseShape = BaseShape & { type: "ellipse"; width: number; height: number };
 export type DiamondShape = BaseShape & { type: "diamond"; width: number; height: number };
+export type TriangleShape = BaseShape & { type: "triangle"; width: number; height: number };
+export type CylinderShape = BaseShape & { type: "cylinder"; width: number; height: number };
+export type CloudShape = BaseShape & { type: "cloud"; width: number; height: number };
+export type HexagonShape = BaseShape & { type: "hexagon"; width: number; height: number };
+export type StarShape = BaseShape & { type: "star"; width: number; height: number };
 export type StickyShape = BaseShape & { type: "sticky"; width: number; height: number };
 export type TextShape = BaseShape & { type: "text"; width: number; height: number };
 export type FrameShape = BaseShape & { type: "frame"; width: number; height: number; name?: string };
+
+export type PathShape = BaseShape & {
+  type: "path";
+  points: [number, number][];
+};
 
 export type ArrowEndpoint =
   | { x: number; y: number }
@@ -39,9 +54,25 @@ export type ArrowShape = BaseShape & {
   start: ArrowEndpoint;
   end: ArrowEndpoint;
   label?: string;
+  routing?: "straight" | "curved" | "orthogonal";
+  arrowStart?: boolean;
+  arrowEnd?: boolean;
 };
 
-export type CanvasShape = RectShape | EllipseShape | DiamondShape | StickyShape | TextShape | FrameShape | ArrowShape;
+export type CanvasShape =
+  | RectShape
+  | EllipseShape
+  | DiamondShape
+  | TriangleShape
+  | CylinderShape
+  | CloudShape
+  | HexagonShape
+  | StarShape
+  | StickyShape
+  | TextShape
+  | FrameShape
+  | PathShape
+  | ArrowShape;
 
 export function createEmptyDocument(): CanvasDocument {
   return { version: 1, shapes: [] };
@@ -83,7 +114,23 @@ export function getShapeBounds(doc: CanvasDocument, shape: CanvasShape): { x: nu
     const minY = Math.min(start.y, end.y);
     return { x: minX, y: minY, width: Math.max(start.x, end.x) - minX, height: Math.max(start.y, end.y) - minY };
   }
-  const s = shape as Exclude<CanvasShape, ArrowShape>;
+  if (shape.type === "path") {
+    if (!shape.points || shape.points.length === 0) {
+      return { x: shape.x, y: shape.y, width: 0, height: 0 };
+    }
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const [px, py] of shape.points) {
+      if (px < minX) minX = px;
+      if (px > maxX) maxX = px;
+      if (py < minY) minY = py;
+      if (py > maxY) maxY = py;
+    }
+    return { x: minX, y: minY, width: Math.max(0, maxX - minX), height: Math.max(0, maxY - minY) };
+  }
+  const s = shape as Exclude<CanvasShape, ArrowShape | PathShape>;
   return { x: s.x, y: s.y, width: s.width, height: s.height };
 }
 

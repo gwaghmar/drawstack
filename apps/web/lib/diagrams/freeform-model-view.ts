@@ -2,6 +2,7 @@ import {
   type CanvasDocument,
   type CanvasShape,
   type ArrowShape,
+  type PathShape,
   type ArrowEndpoint,
   isBoundEndpoint,
   getShapeBounds,
@@ -42,19 +43,26 @@ function serializeShapeLine(shape: CanvasShape): string {
   if (!isArrow) {
     out.x = round(shape.x);
     out.y = round(shape.y);
-    const sized = shape as Exclude<CanvasShape, ArrowShape>;
-    out.width = round(sized.width);
-    out.height = round(sized.height);
+    if (shape.type !== "path") {
+      const sized = shape as Exclude<CanvasShape, ArrowShape | PathShape>;
+      out.width = round(sized.width);
+      out.height = round(sized.height);
+    }
   }
 
   if (shape.rotation !== undefined && shape.rotation !== 0) out.rotation = round(shape.rotation);
   if (shape.fill !== undefined) out.fill = shape.fill;
   if (shape.stroke !== undefined) out.stroke = shape.stroke;
   if (shape.strokeWidth !== undefined) out.strokeWidth = round(shape.strokeWidth);
+  if (shape.strokeDash !== undefined) out.strokeDash = shape.strokeDash;
   if (shape.opacity !== undefined && shape.opacity !== 1) out.opacity = shape.opacity;
 
   if (shape.type === "rectangle" && shape.cornerRadius !== undefined) {
     out.cornerRadius = round(shape.cornerRadius);
+  }
+
+  if (shape.type === "path") {
+    out.points = shape.points.map(([px, py]) => [round(px), round(py)]);
   }
 
   if (shape.frameId !== undefined && shape.frameId !== null) out.frameId = shape.frameId;
@@ -64,6 +72,9 @@ function serializeShapeLine(shape: CanvasShape): string {
   if (isArrow) {
     const arrow = shape as ArrowShape;
     if (arrow.label !== undefined) out.label = arrow.label;
+    if (arrow.routing !== undefined) out.routing = arrow.routing;
+    if (arrow.arrowStart !== undefined) out.arrowStart = arrow.arrowStart;
+    if (arrow.arrowEnd !== undefined) out.arrowEnd = arrow.arrowEnd;
     out.start = serializeEndpoint(arrow.start);
     out.end = serializeEndpoint(arrow.end);
   }

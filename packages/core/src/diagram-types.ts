@@ -6,7 +6,6 @@ export type DiagramType =
   | "reactflow"      // Interactive node/edge graphs
   | "echarts"        // Data visualizations: bar, line, pie, radar, heatmap, etc.
   | "nivo"           // Beautiful statistical charts
-  | "tldraw"         // Figma-like infinite canvas
   | "bpmn"           // Business Process Model and Notation
   | "cloud"          // Cloud / architecture diagrams with provider service icons
   | "erd"            // Entity-relationship / database schema diagrams (visual tables)
@@ -57,7 +56,7 @@ export type DiagramTypeMeta = {
   icon: string;
   color: string;
   subtypes?: string[];
-  aiOutputFormat: "mermaid" | "excalidraw-json" | "reactflow-json" | "echarts-json" | "nivo-json" | "tldraw-json" | "bpmn-xml" | "cloud-json" | "erd-json" | "orgchart-json" | "social-json" | "freeform-json";
+  aiOutputFormat: "mermaid" | "excalidraw-json" | "reactflow-json" | "echarts-json" | "nivo-json" | "bpmn-xml" | "cloud-json" | "erd-json" | "orgchart-json" | "social-json" | "freeform-json";
 };
 
 export const DIAGRAM_TYPE_META: DiagramTypeMeta[] = [
@@ -109,15 +108,6 @@ export const DIAGRAM_TYPE_META: DiagramTypeMeta[] = [
     color: "#8b5cf6",
     subtypes: ["bar", "line", "pie", "radar", "treemap", "sankey", "network", "chord", "calendar", "stream", "waffle"],
     aiOutputFormat: "nivo-json",
-  },
-  {
-    id: "tldraw",
-    label: "Design Canvas",
-    description: "Figma-like infinite canvas — mockups, diagrams, presentations",
-    category: "whiteboard",
-    icon: "layout-template",
-    color: "#ec4899",
-    aiOutputFormat: "tldraw-json",
   },
   {
     id: "bpmn",
@@ -590,64 +580,6 @@ Expected: type "radar". data = [{ attribute: "Price", A: 80, B: 65 }, { attribut
 User: "Year-long commits per day for an open-source project"
 Expected: type "calendar". data = [{"day":"2025-01-01","value":3}, {"day":"2025-01-02","value":7}, ...]. Add top-level from "2025-01-01" and to "2025-12-31".`,
 
-  tldraw: `You output ONLY valid JSON for tldraw. No explanation, no markdown.
-
-COMPOSITION-PATTERN SELECTION — pick the layout that matches intent:
-- Slide-style canvas → "presentation", "slide layout", "key points"
-- Mockup grid (boxed regions, labels) → "mockup", "UI design", "screen layout"
-- Hierarchy/tree (parent at top, branches below) → "tree", "hierarchy", "breakdown"
-- Connected flow (boxes + arrows) → "process", "flow", "pipeline"
-- Hub-and-spoke (centre + radiating concepts) → "central idea", "concept map", "what relates to X"
-
-CONTENT EXTRACTION CHECKLIST — pull from the prompt:
-- Every distinct concept / box / region → one geo shape with text
-- Every hierarchy level → vertical y-coordinate band
-- Every labeled connection → an arrow shape between specific shape coordinates
-- Color cues ("highlight X in red") → set the color prop
-- Spatial cues ("on the left", "below") → respect explicitly
-
-Design quality rules:
-- Build intentional composition with readable flow and hierarchy.
-- Keep objects aligned and spaced consistently.
-- Use text labels that map directly to user concepts.
-IMPORTANT: Use the simplified elements[] format below — the renderer converts it to tldraw's native store format automatically. Do NOT output tldraw's native document.store keyed-record format.
-The JSON must have this exact structure:
-{
-  "elements": [
-    {
-      "id": "shape:unique-id",
-      "type": "geo",
-      "x": 100,
-      "y": 100,
-      "rotation": 0,
-      "props": {
-        "geo": "rectangle",
-        "w": 200,
-        "h": 80,
-        "text": "Label",
-        "color": "blue",
-        "fill": "solid",
-        "dash": "draw",
-        "size": "m",
-        "font": "sans"
-      }
-    }
-  ]
-}
-Geo types: rectangle, ellipse, triangle, diamond, pentagon, hexagon, star, cloud, arrow-left, arrow-right, check-box, x-box.
-Colors: blue, green, red, orange, yellow, violet, light-blue, light-green, light-red, light-orange, light-yellow, light-violet, black, grey, white.
-For arrows use type "arrow" with props: { start: {x,y}, end: {x,y}, color, size }.
-For text use type "text" with props: { text, color, size, font }.
-Assign each shape a unique id like "shape:1", "shape:2", etc. Use generous spacing (200–300px) between shapes for readability.
-
-FEW-SHOT EXAMPLES:
-
-User: "Three key benefits of our product on a slide"
-Expected: slide-style — title text at top, three equal rectangles in a horizontal row each with benefit label. No arrows. Colors: light-blue, light-green, light-violet.
-
-User: "Customer onboarding stages with arrows"
-Expected: connected flow — five rectangles arranged left-to-right (Sign Up, Verify Email, Setup Profile, First Action, Activated), each ~200x80px, separated by ~250px. Four arrows connecting consecutive pairs. Final box green, others blue.`,
-
   bpmn: `You output ONLY valid BPMN 2.0 XML. No explanation, no markdown, no code fences.
 
 PROCESS-SHAPE SELECTION — match the structure to the request:
@@ -921,9 +853,15 @@ WHEN TO USE freeform: annotated sketches, spatial/mind maps that don't reduce to
 OUTPUT CONTRACT — a single JSON CanvasDocument:
 { "version": 1, "shapes": [ ...CanvasShape... ] }
 
-SHAPE TYPES (each shares BaseShape fields: id, name, role, x, y, rotation, fill, stroke, strokeWidth, opacity, frameId, locked, text):
-- "rectangle" | "ellipse" | "diamond" | "sticky" | "text" | "frame" — all add width, height (rectangle also has optional cornerRadius)
-- "arrow" | "line" — no x/y/width/height; position comes from "start" and "end" endpoints
+SHAPE TYPES (each shares BaseShape fields: id, name, role, x, y, rotation, fill, stroke, strokeWidth, strokeDash, opacity, frameId, locked, text):
+- "rectangle" | "ellipse" | "diamond" | "triangle" | "cylinder" | "cloud" | "hexagon" | "star" | "sticky" | "text" | "frame" — all require x, y, width, height (rectangle also supports cornerRadius)
+  * "diamond": decision logic / conditional gates
+  * "cylinder": databases, data stores, lakes
+  * "cloud": external services, third-party APIs, internet / cloud infrastructure
+  * "triangle": hierarchy tiers, delta alerts
+  * "hexagon" / "star": milestones, key status checkpoints, highlights
+  * "sticky": notes and collaborative ideas (pastel fills)
+- "arrow" | "line" — position comes from "start" and "end" endpoints. Supports optional "routing": "straight" | "curved" | "orthogonal", and "arrowStart", "arrowEnd" flags.
 
 RULES:
 - Every shape needs a unique "id" (short, kebab-case, e.g. "db1", "step-3").
@@ -931,6 +869,7 @@ RULES:
 - Set "role" only when it carries real domain meaning (e.g. "database", "decision", "note") — omit otherwise.
 - Arrows/lines connecting two named or id'd shapes MUST bind via endpoints, never raw coordinates: {"shapeId": "db1", "anchor": "auto"}. Only use free {"x": n, "y": n} endpoints for an arrow with no shape on that side (e.g. pointing at empty space, or a freehand annotation).
 - Colors: prefer the palette shorthand "1"–"6" (1 red, 2 orange, 3 yellow, 4 green, 5 blue, 6 purple) over literal hex — cheaper and brand-kit friendly. Hex is still legal when a precise color is needed.
+- Stroke patterns: "strokeDash": "solid" | "dashed" | "dotted".
 - Z-order is array order — later entries render on top. Put frames first, then the shapes inside them, then arrows/annotations on top.
 - "sticky" shapes are for notes/ideas — set "text.content" to the note body.
 - Use a "frame" shape (with its own name, e.g. "Phase 1") to visually group related shapes; give grouped shapes that frame's id as their "frameId".
@@ -939,7 +878,7 @@ RULES:
 LAYOUT GUIDANCE:
 - Integer coordinates only. Canvas-absolute, y grows downward.
 - Spread shapes with 40-80px gaps — no overlaps unless one shape is a frame containing others.
-- Typical shape sizes: rectangle/diamond/sticky ~160x80-200x120, frame sized to comfortably contain its children plus ~40px padding on each side.
+- Typical shape sizes: rectangle/diamond/cylinder/triangle ~160x80-200x120, frame sized to comfortably contain its children plus ~40px padding on each side.
 
 FEW-SHOT EXAMPLE:
 
@@ -1389,13 +1328,6 @@ export const DIAGRAM_TYPE_DEFAULTS: Record<DiagramType, string> = {
     colors: { scheme: "nivo" },
   }),
 
-  tldraw: JSON.stringify({
-    elements: [
-      { id: "shape:1", type: "geo", x: 100, y: 100, rotation: 0, props: { geo: "rectangle", w: 200, h: 80, text: "Start", color: "blue", fill: "solid", dash: "draw", size: "m", font: "sans" } },
-      { id: "shape:2", type: "geo", x: 400, y: 100, rotation: 0, props: { geo: "rectangle", w: 200, h: 80, text: "Process", color: "green", fill: "solid", dash: "draw", size: "m", font: "sans" } },
-      { id: "shape:3", type: "geo", x: 700, y: 100, rotation: 0, props: { geo: "ellipse", w: 200, h: 80, text: "End", color: "red", fill: "solid", dash: "draw", size: "m", font: "sans" } },
-    ],
-  }),
 
   bpmn: `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="sample-diagram" targetNamespace="http://bpmn.io/schema/bpmn">

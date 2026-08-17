@@ -13,7 +13,18 @@ export type CanvasOp =
   | { op: "add"; shape: Partial<CanvasShape> & { type: CanvasShape["type"] } }
   | { op: "update"; target: string; set: Record<string, unknown> }
   | { op: "delete"; target: string }
-  | { op: "connect"; from: string; to: string; label?: string; id?: string; name?: string; kind?: "arrow" | "line" }
+  | {
+      op: "connect";
+      from: string;
+      to: string;
+      label?: string;
+      id?: string;
+      name?: string;
+      kind?: "arrow" | "line";
+      routing?: "straight" | "curved" | "orthogonal";
+      arrowStart?: boolean;
+      arrowEnd?: boolean;
+    }
   | {
       op: "place";
       target: string;
@@ -38,6 +49,11 @@ const DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
   rectangle: { width: 160, height: 80 },
   ellipse: { width: 160, height: 80 },
   diamond: { width: 160, height: 80 },
+  triangle: { width: 160, height: 100 },
+  cylinder: { width: 160, height: 100 },
+  cloud: { width: 180, height: 100 },
+  hexagon: { width: 160, height: 100 },
+  star: { width: 120, height: 120 },
   sticky: { width: 180, height: 180 },
   text: { width: 120, height: 30 },
   frame: { width: 400, height: 300 },
@@ -172,7 +188,15 @@ function applyConnect(
   doc: CanvasDocument,
   from: CanvasShape,
   to: CanvasShape,
-  op: { label?: string; id?: string; name?: string; kind?: "arrow" | "line" }
+  op: {
+    label?: string;
+    id?: string;
+    name?: string;
+    kind?: "arrow" | "line";
+    routing?: "straight" | "curved" | "orthogonal";
+    arrowStart?: boolean;
+    arrowEnd?: boolean;
+  }
 ): CanvasShape {
   if (from.type === "arrow" || from.type === "line") throw new OpError(`connect "from" cannot be an arrow/line: ${from.id}`);
   if (to.type === "arrow" || to.type === "line") throw new OpError(`connect "to" cannot be an arrow/line: ${to.id}`);
@@ -189,6 +213,9 @@ function applyConnect(
     end: { shapeId: to.id, anchor: "auto" },
     ...(op.label ? { label: op.label } : {}),
     ...(op.name ? { name: op.name } : {}),
+    ...(op.routing ? { routing: op.routing } : {}),
+    ...(op.arrowStart !== undefined ? { arrowStart: op.arrowStart } : {}),
+    ...(op.arrowEnd !== undefined ? { arrowEnd: op.arrowEnd } : {}),
   };
   return arrow;
 }

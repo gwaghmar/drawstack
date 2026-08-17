@@ -9,7 +9,7 @@ drawstack is an AI-powered architecture and diagram studio for turning plain-lan
 ## What It Does
 
 - Generates the right diagram type from a short prompt.
-- Supports 8 diagram engines: Mermaid, Excalidraw, React Flow, ECharts, Nivo, tldraw, BPMN, and cloud architecture diagrams.
+- Supports 8 diagram engines: Mermaid, Excalidraw, React Flow, ECharts, Nivo, Konva (Freeform canvas), BPMN, and cloud architecture diagrams.
 - Exports exact-size PNG and SVG assets for docs, decks, social posts, and embeds.
 - Saves projects with revision history, public share links, iframe embeds, and real Open Graph previews.
 - Supports multi-provider AI through OpenAI, Anthropic, Google, Groq, and Mistral.
@@ -39,7 +39,7 @@ Mermaid source for the diagram image lives in [`docs/assets/flowstudio-architect
 - Next.js 16 App Router, React 19, TypeScript, Tailwind CSS
 - Drizzle ORM with Supabase/Postgres
 - Vercel AI SDK with OpenAI, Anthropic, Google, Groq, and Mistral providers
-- Mermaid, Excalidraw, React Flow, ECharts, Nivo, tldraw, and bpmn-js
+- Mermaid, Excalidraw, React Flow, ECharts, Nivo, Konva (Freeform canvas), and bpmn-js
 - pnpm workspaces with `apps/web`, `packages/core`, `packages/cli`, and `packages/mcp-server`
 
 ## Quick Start
@@ -85,10 +85,4 @@ pnpm mcp:dev      # run the MCP server
 
 ## Project Status
 
-drawstack has shipped the core editor, AI generation, save/share/embed workflows, brand kit support, templates, real OG previews, streaming Mermaid preview, and cloud architecture diagrams. 22 diagram types total.
-
-**In progress**: an agent-native freeform canvas (AI + human co-editing the same
-JSON scene graph) to replace tldraw, whose license blocks commercial use. See
-`docs/planning/freeform-canvas-engine-plan.md` (STATUS section) for exact
-current status and next steps — also the entry point for any agent continuing
-this work.
+drawstack has shipped the core editor, AI generation, save/share/embed workflows, brand kit support, templates, real OG previews, streaming Mermaid preview, cloud architecture diagrams, and the agent-native freeform canvas (replacing tldraw). 22 diagram types total. See `docs/planning/freeform-canvas-engine-plan.md` for full design and architecture.

@@ -428,3 +428,55 @@ describe("arrow-to-arrow binding validation (freeform-canvas)", () => {
     assert.ok(errors.some((e) => e.includes('Arrow arr2 endpoint may not bind to arrow/line "arr1"')));
   });
 });
+
+describe("universal shapes and connector options in applyCanvasOps", () => {
+  it("adds triangle, cylinder, cloud, hexagon, and star shapes with defaults", () => {
+    const doc: CanvasDocument = { version: 1, shapes: [] };
+    const result = applyCanvasOps(doc, [
+      { op: "add", shape: { type: "triangle", name: "tri" } },
+      { op: "add", shape: { type: "cylinder", name: "db" } },
+      { op: "add", shape: { type: "cloud", name: "api" } },
+      { op: "add", shape: { type: "hexagon", name: "hex" } },
+      { op: "add", shape: { type: "star", name: "star" } },
+    ]);
+
+    assert.equal(result.applied, 5);
+    assert.equal(result.errors.length, 0);
+    assert.equal(result.doc.shapes.length, 5);
+    const dbShape = result.doc.shapes.find((s) => s.name === "db") as any;
+    assert.equal(dbShape.type, "cylinder");
+    assert.equal(dbShape.width, 160);
+    assert.equal(dbShape.height, 100);
+  });
+
+  it("connects shapes with orthogonal routing and arrowStart/arrowEnd flags", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        { id: "s1", type: "rectangle", x: 0, y: 0, width: 100, height: 50 },
+        { id: "s2", type: "cylinder", x: 200, y: 200, width: 100, height: 80 },
+      ],
+    };
+
+    const result = applyCanvasOps(doc, [
+      {
+        op: "connect",
+        from: "s1",
+        to: "s2",
+        label: "queries",
+        routing: "orthogonal",
+        arrowStart: true,
+        arrowEnd: true,
+      },
+    ]);
+
+    assert.equal(result.applied, 1);
+    assert.equal(result.errors.length, 0);
+    const arrow = result.doc.shapes.find((s) => s.type === "arrow") as ArrowShape;
+    assert.ok(arrow);
+    assert.equal(arrow.label, "queries");
+    assert.equal(arrow.routing, "orthogonal");
+    assert.equal(arrow.arrowStart, true);
+    assert.equal(arrow.arrowEnd, true);
+  });
+});

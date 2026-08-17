@@ -22,10 +22,6 @@ const NivoRenderer = dynamic(
   () => import("./diagrams/nivo-renderer").then((m) => m.NivoRenderer),
   { ssr: false }
 );
-const TldrawRenderer = dynamic(
-  () => import("./diagrams/tldraw-renderer").then((m) => m.TldrawRenderer),
-  { ssr: false }
-);
 const BpmnRenderer = dynamic(
   () => import("./diagrams/bpmn-renderer").then((m) => m.BpmnRenderer),
   { ssr: false }
@@ -122,7 +118,6 @@ export function EmbedViewer({ token }: { token: string }) {
     reactflow: "Node graph",
     echarts: "Chart",
     nivo: "Chart",
-    tldraw: "Canvas",
     bpmn: "BPMN process",
     cloud: "Cloud architecture",
     erd: "Database schema",
@@ -182,9 +177,6 @@ export function EmbedViewer({ token }: { token: string }) {
         <div className="h-full w-full p-2">
           <NivoRenderer source={data.source} />
         </div>
-      )}
-      {diagramType === "tldraw" && (
-        <TldrawRenderer source={data.source} readOnly onChange={() => {}} />
       )}
       {diagramType === "freeform" && (
         <FreeformRenderer source={data.source} readOnly onChange={() => {}} />

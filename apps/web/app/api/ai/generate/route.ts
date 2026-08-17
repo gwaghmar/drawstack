@@ -90,7 +90,7 @@ function defaultIntentPlan(prompt: string): IntentPlan {
 }
 
 const VALID_PRESET_IDS: SocialPresetId[] = ["square_feed", "vertical_feed", "story_reel", "landscape", "link_preview"];
-const VALID_DIAGRAM_TYPES: DiagramType[] = ["mermaid", "excalidraw", "reactflow", "echarts", "nivo", "tldraw", "freeform", "bpmn", "cloud", "erd", "orgchart", "timeline", "versus", "matrix2x2", "funnel", "venn", "tierlist", "iceberg", "alignment", "budget", "habits", "bingo", "bracket"];
+const VALID_DIAGRAM_TYPES: DiagramType[] = ["mermaid", "excalidraw", "reactflow", "echarts", "nivo", "freeform", "bpmn", "cloud", "erd", "orgchart", "timeline", "versus", "matrix2x2", "funnel", "venn", "tierlist", "iceberg", "alignment", "budget", "habits", "bingo", "bracket"];
 
 function parseIntentPlan(raw: string, prompt: string): IntentPlan & { _fallback?: boolean } {
   const repaired = parsePossiblyBrokenJson(raw);
@@ -322,7 +322,6 @@ export async function POST(req: Request) {
       reactflow:  "Extract: node types (start/process/decision/end), edge directions, swim-lane groupings, workflow stages.",
       echarts:    "Extract: series names, axis type (category/time/value), time granularity (daily/monthly/yearly), chart subtype recommendation. Set suggestedSubtype to bar/line/pie/scatter/radar/sankey/treemap/funnel/gauge.",
       nivo:       "Extract: data series names, comparison axes, chart subtype. Set suggestedSubtype to bar/line/pie/radar/treemap/sankey/network/chord/calendar/waffle.",
-      tldraw:     "Extract: spatial groupings, hierarchy levels, connection patterns, shape categories.",
       bpmn:       "Extract: participants/lanes, gateway types (exclusive/parallel/inclusive), process stages, happy path vs exception paths, SLA constraints.",
       cloud:      "Extract: cloud provider (aws/gcp/azure/generic), the services/components involved, and the request/data flow direction (clients -> edge -> gateway -> compute -> data). Map each component to a service token from the cloud icon registry.",
       erd:        "Extract: every entity/table, its columns with SQL types, primary keys (PK), foreign keys (FK), unique keys (UK), and the relationships (1:1 / 1:N / N:M) between tables.",
@@ -359,7 +358,7 @@ Return ONLY JSON matching this shape:
   "clarificationQuestion": "one concise question",
   "clarificationOptions": ["short answer option 1", "short answer option 2", "short answer option 3 (optional)"],
   "suggestedPresetId": "landscape|square_feed|story_reel|vertical_feed|link_preview|null",
-  "suggestedDiagramType": "mermaid|excalidraw|reactflow|echarts|nivo|tldraw|bpmn|cloud|erd|orgchart|timeline|versus|matrix2x2|funnel|venn|tierlist|iceberg|alignment|budget|habits|bingo|bracket|null"
+  "suggestedDiagramType": "mermaid|excalidraw|reactflow|echarts|nivo|freeform|bpmn|cloud|erd|orgchart|timeline|versus|matrix2x2|funnel|venn|tierlist|iceberg|alignment|budget|habits|bingo|bracket|null"
 }
 Rules:
 - Base ambiguity on missing critical nouns/actors/flow direction.
@@ -383,7 +382,7 @@ Rules:
   - "org chart", "organizational chart", "reporting structure", "company hierarchy", "who reports to whom", "team structure", "leadership chart" → "orgchart"
   - "whiteboard", "sketch", "brainstorm", "freehand", "wireframe", "rough drawing" → "excalidraw"
   - "BPMN", "business process model", "enterprise workflow", "swim lanes process", "service task" → "bpmn"
-  - "infinite canvas", "design mockup", "presentation canvas", "slide layout" → "tldraw"
+  - "infinite canvas", "design mockup", "presentation canvas", "slide layout", "freeform canvas", "sticky note board" → "freeform"
   - "flowchart", "sequence diagram", "class diagram", "Gantt", "mindmap", "state machine", "C4", "journey map" → "mermaid"
   - "ERD", "database schema", "entity relationship", "data model", "tables and relationships", "DB design", "schema design" → "erd"
   - "architecture diagram", "system design", "infrastructure", "cloud diagram", "AWS", "GCP", "Azure", "how it's deployed", "deployment topology" → "cloud"

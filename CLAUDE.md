@@ -53,7 +53,7 @@ share / embed / export.
 - **Auth.js** (Supabase) — mock-auth mode for local
 - **Stripe** billing — checkout + portal routes under `app/api/billing/`, webhook at `app/api/webhooks/stripe/route.ts`, UI at `/app/billing`
 - Monorepo (pnpm): `apps/web` (Next app) + `packages/core` (shared types, prompts, themes) + `packages/cli` + `packages/mcp-server` (root script `pnpm mcp:dev`)
-- Mermaid + Excalidraw + ReactFlow (@xyflow) + ECharts + Nivo + tldraw + bpmn-js for diagram rendering
+- Mermaid + Excalidraw + ReactFlow (@xyflow) + ECharts + Nivo + bpmn-js + Konva (Freeform canvas) for diagram rendering
 
 ## Diagram types supported (22)
 
@@ -64,7 +64,7 @@ share / embed / export.
 | `reactflow` | Custom node graphs | drag-to-edit + source |
 | `echarts` | Production charts | JSON source |
 | `nivo` | Polished chart variants | JSON source (read-only) |
-| `tldraw` | Free-form canvas | visual canvas + source |
+| `freeform` | Free-form whiteboard canvas — flat shape/arrow scene graph | visual canvas (Konva) + JSON source + AI ops |
 | `bpmn` | BPMN 2.0 business process | visual modeler + XML source |
 | `cloud` | AWS/GCP/Azure system & infra diagrams with service icons | drag-to-edit + source (xyflow) |
 | `erd` | Visual database schema — table nodes with typed columns, PK/FK/UK, relationships | drag-to-edit + source (xyflow) |
@@ -88,41 +88,24 @@ All renderers live in `apps/web/components/diagrams/*-renderer.tsx`. The cloud, 
 `apps/web/components/editor-client.tsx` (one big file — every diagram type
 branches inside its render section).
 
-## In progress: agent-native canvas engine (replacing tldraw)
+## Shipped: agent-native freeform canvas (replaced tldraw)
 
-tldraw's license requires a separate paid commercial agreement for production use —
-not free for a product we sell. Direction (re-scoped 2026-08-16 after a research
-pass): build an **agent-native** freeform canvas — a compact JSON scene graph that
-AI agents edit via id/name-addressed patch ops and humans edit via the Konva canvas,
-same document, no translation layer. The differentiator is the ops/schema layer, not
-rebuilt drawing primitives. Excalidraw (MIT) is the codebase to mine with attribution;
-tldraw is ideas-from-docs only, never code. Full plan (v2, single source of truth):
-`docs/planning/freeform-canvas-engine-plan.md`.
+`tldraw` was removed to eliminate commercial licensing restrictions. In its place:
+our custom JSON-scene-graph canvas (Konva-rendered) that both humans (drag-to-edit)
+and AI agents (id/name-addressed patch operations via `apply_ops`) edit as the same document —
+no translation layer between what the AI writes and what the human sees.
 
-**Status: plan-v2 milestones A–J DONE and committed (2026-08-16)** — schema +
-ops engine (`freeform-ops.ts`) + model view (`freeform-model-view.ts`) + full
-renderer (select/drag/snap/resize/rotate/text-edit/arrows-with-binding/frames/
-zoom-pan) + AI generation wiring + `apply_ops` agent tool + app-wide wiring.
-186 unit tests green. **Pushed only through milestone G — H/I/J are local,
-unpushed, gated on the first real AI round-trip test.** Next steps, exact
-verification commands, milestone-K removal plan (production DB verified: zero
-tldraw rows → clean removal), and hard-won implementation rules are all in the
-STATUS section at the top of the build order in the plan doc. Read it first.
+**Full plan, history, and deferred polish: `docs/planning/freeform-canvas-engine-plan.md`
+— read the "STATUS" section at the top of the build order.**
+Milestones A–K are complete, tested, and verified:
 - `apps/web/lib/diagrams/freeform-canvas.ts` — scene-graph schema (`CanvasDocument`/
   `CanvasShape`) + pure functions (parse/serialize/resolveArrowEndpoint/validateRefs).
-- `apps/web/lib/diagrams/freeform-canvas.test.ts` — unit tests, in `test:unit`.
-- `apps/web/components/diagrams/freeform-renderer.tsx` — Konva-based renderer.
-  Working: static rendering, select (click/shift-click/marquee), drag-to-move,
-  delete, keyboard nudge, `onChange` wiring with the same ref-guard pattern as
-  `tldraw-renderer.tsx`. NOT yet done: resize/rotate, text editing, snapping, arrow
-  binding, frames, sticky notes, zoom/pan, AI generation wiring, app wiring.
-- **Not reachable in the app yet** — no `"freeform"` entry in `DiagramType`
-  (`packages/core/src/diagram-types.ts`), no render branch in `editor-client.tsx`.
-  Safe to ignore during normal work on this repo until that wiring lands (last
-  build-order step, milestone 12).
-- An isolated working copy lives at `~/FLOWSTUDIO-canvas-lab` (separate directory,
-  not part of this git history) with a throwaway `/freeform-lab` test harness page
-  for manually clicking through interactions before porting stable pieces back here.
+- `apps/web/lib/diagrams/freeform-ops.ts` — surgical patch ops engine (`applyCanvasOps`).
+- `apps/web/lib/diagrams/freeform-serialization.ts` — compact model view serialization.
+- `apps/web/components/diagrams/freeform-renderer.tsx` — Konva-based renderer with select,
+  drag, snap, resize/rotate (`Konva.Transformer`), text-editing, arrow binding, frames,
+  sticky notes, zoom/pan.
+- `apps/web/app/api/ai/agent/route.ts` & `editor-client.tsx` — `apply_ops` tool integration.
   Pure-lib milestones (A–C) don't need it — they run on unit tests in this repo.
 
 ## Status — what's shipped

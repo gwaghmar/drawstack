@@ -164,11 +164,6 @@ const NivoSchema = z.object({
   data: z.unknown().refine((v) => v !== undefined && v !== null, { message: "Nivo JSON must have a 'data' field" }),
 });
 
-const TldrawSchema = z.union([
-  z.object({ elements: z.array(z.unknown()).min(1) }),
-  z.object({ document: z.object({ store: z.record(z.string(), z.unknown()) }) }),
-]);
-
 const FreeformTextSchema = z.object({
   content: z.string(),
   fontSize: z.number().optional(),
@@ -186,6 +181,7 @@ const FreeformBaseSchema = z.object({
   fill: z.string().optional(),
   stroke: z.string().optional(),
   strokeWidth: z.number().optional(),
+  strokeDash: z.enum(["solid", "dashed", "dotted"]).optional(),
   opacity: z.number().optional(),
   frameId: z.string().nullable().optional(),
   locked: z.boolean().optional(),
@@ -193,12 +189,29 @@ const FreeformBaseSchema = z.object({
 });
 
 const FreeformSizedShapeSchema = FreeformBaseSchema.extend({
-  type: z.enum(["rectangle", "ellipse", "diamond", "sticky", "text", "frame"]),
+  type: z.enum([
+    "rectangle",
+    "ellipse",
+    "diamond",
+    "triangle",
+    "cylinder",
+    "cloud",
+    "hexagon",
+    "star",
+    "sticky",
+    "text",
+    "frame",
+  ]),
   x: z.number(),
   y: z.number(),
   width: z.number(),
   height: z.number(),
   cornerRadius: z.number().optional(),
+});
+
+const FreeformPathShapeSchema = FreeformBaseSchema.extend({
+  type: z.literal("path"),
+  points: z.array(z.tuple([z.number(), z.number()])),
 });
 
 const FreeformEndpointSchema = z.union([
@@ -214,12 +227,16 @@ const FreeformArrowShapeSchema = FreeformBaseSchema.extend({
   start: FreeformEndpointSchema,
   end: FreeformEndpointSchema,
   label: z.string().optional(),
+  routing: z.enum(["straight", "curved", "orthogonal"]).optional(),
+  arrowStart: z.boolean().optional(),
+  arrowEnd: z.boolean().optional(),
 });
 
-const FreeformShapeSchema = z.union([FreeformSizedShapeSchema, FreeformArrowShapeSchema]);
+const FreeformShapeSchema = z.union([FreeformSizedShapeSchema, FreeformPathShapeSchema, FreeformArrowShapeSchema]);
 
 const FreeformCanvasSchema = z.object({
   version: z.literal(1),
+  renderMode: z.enum(["clean", "sketchy"]).optional(),
   shapes: z.array(FreeformShapeSchema).min(1, "Freeform canvas must have at least one shape"),
 });
 
@@ -246,7 +263,7 @@ export async function validateAndRepairOutput(diagramType: DiagramType, raw: str
     return { ok: true, source: cleaned };
   }
 
-  if (["excalidraw", "reactflow", "echarts", "nivo", "tldraw", "freeform"].includes(diagramType)) {
+  if (["excalidraw", "reactflow", "echarts", "nivo", "freeform"].includes(diagramType)) {
     const repaired = parsePossiblyBrokenJson(cleaned);
     if (!repaired) return { ok: false, reason: `Invalid JSON for ${diagramType}` };
 
@@ -270,10 +287,6 @@ export async function validateAndRepairOutput(diagramType: DiagramType, raw: str
     if (diagramType === "nivo") {
       const result = NivoSchema.safeParse(parsed);
       if (!result.success) return { ok: false, reason: `Nivo structure invalid: ${result.error.issues[0]?.message}` };
-    }
-    if (diagramType === "tldraw") {
-      const result = TldrawSchema.safeParse(parsed);
-      if (!result.success) return { ok: false, reason: `tldraw structure invalid: must have elements[] or document.store` };
     }
     if (diagramType === "freeform") {
       const result = FreeformCanvasSchema.safeParse(parsed);

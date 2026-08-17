@@ -26,10 +26,6 @@ const NivoRenderer = dynamic(
   () => import("./diagrams/nivo-renderer").then((m) => m.NivoRenderer),
   { ssr: false }
 );
-const TldrawRenderer = dynamic(
-  () => import("./diagrams/tldraw-renderer").then((m) => m.TldrawRenderer),
-  { ssr: false }
-);
 const BpmnRenderer = dynamic(
   () => import("./diagrams/bpmn-renderer").then((m) => m.BpmnRenderer),
   { ssr: false }
@@ -136,7 +132,6 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
     reactflow: "Node graph",
     echarts: "Chart",
     nivo: "Chart",
-    tldraw: "Canvas",
     bpmn: "BPMN process",
     cloud: "Cloud architecture",
     erd: "Database schema",
@@ -242,11 +237,6 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
               {diagramType === "nivo" && (
                 <div className="h-[500px] p-4">
                   <NivoRenderer source={data.source} />
-                </div>
-              )}
-              {diagramType === "tldraw" && (
-                <div className="h-[600px]">
-                  <TldrawRenderer source={data.source} readOnly onChange={() => {}} />
                 </div>
               )}
               {diagramType === "freeform" && (

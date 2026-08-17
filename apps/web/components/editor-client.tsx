@@ -115,10 +115,6 @@ const NivoRenderer = dynamic(
   () => import("./diagrams/nivo-renderer").then((m) => ({ default: m.NivoRenderer })),
   { ssr: false, loading: () => <CanvasLoader label="Chart" /> }
 );
-const TldrawRenderer = dynamic(
-  () => import("./diagrams/tldraw-renderer").then((m) => ({ default: m.TldrawRenderer })),
-  { ssr: false, loading: () => <CanvasLoader label="Canvas" /> }
-);
 const BpmnRenderer = dynamic(
   () => import("./diagrams/bpmn-renderer").then((m) => ({ default: m.BpmnRenderer })),
   { ssr: false, loading: () => <CanvasLoader label="BPMN" /> }
@@ -230,10 +226,6 @@ function summarizeDiagramSource(diagramType: DiagramType, source: string): strin
     if (diagramType === "nivo") {
       const dataCount = Array.isArray(parsed.data) ? parsed.data.length : 0;
       return `Nivo chart type "${parsed.type ?? "unknown"}" with ${dataCount} data items.`;
-    }
-    if (diagramType === "tldraw") {
-      const count = Array.isArray(parsed.elements) ? parsed.elements.length : 0;
-      return `tldraw document with ${count} elements.`;
     }
     if (diagramType === "freeform") {
       const parsedFreeform = parsed as { shapes?: unknown[] };
@@ -1635,7 +1627,6 @@ export function EditorClient({
     echarts: ["Change to line chart", "Add second series", "Make it a pie chart", "Add gradient colors"],
     nivo: ["Change to bar chart", "Add monthly data", "Use dark theme"],
     bpmn: ["Add approval gateway", "Add error boundary", "Add a swimlane"],
-    tldraw: ["Add shapes", "Create a wireframe", "Add text labels"],
     freeform: ["Add shapes", "Create a wireframe", "Add text labels"],
   };
 
@@ -2659,7 +2650,7 @@ export function EditorClient({
                       </label>
                     )}
                   </div>
-                  {["excalidraw", "tldraw", "freeform"].includes(diagramType) && (
+                  {["excalidraw", "freeform"].includes(diagramType) && (
                     <p className="mt-2 text-[10px] leading-snug text-slate-400">Native canvas export — custom sizes don&apos;t apply.</p>
                   )}
                 </div>
@@ -2836,7 +2827,6 @@ export function EditorClient({
               <NivoRenderer source={source} />
             </div>
           )}
-          {diagramType === "tldraw" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl" style={{ minHeight: "600px" }}><TldrawRenderer source={source} onChange={setSource} /></div>}
           {diagramType === "freeform" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}><FreeformRenderer source={source} onChange={setSource} /></div>}
           {diagramType === "bpmn" && (
             <div className="flex h-full min-h-0 w-full max-w-full flex-col self-stretch">

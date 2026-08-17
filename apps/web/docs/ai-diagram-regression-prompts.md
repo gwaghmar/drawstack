@@ -22,9 +22,9 @@ Use this checklist to manually validate that generation quality is coherent for 
 - Low context: `team velocity`
 - High detail: `Generate a bar chart dataset for team velocity by sprint for 3 squads with points committed vs completed and readable labels.`
 
-### tldraw
-- Low context: `app architecture`
-- High detail: `Design a canvas layout for mobile app architecture: client, API gateway, auth, services, database, cache, queue, and observability.`
+### Freeform Canvas
+- Low context: `project kickoff board`
+- High detail: `Create a freeform canvas board with a frame, three named boxes for research, design, and build connected in order, and a sticky note reminder.`
 
 ### BPMN
 - Low context: `purchase approval process`

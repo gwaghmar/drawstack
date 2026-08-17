@@ -461,3 +461,45 @@ describe("resolveColor", () => {
     assert.equal(resolveColor(undefined), undefined);
   });
 });
+
+describe("Universal Shapes and Path bounds", () => {
+  it("computes bounds correctly for PathShape from points", () => {
+    const doc: CanvasDocument = { version: 1, shapes: [] };
+    const path = {
+      id: "p1",
+      type: "path" as const,
+      x: 0,
+      y: 0,
+      points: [
+        [10, 20],
+        [100, 250],
+        [50, 80],
+      ] as [number, number][],
+    };
+    const bounds = getShapeBounds(doc, path);
+    assert.equal(bounds.x, 10);
+    assert.equal(bounds.y, 20);
+    assert.equal(bounds.width, 90);
+    assert.equal(bounds.height, 230);
+  });
+
+  it("round-trips universal shapes (triangle, cylinder, cloud, hexagon, star, path)", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      renderMode: "sketchy",
+      shapes: [
+        { id: "t1", type: "triangle", x: 10, y: 10, width: 100, height: 80, fill: "3" },
+        { id: "c1", type: "cylinder", x: 120, y: 10, width: 100, height: 90, fill: "4" },
+        { id: "cl1", type: "cloud", x: 230, y: 10, width: 140, height: 90, fill: "5" },
+        { id: "h1", type: "hexagon", x: 380, y: 10, width: 110, height: 90, fill: "6" },
+        { id: "st1", type: "star", x: 500, y: 10, width: 100, height: 100, fill: "1" },
+        { id: "p1", type: "path", x: 0, y: 0, points: [[0, 0], [50, 50]] },
+      ],
+    };
+
+    const serialized = serializeFreeformDocument(doc);
+    const { doc: parsed, errors } = parseFreeformSource(serialized);
+    assert.deepEqual(errors, []);
+    assert.deepEqual(parsed, doc);
+  });
+});
