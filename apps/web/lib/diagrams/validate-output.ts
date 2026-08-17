@@ -94,12 +94,16 @@ function cleanModelOutput(text: string): string {
 // ---------------------------------------------------------------------------
 
 const FreeformTextSchema = z.object({
-  content: z.string(),
+  // Renderer guards with `shape.text?.content` and skips silently when absent
+  // (freeform-svg.ts, freeform-renderer.tsx) -- a text block with no content
+  // is inert, not malformed, and must not fail the whole document.
+  content: z.string().optional(),
   fontSize: z.number().optional(),
   fontFamily: z.string().optional(),
   align: z.enum(["left", "center", "right"]).optional(),
   color: z.string().optional(),
   bold: z.boolean().optional(),
+  wrap: z.boolean().optional(),
 });
 
 const FreeformBaseSchema = z.object({

@@ -78,3 +78,29 @@ test("freeform: macro shape omitting width/height for auto-sizing is ok", async 
   );
   assert.equal(r.ok, true);
 });
+
+test("freeform: shape with a contentless decorative text block is ok", async () => {
+  // Reproduces a second live-production failure found immediately after the
+  // width/height fix above: the AI attached a text style object (fontSize/
+  // fontFamily/fill, no content) to a step_timeline shape. The renderer
+  // guards with `shape.text?.content` and skips silently -- one shape's
+  // harmless mistake was rejecting the entire document.
+  const r = await validateAndRepairOutput(
+    "freeform",
+    JSON.stringify({
+      version: 1,
+      shapes: [
+        {
+          id: "s1",
+          type: "step_timeline",
+          title: "Customer Onboarding",
+          steps: [{ label: "STEP 1", title: "Sign Up", description: "Create an account." }],
+          text: { wrap: true, fontSize: 14, fontFamily: "Inter, sans-serif" },
+          x: 100,
+          y: 50,
+        },
+      ],
+    })
+  );
+  assert.equal(r.ok, true);
+});
