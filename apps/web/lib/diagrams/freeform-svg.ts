@@ -626,15 +626,18 @@ export function freeformToSvg(
 
     const rawFill = shape.fill ? resolveColor(shape.fill) ?? shape.fill : shape.type === "sticky" ? "#fef08a" : cardBg;
     const fill = rawFill === "transparent" ? "none" : rawFill;
-    // Konva falls back to #1e293b for a stroke-less shape; the exporter used a
-    // pale card border, so unstroked shapes and connectors came out washed out.
+    // Konva falls back to #1e293b for the primitives it draws natively; the
+    // exporter used a pale card border, so unstroked primitives and connectors
+    // came out washed out. Macro shapes are rasterized through this exporter,
+    // so they never drifted — they keep the card border they were designed with.
+    const usesNativeStrokeDefault = FLAT_BY_DEFAULT_TYPES.has(shape.type) || shape.type === "arrow" || shape.type === "line";
     const stroke = shape.stroke
       ? resolveColor(shape.stroke) ?? shape.stroke
       : shape.type === "frame"
         ? (isDark ? "#334155" : "#cbd5e1")
-        : isDark
-          ? cardBorder
-          : "#1e293b";
+        : usesNativeStrokeDefault && !isDark
+          ? "#1e293b"
+          : cardBorder;
     const strokeWidth = shape.strokeWidth ?? 1.5;
     const opacity = shape.opacity !== undefined ? `opacity="${shape.opacity}"` : "";
     const strokeDash =
