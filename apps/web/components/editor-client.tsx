@@ -123,6 +123,10 @@ const BpmnRenderer = dynamic(
   () => import("./diagrams/bpmn-renderer").then((m) => ({ default: m.BpmnRenderer })),
   { ssr: false, loading: () => <CanvasLoader label="BPMN" /> }
 );
+const FreeformRenderer = dynamic(
+  () => import("./diagrams/freeform-renderer").then((m) => ({ default: m.FreeformRenderer })),
+  { ssr: false, loading: () => <CanvasLoader label="Canvas" /> }
+);
 
 function CanvasLoader({ label }: { label: string }) {
   return (
@@ -230,6 +234,11 @@ function summarizeDiagramSource(diagramType: DiagramType, source: string): strin
     if (diagramType === "tldraw") {
       const count = Array.isArray(parsed.elements) ? parsed.elements.length : 0;
       return `tldraw document with ${count} elements.`;
+    }
+    if (diagramType === "freeform") {
+      const parsedFreeform = parsed as { shapes?: unknown[] };
+      const count = Array.isArray(parsedFreeform.shapes) ? parsedFreeform.shapes.length : 0;
+      return `Freeform canvas with ${count} shapes.`;
     }
   } catch {
     return `${diagramType} source is present but not fully parseable.`;
@@ -1627,6 +1636,7 @@ export function EditorClient({
     nivo: ["Change to bar chart", "Add monthly data", "Use dark theme"],
     bpmn: ["Add approval gateway", "Add error boundary", "Add a swimlane"],
     tldraw: ["Add shapes", "Create a wireframe", "Add text labels"],
+    freeform: ["Add shapes", "Create a wireframe", "Add text labels"],
   };
 
   const sourceLabel = ["mermaid", "bpmn"].includes(diagramType) ? "Source" : "JSON Source";
@@ -2649,7 +2659,7 @@ export function EditorClient({
                       </label>
                     )}
                   </div>
-                  {["excalidraw", "tldraw"].includes(diagramType) && (
+                  {["excalidraw", "tldraw", "freeform"].includes(diagramType) && (
                     <p className="mt-2 text-[10px] leading-snug text-slate-400">Native canvas export — custom sizes don&apos;t apply.</p>
                   )}
                 </div>
@@ -2827,6 +2837,7 @@ export function EditorClient({
             </div>
           )}
           {diagramType === "tldraw" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl" style={{ minHeight: "600px" }}><TldrawRenderer source={source} onChange={setSource} /></div>}
+          {diagramType === "freeform" && <div className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}><FreeformRenderer source={source} onChange={setSource} /></div>}
           {diagramType === "bpmn" && (
             <div className="flex h-full min-h-0 w-full max-w-full flex-col self-stretch">
               <div

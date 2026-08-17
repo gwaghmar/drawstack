@@ -46,6 +46,10 @@ const SocialCardRenderer = dynamic(
   () => import("./diagrams/social-card-renderer").then((m) => m.SocialCardRenderer),
   { ssr: false }
 );
+const FreeformRenderer = dynamic(
+  () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
+  { ssr: false }
+);
 
 type ShareData = {
   title: string;
@@ -181,6 +185,9 @@ export function EmbedViewer({ token }: { token: string }) {
       )}
       {diagramType === "tldraw" && (
         <TldrawRenderer source={data.source} readOnly onChange={() => {}} />
+      )}
+      {diagramType === "freeform" && (
+        <FreeformRenderer source={data.source} readOnly onChange={() => {}} />
       )}
       {diagramType === "bpmn" && (
         <BpmnRenderer source={data.source} readOnly onChange={() => {}} />

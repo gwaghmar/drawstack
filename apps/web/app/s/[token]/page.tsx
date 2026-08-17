@@ -8,7 +8,7 @@ import { sha256Hex } from "@/lib/crypto";
 
 const TYPE_LABELS: Record<string, string> = {
   mermaid: "Text flowchart", excalidraw: "Whiteboard", reactflow: "Node graph",
-  echarts: "Chart", nivo: "Chart", tldraw: "Canvas", bpmn: "BPMN process",
+  echarts: "Chart", nivo: "Chart", tldraw: "Canvas", freeform: "Free Canvas", bpmn: "BPMN process",
   cloud: "Cloud architecture", erd: "Database schema", orgchart: "Org chart",
   timeline: "Timeline", versus: "Versus", matrix2x2: "2x2 Matrix", funnel: "Funnel",
   venn: "Venn Diagram", tierlist: "Tier List", iceberg: "Iceberg", alignment: "Alignment Chart",

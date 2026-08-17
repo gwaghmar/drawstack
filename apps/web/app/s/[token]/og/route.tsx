@@ -14,6 +14,7 @@ const TYPE_LABELS: Record<string, string> = {
   echarts: "Chart",
   nivo: "Chart",
   tldraw: "Canvas",
+  freeform: "Free Canvas",
   bpmn: "BPMN process",
   cloud: "Cloud architecture",
   erd: "Database schema",

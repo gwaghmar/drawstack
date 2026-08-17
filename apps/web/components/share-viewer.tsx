@@ -50,6 +50,10 @@ const SocialCardRenderer = dynamic(
   () => import("./diagrams/social-card-renderer").then((m) => m.SocialCardRenderer),
   { ssr: false }
 );
+const FreeformRenderer = dynamic(
+  () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
+  { ssr: false }
+);
 
 type ShareData = {
   title: string;
@@ -243,6 +247,11 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
               {diagramType === "tldraw" && (
                 <div className="h-[600px]">
                   <TldrawRenderer source={data.source} readOnly onChange={() => {}} />
+                </div>
+              )}
+              {diagramType === "freeform" && (
+                <div className="h-[600px]">
+                  <FreeformRenderer source={data.source} readOnly onChange={() => {}} />
                 </div>
               )}
               {diagramType === "bpmn" && (
