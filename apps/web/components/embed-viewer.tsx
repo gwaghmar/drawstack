@@ -135,6 +135,7 @@ export function EmbedViewer({ token }: { token: string }) {
     habits: "Habit Tracker",
     bingo: "Bingo Card",
     bracket: "Bracket",
+    freeform: "Free Canvas",
   };
   const bg = diagramType === "mermaid" ? (theme.themeVariables.background ?? "#fff") : "#fff";
 

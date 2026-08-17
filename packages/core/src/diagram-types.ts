@@ -22,7 +22,8 @@ export type DiagramType =
   | "budget"        // Income/expense breakdown social cards
   | "habits"        // Monthly habit streak grid social cards
   | "bingo"         // 5x5 bingo card social cards
-  | "bracket";      // Single-elimination tournament bracket social cards
+  | "bracket"       // Single-elimination tournament bracket social cards
+  | "freeform";     // Free-form whiteboard canvas — flat shape/arrow scene graph
 
 export type DiagramCategory =
   | "whiteboard"
@@ -56,7 +57,7 @@ export type DiagramTypeMeta = {
   icon: string;
   color: string;
   subtypes?: string[];
-  aiOutputFormat: "mermaid" | "excalidraw-json" | "reactflow-json" | "echarts-json" | "nivo-json" | "tldraw-json" | "bpmn-xml" | "cloud-json" | "erd-json" | "orgchart-json" | "social-json";
+  aiOutputFormat: "mermaid" | "excalidraw-json" | "reactflow-json" | "echarts-json" | "nivo-json" | "tldraw-json" | "bpmn-xml" | "cloud-json" | "erd-json" | "orgchart-json" | "social-json" | "freeform-json";
 };
 
 export const DIAGRAM_TYPE_META: DiagramTypeMeta[] = [
@@ -268,6 +269,16 @@ export const DIAGRAM_TYPE_META: DiagramTypeMeta[] = [
     icon: "trophy",
     color: "#ef4444",
     aiOutputFormat: "social-json",
+  },
+  {
+    id: "freeform",
+    label: "Free Canvas",
+    description: "Free-form whiteboard — sketches, spatial maps, mood boards, sticky-note boards",
+    category: "whiteboard",
+    icon: "shapes",
+    color: "#14b8a6",
+    subtypes: ["sketch", "spatial-map", "sticky-board", "mood-board"],
+    aiOutputFormat: "freeform-json",
   },
 ];
 
@@ -902,6 +913,45 @@ RULES:
 - Match count halves each round (e.g. 4 → 2 → 1)
 - Round names: "Round of 16", "Quarterfinals", "Semifinals", "Final"
 Example: {"type":"bracket","title":"Best JS Framework","rounds":[{"name":"Semifinals","matches":[{"a":"React","b":"Vue","winner":"React"},{"a":"Svelte","b":"Solid","winner":"Svelte"}]},{"name":"Final","matches":[{"a":"React","b":"Svelte"}]}]}`,
+
+  freeform: `You output ONLY valid JSON for a free-form whiteboard canvas. No explanation, no markdown, no code fences.
+
+WHEN TO USE freeform: annotated sketches, spatial/mind maps that don't reduce to a strict node-graph flow, mood boards, sticky-note boards, mixed shape+text compositions, "put these on a whiteboard" requests. Do NOT use freeform when a more specific type fits better: a strict process/sequence flow → mermaid or reactflow; cloud/infra topology → cloud; a database schema → erd; a reporting hierarchy → orgchart. Prefer the most specific type; fall back to freeform only when the request is genuinely spatial or free-form.
+
+OUTPUT CONTRACT — a single JSON CanvasDocument:
+{ "version": 1, "shapes": [ ...CanvasShape... ] }
+
+SHAPE TYPES (each shares BaseShape fields: id, name, role, x, y, rotation, fill, stroke, strokeWidth, opacity, frameId, locked, text):
+- "rectangle" | "ellipse" | "diamond" | "sticky" | "text" | "frame" — all add width, height (rectangle also has optional cornerRadius)
+- "arrow" | "line" — no x/y/width/height; position comes from "start" and "end" endpoints
+
+RULES:
+- Every shape needs a unique "id" (short, kebab-case, e.g. "db1", "step-3").
+- Give every meaningful shape a semantic "name" (e.g. "database", "api-server") so it can be referred to by name, not just id. Names must be unique across the document.
+- Set "role" only when it carries real domain meaning (e.g. "database", "decision", "note") — omit otherwise.
+- Arrows/lines connecting two named or id'd shapes MUST bind via endpoints, never raw coordinates: {"shapeId": "db1", "anchor": "auto"}. Only use free {"x": n, "y": n} endpoints for an arrow with no shape on that side (e.g. pointing at empty space, or a freehand annotation).
+- Colors: prefer the palette shorthand "1"–"6" (1 red, 2 orange, 3 yellow, 4 green, 5 blue, 6 purple) over literal hex — cheaper and brand-kit friendly. Hex is still legal when a precise color is needed.
+- Z-order is array order — later entries render on top. Put frames first, then the shapes inside them, then arrows/annotations on top.
+- "sticky" shapes are for notes/ideas — set "text.content" to the note body.
+- Use a "frame" shape (with its own name, e.g. "Phase 1") to visually group related shapes; give grouped shapes that frame's id as their "frameId".
+- Text content goes in the "text" object ({ "content": "...", optional fontSize/align/bold/color }), not in a top-level "label" field (arrows are the one exception — they support a top-level "label" for the connector's caption).
+
+LAYOUT GUIDANCE:
+- Integer coordinates only. Canvas-absolute, y grows downward.
+- Spread shapes with 40-80px gaps — no overlaps unless one shape is a frame containing others.
+- Typical shape sizes: rectangle/diamond/sticky ~160x80-200x120, frame sized to comfortably contain its children plus ~40px padding on each side.
+
+FEW-SHOT EXAMPLE:
+
+User: "Whiteboard: a 'Phase 1' frame with a Research box connected to a Design box, plus a sticky note reminding the team to talk to users"
+Expected:
+{"version":1,"shapes":[
+{"id":"frame1","type":"frame","name":"Phase 1","x":40,"y":40,"width":520,"height":280,"text":{"content":"Phase 1"}},
+{"id":"research","type":"rectangle","name":"research","role":"step","x":80,"y":120,"width":180,"height":90,"fill":"5","frameId":"frame1","text":{"content":"Research"}},
+{"id":"design","type":"rectangle","name":"design","role":"step","x":360,"y":120,"width":180,"height":90,"fill":"4","frameId":"frame1","text":{"content":"Design"}},
+{"id":"arrow1","type":"arrow","start":{"shapeId":"research","anchor":"auto"},"end":{"shapeId":"design","anchor":"auto"},"label":"handoff"},
+{"id":"note1","type":"sticky","name":"reminder","x":80,"y":360,"width":200,"height":140,"fill":"3","text":{"content":"Talk to real users before Phase 2"}}
+]}`,
 };
 
 // ─── Anti-generic directive ──────────────────────────────────────────────────
@@ -1586,6 +1636,17 @@ export const DIAGRAM_TYPE_DEFAULTS: Record<DiagramType, string> = {
       ]},
     ],
   }, null, 2),
+
+  freeform: JSON.stringify({
+    version: 1,
+    shapes: [
+      { id: "frame1", type: "frame", name: "Ideas", x: 40, y: 40, width: 480, height: 260, text: { content: "Ideas" } },
+      { id: "box1", type: "rectangle", name: "concept-a", x: 80, y: 120, width: 180, height: 90, fill: "5", frameId: "frame1", text: { content: "Concept A" } },
+      { id: "box2", type: "rectangle", name: "concept-b", x: 320, y: 120, width: 180, height: 90, fill: "4", frameId: "frame1", text: { content: "Concept B" } },
+      { id: "arrow1", type: "arrow", start: { shapeId: "box1", anchor: "auto" }, end: { shapeId: "box2", anchor: "auto" }, label: "leads to" },
+      { id: "note1", type: "sticky", name: "reminder", x: 80, y: 340, width: 200, height: 140, fill: "3", text: { content: "Add more notes here" } },
+    ],
+  }),
 };
 
 // ---------------------------------------------------------------------------

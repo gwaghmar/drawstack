@@ -149,6 +149,7 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
     habits: "Habit Tracker",
     bingo: "Bingo Card",
     bracket: "Bracket",
+    freeform: "Free Canvas",
   };
 
   return (

@@ -337,6 +337,7 @@ export async function POST(req: Request) {
       habits:     "Extract: the habit being tracked, the month, and which days were completed. Include ALL days of the month.",
       bingo:      "Extract: the theme and 25 bingo square phrases. All squares must relate to the theme.",
       bracket:    "Extract: the tournament subject, all competitors, which round they appear in, and any declared winners.",
+      freeform:   "Extract: every distinct shape/note and its spatial relationship to the others (grouped in a frame, connected by an arrow, positioned near another element). Suggest a suggestedSubtype (sketch/spatial-map/sticky-board/mood-board).",
     };
     const intentInstruction = `You are analyzing intent for a ${diagramType} diagram. ${typeHints[diagramType]}
 Return ONLY JSON matching this shape:

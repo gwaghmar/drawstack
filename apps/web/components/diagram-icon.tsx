@@ -23,6 +23,7 @@ import {
   CheckSquare,
   Hash,
   Trophy,
+  Shapes,
   type LucideIcon,
 } from "lucide-react";
 import type { DiagramType } from "@flowchart/core";
@@ -52,6 +53,7 @@ export function DiagramTypeIcon({ type, className, size }: { type: DiagramType; 
     habits: CheckSquare,
     bingo: Hash,
     bracket: Trophy,
+    freeform: Shapes,
   };
   const Icon = iconMap[type] ?? GitFork;
   return <Icon size={size ?? 18} className={className} />;
