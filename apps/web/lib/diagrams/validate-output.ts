@@ -155,6 +155,7 @@ const FreeformSizedShapeSchema = FreeformBaseSchema.passthrough().extend({
     "pictogram",
     "pictogram_row",
     "mesh_connector",
+    "ui_node",
   ]),
   x: z.number(),
   y: z.number(),

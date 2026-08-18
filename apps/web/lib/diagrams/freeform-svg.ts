@@ -2021,6 +2021,16 @@ export function freeformToSvg(
         );
         break;
       }
+      case "ui_node": {
+        const uNode = shape as any;
+        const width = uNode.width || 160;
+        const height = uNode.height || 90;
+        elements.push(
+          `<rect x="${uNode.x}" y="${uNode.y}" width="${width}" height="${height}" rx="8" fill="#ffffff" stroke="#e2e8f0" stroke-width="2" stroke-dasharray="4 4" />
+          <text x="${uNode.x + width/2}" y="${uNode.y + height/2}" font-family="sans-serif" font-size="14" fill="#94a3b8" text-anchor="middle" dominant-baseline="middle">Interactive Component</text>`
+        );
+        break;
+      }
       case "frame": {
         elements.push(
           `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="10" fill="none" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-dasharray="6,4" ${opacity} />
