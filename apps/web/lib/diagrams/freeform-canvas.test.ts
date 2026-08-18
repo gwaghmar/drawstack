@@ -10,6 +10,9 @@ import {
   validateFreeformRefs,
   getShapeBounds,
   resolveColor,
+  computeArrowHeadGeometry,
+  fitTextFontSize,
+  resolveArrowHeadStyle,
   type CanvasDocument,
   type RectShape,
   type FrameShape,
@@ -533,5 +536,170 @@ describe("Universal Shapes and Path bounds", () => {
     const p = resolveArrowEndpoint(doc, { shapeId: "r1", anchor: "right" });
     assert.equal(p.x, 150);
     assert.equal(p.y, 200);
+  });
+});
+
+describe("resolveArrowHeadStyle", () => {
+  const base = { id: "a1", x: 0, y: 0, start: { x: 0, y: 0 }, end: { x: 100, y: 0 } };
+
+  it("defaults an arrow to a pointer at the end only", () => {
+    const arrow = { ...base, type: "arrow" as const };
+    assert.equal(resolveArrowHeadStyle(arrow, "end"), "arrow");
+    assert.equal(resolveArrowHeadStyle(arrow, "start"), "none");
+  });
+
+  it("defaults a line to no heads at all", () => {
+    const line = { ...base, type: "line" as const };
+    assert.equal(resolveArrowHeadStyle(line, "end"), "none");
+    assert.equal(resolveArrowHeadStyle(line, "start"), "none");
+  });
+
+  it("honors the legacy booleans when no style is set", () => {
+    const arrow = { ...base, type: "arrow" as const, arrowStart: true, arrowEnd: false };
+    assert.equal(resolveArrowHeadStyle(arrow, "start"), "arrow");
+    assert.equal(resolveArrowHeadStyle(arrow, "end"), "none");
+  });
+
+  it("lets an explicit style win over the booleans, including on a line", () => {
+    const arrow = { ...base, type: "arrow" as const, arrowEnd: false, arrowHeadEnd: "diamond" as const };
+    assert.equal(resolveArrowHeadStyle(arrow, "end"), "diamond");
+    const line = { ...base, type: "line" as const, arrowHeadEnd: "crowfoot-many" as const };
+    assert.equal(resolveArrowHeadStyle(line, "end"), "crowfoot-many");
+  });
+});
+
+describe("computeArrowHeadGeometry", () => {
+  const tip = { x: 100, y: 0 };
+  const from = { x: 0, y: 0 };
+
+  it("returns nothing for styles the renderers draw themselves", () => {
+    assert.equal(computeArrowHeadGeometry(tip, from, "none"), null);
+    assert.equal(computeArrowHeadGeometry(tip, from, "arrow"), null);
+  });
+
+  it("puts the head apex on the tip and pulls the line back behind it", () => {
+    const geom = computeArrowHeadGeometry(tip, from, "triangle-open")!;
+    const polygon = geom.marks[0];
+    assert.equal(polygon.kind, "polygon");
+    assert.deepEqual(polygon.kind === "polygon" ? polygon.points[0] : null, tip);
+    // Line stops short of the tip so an open head is not skewered by its own line.
+    assert.ok(geom.lineEnd.x < tip.x);
+    assert.equal(Math.round(geom.lineEnd.y), 0);
+  });
+
+  it("fills a diamond but not an open one", () => {
+    const filled = computeArrowHeadGeometry(tip, from, "diamond")!.marks[0];
+    const open = computeArrowHeadGeometry(tip, from, "diamond-open")!.marks[0];
+    assert.equal(filled.kind === "polygon" && filled.filled, true);
+    assert.equal(open.kind === "polygon" && open.filled, false);
+  });
+
+  it("orients the head along the segment, not the axis", () => {
+    const down = computeArrowHeadGeometry({ x: 0, y: 100 }, { x: 0, y: 0 }, "diamond")!;
+    assert.equal(Math.round(down.lineEnd.x), 0);
+    assert.ok(down.lineEnd.y < 100);
+  });
+
+  it("scales the head with stroke width", () => {
+    const thin = computeArrowHeadGeometry(tip, from, "diamond", 1)!;
+    const thick = computeArrowHeadGeometry(tip, from, "diamond", 6)!;
+    assert.ok(thick.lineEnd.x < thin.lineEnd.x);
+  });
+
+  it("gives every crow's-foot cardinality its own mark set", () => {
+    const marksFor = (style: Parameters<typeof computeArrowHeadGeometry>[2]) =>
+      computeArrowHeadGeometry(tip, from, style)!.marks;
+
+    // "many" is the foot alone: two polylines, no bar, no ring.
+    const many = marksFor("crowfoot-many");
+    assert.equal(many.every((m) => m.kind === "polyline"), true);
+    assert.equal(many.filter((m) => m.kind === "circle").length, 0);
+
+    // "one" is a single bar.
+    assert.equal(marksFor("crowfoot-one").length, 1);
+
+    // Optionality adds a ring; the mandatory variants have none.
+    for (const style of ["crowfoot-zero-one", "crowfoot-zero-many"] as const) {
+      assert.equal(marksFor(style).filter((m) => m.kind === "circle").length, 1);
+    }
+    for (const style of ["crowfoot-one", "crowfoot-many", "crowfoot-one-many"] as const) {
+      assert.equal(marksFor(style).filter((m) => m.kind === "circle").length, 0);
+    }
+
+    // "one-many" carries both the bar and the foot.
+    assert.equal(marksFor("crowfoot-one-many").length, 3);
+  });
+
+  it("clears the ring with the line end so the two do not overlap", () => {
+    const geom = computeArrowHeadGeometry(tip, from, "crowfoot-zero-one")!;
+    const ring = geom.marks.find((m) => m.kind === "circle")!;
+    assert.equal(ring.kind, "circle");
+    if (ring.kind !== "circle") return;
+    assert.ok(geom.lineEnd.x <= ring.cx - ring.r + 0.001);
+  });
+});
+
+describe("fitTextFontSize", () => {
+  const box = { width: 160, height: 60, fontSize: 14 };
+
+  it("leaves copy that already fits alone", () => {
+    assert.equal(fitTextFontSize({ ...box, content: "Short" }), 14);
+  });
+
+  it("shrinks copy that would wrap past the shape height", () => {
+    const fitted = fitTextFontSize({
+      ...box,
+      height: 30,
+      content: "a much longer label that wraps onto several lines",
+    });
+    assert.ok(fitted < 14);
+  });
+
+  it("never shrinks below 60% of the authored size", () => {
+    const fitted = fitTextFontSize({
+      width: 60,
+      height: 16,
+      fontSize: 20,
+      content: "an extremely long label that cannot possibly fit in this tiny box",
+    });
+    assert.equal(fitted, 12);
+  });
+
+  it("floors at 8px for small authored sizes", () => {
+    const fitted = fitTextFontSize({
+      width: 40,
+      height: 14,
+      fontSize: 10,
+      content: "far too much text for this box to ever hold at any size",
+    });
+    assert.equal(fitted, 8);
+  });
+
+  it("never touches wrap:false — ASCII and terminal layouts must not rescale", () => {
+    const fitted = fitTextFontSize({
+      width: 40,
+      height: 16,
+      fontSize: 14,
+      wrap: false,
+      content: "+----------+\n| a box    |\n+----------+",
+    });
+    assert.equal(fitted, 14);
+  });
+
+  it("keeps a single line at full size in a short box", () => {
+    // A 20px bar holds one line of 11px type; leading only sits between lines.
+    assert.equal(fitTextFontSize({ width: 200, height: 20, fontSize: 11, content: "Completed task" }), 11);
+  });
+
+  it("accounts for explicit newlines, not just soft wrapping", () => {
+    const fitted = fitTextFontSize({ ...box, height: 34, content: "line one\nline two\nline three" });
+    assert.ok(fitted < 14);
+  });
+
+  it("shrinks more as the box gets shorter", () => {
+    const content = "a label long enough to need two or three lines";
+    const roomy = fitTextFontSize({ ...box, height: 50, content });
+    const tight = fitTextFontSize({ ...box, height: 24, content });
+    assert.ok(tight <= roomy);
   });
 });
