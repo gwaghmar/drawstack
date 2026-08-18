@@ -90,6 +90,7 @@ RULES:
 - Connectors between shapes MUST bind via endpoints: {"shapeId": "node1", "anchor": "auto"}.
 - Use exact, rich domain values instead of generic placeholders.
 - For a schema / ERD request: use "table" shapes for the entities and a "line" per relationship, with a crow's-foot head on BOTH ends. A relationship with a head on only one end is unreadable — the reader cannot tell what the other side allows.
+- NEVER write cardinality as text ("1:N", "1..*", "one-to-many") and NEVER set "none" on a relationship line. The notation IS the head: one-to-many is "arrowHeadStart":"crowfoot-one" + "arrowHeadEnd":"crowfoot-many". Use the label for the verb that names the relationship ("places", "ships as", "belongs to") — never for the counts.
 
 WORKED EXAMPLE — schema / ERD (one-to-many, and optional one-to-one):
 {"version":1,"shapes":[
