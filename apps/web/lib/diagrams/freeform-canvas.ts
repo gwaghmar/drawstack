@@ -849,3 +849,106 @@ export function fitTextFontSize(opts: {
   }
   return floor;
 }
+
+export function connectorLabelSize(label: string, labelStyle?: "pill" | "plain"): { width: number; height: number } {
+  return { width: Math.max(52, label.length * 7.5 + 18), height: labelStyle === "plain" ? 18 : 22 };
+}
+
+type LabelRect = { x: number; y: number; width: number; height: number };
+
+function rectOverlapArea(a: LabelRect, b: LabelRect): number {
+  const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+  const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+  return w > 0 && h > 0 ? w * h : 0;
+}
+
+function pointAtFraction(pts: { x: number; y: number }[], frac: number): { x: number; y: number; dx: number; dy: number } {
+  let total = 0;
+  const lens: number[] = [];
+  for (let i = 0; i + 1 < pts.length; i++) {
+    const len = Math.hypot(pts[i + 1].x - pts[i].x, pts[i + 1].y - pts[i].y);
+    lens.push(len);
+    total += len;
+  }
+  if (total === 0) return { x: pts[0].x, y: pts[0].y, dx: 1, dy: 0 };
+  let target = total * frac;
+  for (let i = 0; i < lens.length; i++) {
+    if (target <= lens[i] || i === lens.length - 1) {
+      const t = lens[i] === 0 ? 0 : target / lens[i];
+      const dx = pts[i + 1].x - pts[i].x;
+      const dy = pts[i + 1].y - pts[i].y;
+      const len = Math.hypot(dx, dy) || 1;
+      return {
+        x: pts[i].x + dx * t,
+        y: pts[i].y + dy * t,
+        dx: dx / len,
+        dy: dy / len,
+      };
+    }
+    target -= lens[i];
+  }
+  return { x: pts[pts.length - 1].x, y: pts[pts.length - 1].y, dx: 1, dy: 0 };
+}
+
+/**
+ * One placement pass for every labeled connector in the document, shared by both
+ * renderers so canvas and export agree on where a label sits. Slides each label
+ * along its route and to either side to find a spot clear of shapes AND of the
+ * labels already placed before it (array order = placement priority).
+ */
+export function computeConnectorLabelLayout(doc: CanvasDocument): Map<string, { x: number; y: number }> {
+  const layout = new Map<string, { x: number; y: number }>();
+
+  const obstacles: LabelRect[] = [];
+  for (const shape of doc.shapes) {
+    if (shape.type === "arrow" || shape.type === "line") continue;
+    obstacles.push(getShapeBounds(doc, shape));
+  }
+
+  const placed: LabelRect[] = [];
+  const FRACTIONS = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82];
+  const SIDE_OFFSETS = [14, -14];
+
+  for (const shape of doc.shapes) {
+    if (shape.type !== "arrow" && shape.type !== "line") continue;
+    const arrow = shape as ArrowShape;
+    if (!arrow.label) continue;
+
+    const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
+    const route = [start, ...(arrow.waypoints ?? []), end];
+    const { width, height } = connectorLabelSize(arrow.label, arrow.labelStyle);
+
+    let best: { x: number; y: number } | null = null;
+    let bestScore = Infinity;
+
+    for (const frac of FRACTIONS) {
+      const p = pointAtFraction(route, frac);
+      for (const side of SIDE_OFFSETS) {
+        const cx = p.x + -p.dy * side;
+        const cy = p.y + p.dx * side;
+        const rect: LabelRect = { x: cx - width / 2, y: cy - height / 2, width, height };
+
+        let score = 0;
+        for (const ob of obstacles) score += rectOverlapArea(rect, ob);
+        // A label burying another label is worse than clipping a shape corner.
+        for (const pl of placed) score += rectOverlapArea(rect, pl) * 3;
+        // All else equal, prefer the route midpoint and the "above" side.
+        score += Math.abs(frac - 0.5) * 40 + (side < 0 ? 4 : 0);
+
+        if (score < bestScore) {
+          bestScore = score;
+          best = { x: Math.round(cx), y: Math.round(cy) };
+        }
+        if (bestScore === 0) break;
+      }
+      if (bestScore <= Math.abs(frac - 0.5) * 40) break;
+    }
+
+    if (best) {
+      layout.set(shape.id, best);
+      placed.push({ x: best.x - width / 2, y: best.y - height / 2, width, height });
+    }
+  }
+
+  return layout;
+}

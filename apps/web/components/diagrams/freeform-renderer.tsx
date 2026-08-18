@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useEffect, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage, Circle as KonvaCircle } from "react-konva";
 import Konva from "konva";
 import rough from "roughjs";
@@ -89,6 +89,7 @@ import {
   getShapeBounds,
   resolveArrowHeadStyle,
   computeArrowHeadGeometry,
+  computeConnectorLabelLayout,
   fitTextFontSize,
   generateShapeId,
   resolveColor,
@@ -893,7 +894,8 @@ function renderShape(
   onShapeDblClick?: (shapeId: string) => void,
   editingShapeId?: string | null,
   mode: ToolMode = "select",
-  onTableCellDblClick?: (shapeId: string, cell: TableCellCoord) => void
+  onTableCellDblClick?: (shapeId: string, cell: TableCellCoord) => void,
+  connectorLabelLayout?: Map<string, { x: number; y: number }>
 ): React.ReactNode {
   const isEditingThis = editingShapeId === shape.id;
   const draggable = !readOnly && mode === "select";
@@ -958,7 +960,10 @@ function renderShape(
       if (arrowShape.routing === "curved") tension = 0.4;
     }
 
-    const { x: midX, y: midY } = polylineMidpoint(points);
+    // Shared, collision-aware placement (freeform-canvas.ts) -- same map the
+    // SVG exporter reads, so canvas and export put the label in the same spot.
+    const sharedLabelPos = connectorLabelLayout?.get(shape.id);
+    const { x: midX, y: midY } = sharedLabelPos ?? polylineMidpoint(points);
 
     const routePoints: { x: number; y: number }[] = [];
     for (let i = 0; i < points.length; i += 2) routePoints.push({ x: points[i], y: points[i + 1] });
@@ -1078,7 +1083,7 @@ function renderShape(
       const labelWidth = Math.min(desiredWidth, availableWidth);
       const halfWidth = labelWidth / 2;
       return (
-        <Group key={`${shape.id}-label-group`} x={midX} y={midY - 14} listening={false}>
+        <Group key={`${shape.id}-label-group`} x={midX} y={sharedLabelPos ? midY - 8 : midY - 14} listening={false}>
           <Rect
             x={-halfWidth}
             y={-2}
@@ -3657,6 +3662,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     ...doc.shapes.filter((s) => s.type !== "frame"),
   ];
 
+  const connectorLabelLayout = useMemo(() => computeConnectorLabelLayout(doc), [doc]);
+
   const handleCanvasDragOver = (e: ReactDragEvent<HTMLDivElement>) => {
     if (readOnly) return;
     if (Array.from(e.dataTransfer.types).includes("Files")) {
@@ -4255,7 +4262,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
               startEditing,
               editingShapeId,
               mode,
-              startEditingTableCell
+              startEditingTableCell,
+              connectorLabelLayout
             )
           )}
 

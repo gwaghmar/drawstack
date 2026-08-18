@@ -11,9 +11,11 @@ import {
   getShapeBounds,
   resolveColor,
   computeArrowHeadGeometry,
+  computeConnectorLabelLayout,
   fitTextFontSize,
   resolveArrowHeadStyle,
   type CanvasDocument,
+  type CanvasShape,
   type RectShape,
   type FrameShape,
   type ArrowShape,
@@ -726,5 +728,52 @@ describe("getShapeBounds — default size when a primitive omits width/height", 
     const sticky = getShapeBounds(doc, { id: "s", type: "sticky", x: 0, y: 0 } as any);
     const text = getShapeBounds(doc, { id: "t", type: "text", x: 0, y: 0 } as any);
     assert.notEqual(sticky.width, text.width);
+  });
+});
+
+describe("computeConnectorLabelLayout", () => {
+  function rect(id: string, x: number, y: number): CanvasShape {
+    return { id, type: "rectangle", x, y, width: 120, height: 60 } as CanvasShape;
+  }
+
+  it("keeps a label off the shapes it connects", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        rect("a", 0, 0),
+        rect("b", 300, 0),
+        { id: "e1", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" }, label: "connects" } as CanvasShape,
+      ],
+    };
+    const layout = computeConnectorLabelLayout(doc);
+    const pos = layout.get("e1")!;
+    assert.ok(pos, "label should be placed");
+    // The gap between the shapes is x in (120, 300); the label center must sit in it.
+    assert.ok(pos.x > 120 && pos.x < 300, `label x=${pos.x} should sit in the gap between the shapes`);
+  });
+
+  it("separates the labels of two connectors sharing the same corridor", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        rect("a", 0, 0),
+        rect("b", 400, 0),
+        { id: "e1", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" }, label: "first" } as CanvasShape,
+        { id: "e2", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" }, label: "second" } as CanvasShape,
+      ],
+    };
+    const layout = computeConnectorLabelLayout(doc);
+    const p1 = layout.get("e1")!;
+    const p2 = layout.get("e2")!;
+    const apart = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+    assert.ok(apart >= 16, `identical routes should not stack labels (centers ${apart.toFixed(1)}px apart)`);
+  });
+
+  it("places nothing for unlabeled connectors", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [rect("a", 0, 0), rect("b", 300, 0), { id: "e1", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" } } as CanvasShape],
+    };
+    assert.equal(computeConnectorLabelLayout(doc).size, 0);
   });
 });

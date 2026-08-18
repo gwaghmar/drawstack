@@ -30,6 +30,8 @@ import {
   isBoundEndpoint,
   resolveArrowHeadStyle,
   computeArrowHeadGeometry,
+  computeConnectorLabelLayout,
+  connectorLabelSize,
   wrapTextLines,
   fitTextFontSize,
 } from "./freeform-canvas.ts";
@@ -409,35 +411,6 @@ function computeCatmullRomPathD(points: { x: number; y: number }[]): string {
   return d;
 }
 
-function findBestLabelPosition(
-  waypoints: { x: number; y: number }[],
-  obstacles: { x: number; y: number; width: number; height: number }[]
-): { x: number; y: number } {
-  let longestLen = -1;
-  let bestMid = {
-    x: Math.round((waypoints[0].x + waypoints[waypoints.length - 1].x) / 2),
-    y: Math.round((waypoints[0].y + waypoints[waypoints.length - 1].y) / 2),
-  };
-
-  for (let i = 0; i < waypoints.length - 1; i++) {
-    const p1 = waypoints[i];
-    const p2 = waypoints[i + 1];
-    const segLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-    const mid = { x: Math.round((p1.x + p2.x) / 2), y: Math.round((p1.y + p2.y) / 2) };
-
-    const collides = obstacles.some(
-      (b) => mid.x >= b.x - 12 && mid.x <= b.x + b.width + 12 && mid.y >= b.y - 12 && mid.y <= b.y + b.height + 12
-    );
-
-    if (!collides && segLen > longestLen) {
-      longestLen = segLen;
-      bestMid = mid;
-    }
-  }
-
-  return bestMid;
-}
-
 // ─── Squarified Treemap Layout (Bruls, Huizing, van Wijk) ───────────────────
 type TreemapRect = { x: number; y: number; w: number; h: number };
 
@@ -535,6 +508,7 @@ export function freeformToSvg(
     maxY = -Infinity;
 
   const obstacleBounds: { x: number; y: number; width: number; height: number }[] = [];
+  const connectorLabelLayout = computeConnectorLabelLayout(doc);
 
   for (const shape of doc.shapes) {
     const b = getShapeBounds(doc, shape);
@@ -741,29 +715,13 @@ export function freeformToSvg(
       }
 
       if (arrow.label) {
-        const bestPos = findBestLabelPosition(waypoints, obstacleBounds);
-        const labelWidth = Math.max(52, arrow.label.length * 7.5 + 18);
-
-        // Offset perpendicular-above the segment direction at the label point so the
-        // pill doesn't sit directly on the line and collide with shape/frame labels.
-        let segA = waypoints[0];
-        let segB = waypoints[waypoints.length - 1];
-        for (let i = 0; i < waypoints.length - 1; i++) {
-          const midX = Math.round((waypoints[i].x + waypoints[i + 1].x) / 2);
-          const midY = Math.round((waypoints[i].y + waypoints[i + 1].y) / 2);
-          if (midX === bestPos.x && midY === bestPos.y) {
-            segA = waypoints[i];
-            segB = waypoints[i + 1];
-            break;
-          }
-        }
-        const segDx = segB.x - segA.x;
-        const segDy = segB.y - segA.y;
-        const segLen = Math.hypot(segDx, segDy) || 1;
-        const normX = -segDy / segLen;
-        const normY = segDx / segLen;
-        const labelX = bestPos.x + normX * 14;
-        const labelY = bestPos.y + normY * 14;
+        // Shared placement (freeform-canvas.ts): slides along the route and to
+        // either side, avoiding shapes and labels already placed -- and both
+        // renderers consume the same map, so canvas and export agree.
+        const placedLabel = connectorLabelLayout.get(shape.id);
+        const labelWidth = connectorLabelSize(arrow.label, arrow.labelStyle).width;
+        const labelX = placedLabel?.x ?? Math.round((waypoints[0].x + waypoints[waypoints.length - 1].x) / 2);
+        const labelY = placedLabel?.y ?? Math.round((waypoints[0].y + waypoints[waypoints.length - 1].y) / 2);
 
         const plain = arrow.labelStyle === "plain";
         const labelBg = plain
