@@ -89,6 +89,17 @@ RULES:
 - Every shape needs a unique "id" (short, kebab-case, e.g. "rev_chart", "step1").
 - Connectors between shapes MUST bind via endpoints: {"shapeId": "node1", "anchor": "auto"}.
 - Use exact, rich domain values instead of generic placeholders.
+- For a schema / ERD request: use "table" shapes for the entities and a "line" per relationship, with a crow's-foot head on BOTH ends. A relationship with a head on only one end is unreadable — the reader cannot tell what the other side allows.
+
+WORKED EXAMPLE — schema / ERD (one-to-many, and optional one-to-one):
+{"version":1,"shapes":[
+ {"id":"customers","type":"table","x":60,"y":60,"width":220,"height":120,"tableName":"customers","columns":[{"name":"id","type":"uuid","isPk":true},{"name":"email","type":"citext"},{"name":"created_at","type":"timestamptz"}]},
+ {"id":"orders","type":"table","x":420,"y":60,"width":220,"height":120,"tableName":"orders","columns":[{"name":"id","type":"uuid","isPk":true},{"name":"customer_id","type":"uuid","isFk":true},{"name":"total_cents","type":"integer"}]},
+ {"id":"shipments","type":"table","x":420,"y":260,"width":220,"height":96,"tableName":"shipments","columns":[{"name":"id","type":"uuid","isPk":true},{"name":"order_id","type":"uuid","isFk":true}]},
+ {"id":"rel_cust_orders","type":"line","start":{"shapeId":"customers","anchor":"auto"},"end":{"shapeId":"orders","anchor":"auto"},"arrowHeadStart":"crowfoot-one","arrowHeadEnd":"crowfoot-many","label":"places","labelStyle":"plain","stroke":"#334155"},
+ {"id":"rel_order_shipment","type":"line","start":{"shapeId":"orders","anchor":"auto"},"end":{"shapeId":"shipments","anchor":"auto"},"arrowHeadStart":"crowfoot-one","arrowHeadEnd":"crowfoot-zero-one","label":"ships as","labelStyle":"plain","stroke":"#334155"}
+]}
+Read it as: one customer places many orders; one order ships as at most one shipment. Swap the end head for the cardinality the schema actually allows — "crowfoot-one-many" when at least one is required, "crowfoot-zero-many" when none is allowed.
 
 DESIGN STANDARDS (fonts & color — follow these unless the user asks otherwise):
 - Type pairing: editorial posters = serif display titles ("Georgia, 'Times New Roman', serif") + sans body; dashboards/UI = Inter throughout; terminal/technical = "'JetBrains Mono', monospace" with text.wrap false. Set fontSize deliberately: display 28-64, section titles 20-30, body 13-15, eyebrow/labels 10-12 uppercase.
