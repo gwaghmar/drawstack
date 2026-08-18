@@ -403,6 +403,11 @@ the canvas plan's legal section — not verified as part of today's work.
 - `backup/all-27-diagram-types` (branch) and `all-27-diagram-types` (tag) are the
   restore point from before the single-engine pivot — don't delete these.
 
+### Response style
+- Keep responses short. Less chatty, no filler, no preamble.
+- Simple, flexible language.
+- After finishing a task, briefly list what was changed, added, or fixed.
+
 ### Code style
 - **No emojis** in code or commits unless explicitly requested.
 - **No comments explaining what code does** — only WHY when non-obvious. Identifiers carry the meaning.
