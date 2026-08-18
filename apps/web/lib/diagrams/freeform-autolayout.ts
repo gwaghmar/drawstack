@@ -175,11 +175,25 @@ export function autoLayoutFreeformDocument(
     layerOffset += maxLayerThickness + layerGap;
   }
 
-  // Update doc shapes
+  // Update doc shapes. Connectors between laid-out nodes switch to orthogonal
+  // routing at the same time -- layered positions with straight diagonal lines
+  // read as spaghetti, and the right-angle router is what the layered layout
+  // was drawn for. An explicit routing choice on a connector is respected.
   const updatedShapes = doc.shapes.map((s) => {
     if (newPositions.has(s.id)) {
       const pos = newPositions.get(s.id)!;
       return { ...s, x: pos.x, y: pos.y } as CanvasShape;
+    }
+    if ((s.type === "arrow" || s.type === "line") && s.routing === undefined) {
+      const arrow = s as ArrowShape;
+      if (
+        isBoundEndpoint(arrow.start) &&
+        isBoundEndpoint(arrow.end) &&
+        newPositions.has(arrow.start.shapeId) &&
+        newPositions.has(arrow.end.shapeId)
+      ) {
+        return { ...s, routing: "orthogonal" } as CanvasShape;
+      }
     }
     return s;
   });

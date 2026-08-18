@@ -90,6 +90,7 @@ import {
   resolveArrowHeadStyle,
   computeArrowHeadGeometry,
   computeConnectorLabelLayout,
+  computeSimpleOrthogonalRoute,
   fitTextFontSize,
   generateShapeId,
   resolveColor,
@@ -517,24 +518,10 @@ function getSvgPathFromStroke(stroke: number[][]): string {
   return d.join(" ");
 }
 
-function computeOrthogonalSegment(
-  start: { x: number; y: number },
-  end: { x: number; y: number }
-): number[] {
-  const midX = Math.round((start.x + end.x) / 2);
-  return [start.x, start.y, midX, start.y, midX, end.y, end.x, end.y];
-}
-
-// Applies the right-angle bend between every consecutive pair so multi-waypoint
-// arrows stay orthogonal along their whole route, not just start->end.
+// Shared bend rule (freeform-canvas.ts) -- the same route the label layout
+// walks, so the label sits on the path that actually gets drawn.
 function computeOrthogonalPoints(points: { x: number; y: number }[]): number[] {
-  if (points.length < 2) return points.flatMap((p) => [p.x, p.y]);
-  const out: number[] = [];
-  for (let i = 0; i + 1 < points.length; i++) {
-    const seg = computeOrthogonalSegment(points[i], points[i + 1]);
-    out.push(...(i === 0 ? seg : seg.slice(2)));
-  }
-  return out;
+  return computeSimpleOrthogonalRoute(points).flatMap((p) => [p.x, p.y]);
 }
 
 const FIXTURE_DOCUMENT: CanvasDocument = {

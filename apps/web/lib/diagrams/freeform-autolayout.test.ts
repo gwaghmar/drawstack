@@ -68,4 +68,22 @@ describe("autoLayoutFreeformDocument", () => {
       assert.ok(Number.isFinite(s.y), `${s.id}.y should be finite, got ${s.y}`);
     }
   });
+
+  it("switches its connectors to orthogonal routing, respecting explicit choices", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        { id: "a", type: "rectangle", x: 0, y: 0, width: 100, height: 60 },
+        { id: "b", type: "rectangle", x: 0, y: 0, width: 100, height: 60 },
+        { id: "auto", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" } },
+        { id: "chosen", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" }, routing: "curved" },
+        { id: "loose", type: "line", x: 0, y: 0, start: { x: 5, y: 5 }, end: { x: 50, y: 50 } },
+      ],
+    };
+    const laidOut = autoLayoutFreeformDocument(doc);
+    const byId = new Map(laidOut.shapes.map((s) => [s.id, s]));
+    assert.equal((byId.get("auto") as { routing?: string }).routing, "orthogonal");
+    assert.equal((byId.get("chosen") as { routing?: string }).routing, "curved");
+    assert.equal((byId.get("loose") as { routing?: string }).routing, undefined);
+  });
 });

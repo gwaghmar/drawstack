@@ -850,6 +850,19 @@ export function fitTextFontSize(opts: {
   return floor;
 }
 
+/** The right-angle bend rule both renderers draw orthogonal routes with. */
+export function computeSimpleOrthogonalRoute(points: { x: number; y: number }[]): { x: number; y: number }[] {
+  if (points.length < 2) return points;
+  const out: { x: number; y: number }[] = [points[0]];
+  for (let i = 0; i + 1 < points.length; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    const midX = Math.round((a.x + b.x) / 2);
+    out.push({ x: midX, y: a.y }, { x: midX, y: b.y }, b);
+  }
+  return out;
+}
+
 export function connectorLabelSize(label: string, labelStyle?: "pill" | "plain"): { width: number; height: number } {
   return { width: Math.max(52, label.length * 7.5 + 18), height: labelStyle === "plain" ? 18 : 22 };
 }
@@ -915,7 +928,8 @@ export function computeConnectorLabelLayout(doc: CanvasDocument): Map<string, { 
     if (!arrow.label) continue;
 
     const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
-    const route = [start, ...(arrow.waypoints ?? []), end];
+    const logical = [start, ...(arrow.waypoints ?? []), end];
+    const route = arrow.routing === "orthogonal" ? computeSimpleOrthogonalRoute(logical) : logical;
     const { width, height } = connectorLabelSize(arrow.label, arrow.labelStyle);
 
     let best: { x: number; y: number } | null = null;
