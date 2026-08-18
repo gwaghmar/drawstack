@@ -609,6 +609,58 @@ const FIXTURE_DOCUMENT: CanvasDocument = {
   ],
 };
 
+
+export const UiNodeContext = React.createContext<{
+  useDataFetch: (url: string) => { data: any; loading: boolean; error: any };
+  useSharedState: (key: string, initialValue: any) => [any, (val: any) => void];
+  onHealShape: (id: string, code: string) => void;
+} | null>(null);
+
+function UiNodeRenderer({ shape, draggable, readOnly, onShapeClick, onShapeDblClick, onShapeDragStart, onShapeDragMove, onShapeDragEnd }: any) {
+  const ctx = React.useContext(UiNodeContext);
+  if (!ctx) return null;
+  const s = shape as any;
+  const { useDataFetch, useSharedState, onHealShape } = ctx;
+  return (
+    <Group
+      key={s.id}
+      id={s.id}
+      x={s.x}
+      y={s.y}
+      width={s.width}
+      height={s.height}
+      draggable={draggable}
+      onClick={(e) => onShapeClick?.(e, s.id)}
+      onDblClick={() => onShapeDblClick?.(s.id)}
+      onDragStart={() => onShapeDragStart?.(s.id, s.x, s.y)}
+      onDragMove={(e) => onShapeDragMove?.(e, s.id, e.target.x(), e.target.y())}
+      onDragEnd={() => onShapeDragEnd?.(s.id)}
+    >
+      <Rect width={s.width} height={s.height} cornerRadius={12} fill="#ffffff" shadowColor="rgba(0,0,0,0.1)" shadowBlur={10} shadowOffset={{x:0, y:4}} listening={false} />
+      {s.code ? (
+        <Html divProps={{ style: { width: s.width, height: s.height, overflow: "hidden", padding: "16px" } }}>
+          <div style={{ pointerEvents: readOnly ? 'none' : 'auto', width: '100%', height: '100%' }}>
+            <ThemeProvider theme="editorial">
+              <LiveProvider 
+                code={s.code} 
+                scope={{ 
+                  React, useState, useEffect, useDataFetch, useSharedState,
+                  Form, Slider, Toggle, Select, Card,
+                  DataTable, Input, Button, Badge, Tabs,
+                  Typography, Icon, BarChart, DonutChart, LineChart
+                }}
+              >
+                <LivePreview />
+                <SelfHealingError shapeId={s.id} code={s.code} onHealShape={onHealShape} />
+              </LiveProvider>
+            </ThemeProvider>
+          </div>
+        </Html>
+      ) : null}
+    </Group>
+  );
+}
+
 const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "dashboard",
   "chart",
@@ -1325,6 +1377,8 @@ function renderShape(
         );
       }
 
+      case "ui_node":
+        return <UiNodeRenderer shape={shape} draggable={draggable} readOnly={readOnly} onShapeClick={onShapeClick} onShapeDblClick={onShapeDblClick} onShapeDragStart={onShapeDragStart} onShapeDragMove={onShapeDragMove} onShapeDragEnd={onShapeDragEnd} />;
       case "frame":
         return (
           <Fragment key={shape.id}>
@@ -1808,6 +1862,63 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     if (errors.length > 0) return parsed;
     return parsed.shapes.length > 0 ? parsed : FIXTURE_DOCUMENT;
   });
+
+
+  const onHealShape = React.useCallback((id: string, code: string) => {
+    setDoc((doc) => {
+      const newShapes = doc.shapes.map(s => s.id === id && s.type === "ui_node" ? { ...s, code } : s);
+      const newDoc = { ...doc, shapes: newShapes };
+      if (onChange) onChange(JSON.stringify(newDoc));
+      return newDoc;
+    });
+  }, [onChange]);
+
+  const useDataFetch = React.useCallback((url: string) => {
+    const [data, setData] = React.useState<any>(null);
+    const [loading, setLoading] = React.useState(true);
+    const [error, setError] = React.useState<any>(null);
+    React.useEffect(() => {
+      fetch(url)
+        .then(res => res.json())
+        .then(data => { setData(data); setLoading(false); })
+        .catch(err => { setError(err); setLoading(false); });
+    }, [url]);
+    return { data, loading, error };
+  }, []);
+
+  const useSharedState = React.useCallback((key: string, initialValue: any) => {
+    const [val, setVal] = React.useState(() => {
+      if (!yjsStoreRef.current) return initialValue;
+      const raw = yjsStoreRef.current.ydoc.getMap("sharedState").get(key);
+      if (raw !== undefined) {
+        try { return JSON.parse(raw as string); } catch { return raw; }
+      }
+      return initialValue;
+    });
+
+    React.useEffect(() => {
+      if (!yjsStoreRef.current) return;
+      const map = yjsStoreRef.current.ydoc.getMap("sharedState");
+      const obs = () => {
+        const raw = map.get(key);
+        if (raw !== undefined) {
+          try { setVal(JSON.parse(raw as string)); } catch { setVal(raw); }
+        }
+      };
+      map.observe(obs);
+      return () => map.unobserve(obs);
+    }, [key]);
+
+    const setSharedVal = React.useCallback((newVal: any) => {
+      if (!yjsStoreRef.current) return;
+      setVal(newVal);
+      yjsStoreRef.current.ydoc.getMap("sharedState").set(key, JSON.stringify(newVal));
+    }, [key]);
+
+    return [val, setSharedVal] as [any, (val: any) => void];
+  }, []);
+
+  const uiNodeCtx = React.useMemo(() => ({ useDataFetch, useSharedState, onHealShape }), [useDataFetch, useSharedState, onHealShape]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
@@ -3313,8 +3424,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
       const shape = doc.shapes.find((s) => s.id === node.id());
       if (!shape || shape.type === "arrow" || shape.type === "line" || shape.type === "path") continue;
 
-      const width = Math.round(node.width() * node.scaleX());
-      const height = Math.round(node.height() * node.scaleY());
+      const width = Math.round((node.width() || (shape as any).width || 0) * node.scaleX());
+      const height = Math.round((node.height() || (shape as any).height || 0) * node.scaleY());
       const rotation = Math.round(node.rotation());
       node.scaleX(1);
       node.scaleY(1);
@@ -3721,6 +3832,7 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   };
 
   return (
+    <UiNodeContext.Provider value={uiNodeCtx}>
     <div
       ref={containerRef}
       className="w-full h-full relative overflow-hidden select-none bg-slate-50 dark:bg-slate-950"
@@ -4727,5 +4839,6 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
         </div>
       )}
     </div>
+    </UiNodeContext.Provider>
   );
 }
