@@ -2,7 +2,6 @@ import {
   type CanvasDocument,
   type CanvasShape,
   type ArrowShape,
-  type RectShape,
   getShapeBounds,
   isBoundEndpoint,
 } from "./freeform-canvas.ts";
@@ -30,7 +29,7 @@ export function autoLayoutFreeformDocument(
   // Filter out arrows, lines, and frames for layout positioning
   const layoutableShapes = doc.shapes.filter(
     (s) => s.type !== "arrow" && s.type !== "line" && s.type !== "frame" && s.type !== "path"
-  ) as (Exclude<CanvasShape, ArrowShape> & { width: number; height: number })[];
+  ) as Exclude<CanvasShape, ArrowShape>[];
 
   if (layoutableShapes.length === 0) return doc;
 
@@ -138,10 +137,15 @@ export function autoLayoutFreeformDocument(
   const newPositions = new Map<string, { x: number; y: number }>();
   let layerOffset = direction === "LR" ? startX : startY;
 
+  // getShapeBounds falls through to computeDynamicShapeDimensions for any shape
+  // missing width/height (the common case for AI-authored shapes) — reading the
+  // field directly reads undefined and poisons every downstream position with NaN.
+  const boundsOf = (id: string) => getShapeBounds(doc, shapeMap.get(id)! as CanvasShape);
+
   const breadthOf = (layer: string[]) =>
     layer.reduce((sum, id) => {
-      const shape = shapeMap.get(id)!;
-      return sum + (direction === "LR" ? shape.height : shape.width);
+      const b = boundsOf(id);
+      return sum + (direction === "LR" ? b.height : b.width);
     }, 0) + Math.max(0, (layer.length - 1) * nodeGap);
 
   // Center every layer on one axis so a wide layer doesn't drag narrow ones
@@ -151,20 +155,20 @@ export function autoLayoutFreeformDocument(
   for (const layer of layers) {
     let maxLayerThickness = 0;
     for (const id of layer) {
-      const shape = shapeMap.get(id)!;
-      maxLayerThickness = Math.max(maxLayerThickness, direction === "LR" ? shape.width : shape.height);
+      const b = boundsOf(id);
+      maxLayerThickness = Math.max(maxLayerThickness, direction === "LR" ? b.width : b.height);
     }
 
     let breadthCursor = (direction === "LR" ? startY : startX) + (widestBreadth - breadthOf(layer)) / 2;
 
     for (const id of layer) {
-      const shape = shapeMap.get(id)!;
+      const b = boundsOf(id);
       if (direction === "LR") {
         newPositions.set(id, { x: layerOffset, y: Math.round(breadthCursor) });
-        breadthCursor += shape.height + nodeGap;
+        breadthCursor += b.height + nodeGap;
       } else {
         newPositions.set(id, { x: Math.round(breadthCursor), y: layerOffset });
-        breadthCursor += shape.width + nodeGap;
+        breadthCursor += b.width + nodeGap;
       }
     }
 

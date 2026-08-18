@@ -15,6 +15,7 @@ import { lastUserText, toChatTurns, type ChatTurn } from "@/lib/ai-messages";
 import { buildBrandDirective } from "@/lib/brand-directive";
 import { recordAiEvent } from "@/lib/ai-events";
 import { validateAndRepairOutput, parsePossiblyBrokenJson } from "@/lib/diagrams/validate-output";
+import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
 
 export const maxDuration = 60;
 
@@ -40,6 +41,12 @@ type IntentPlan = {
   clarificationOptions?: string[];
   suggestedPresetId?: SocialPresetId | null;
   suggestedDiagramType?: DiagramType | null;
+  /** "graph" = shapes are connected nodes with no deliberate hand-composed
+   * layout (flowchart/ERD/org-chart/dependency-graph shaped) -- safe for the
+   * engine to auto-arrange. Omitted/null = leave the model's own positions
+   * alone (poster/dashboard/infographic compositions, where position IS the
+   * design). Conservative default: no layout unless the model says so. */
+  layoutHint?: "graph" | null;
 };
 
 async function tryDecrementCredit(userId: string): Promise<boolean> {
@@ -130,6 +137,7 @@ function parseIntentPlan(raw: string, prompt: string): IntentPlan & { _fallback?
       suggestedDiagramType: typeof parsed.suggestedDiagramType === "string" && VALID_DIAGRAM_TYPES.includes(parsed.suggestedDiagramType as DiagramType)
         ? (parsed.suggestedDiagramType as DiagramType)
         : null,
+      layoutHint: parsed.layoutHint === "graph" ? "graph" : null,
     };
   } catch {
     return { ...defaultIntentPlan(prompt), _fallback: true };
@@ -336,8 +344,10 @@ Return ONLY JSON matching this shape:
   "shouldAskClarification": true|false,
   "clarificationQuestion": "one concise question",
   "clarificationOptions": ["short answer option 1", "short answer option 2", "short answer option 3 (optional)"],
-  "suggestedPresetId": "landscape|square_feed|story_reel|vertical_feed|link_preview|null"
+  "suggestedPresetId": "landscape|square_feed|story_reel|vertical_feed|link_preview|null",
+  "layoutHint": "graph|null"
 }
+Set "layoutHint": "graph" ONLY when the request is fundamentally a connected node graph with no inherent visual composition -- a flowchart, ERD, org chart, dependency graph, or system architecture where the shapes' positions don't matter beyond "connected things read left-to-right / top-to-bottom". This lets the engine auto-arrange the nodes instead of the model guessing coordinates. Leave it null (default) for anything with deliberate visual composition -- dashboards, posters, infographics, mindmaps, timelines, or any request mentioning layout/style cues -- where hand-placed positions ARE the design.
 Rules:
 - Base ambiguity on missing critical nouns/actors/flow direction.
 - If request is detailed, detailLevel should be high and shouldAskClarification false.
@@ -512,6 +522,33 @@ ${ANTI_GENERIC_DIRECTIVE}`;
           console.log(`[AI generate] validation ${validation.ok ? "ok" : "FAILED"} type=${effectiveDiagramType} latencyMs=${genLatencyMs} outputLen=${finalText.length}${validation.ok ? "" : ` reason=${validation.reason}`}`);
           if (validation.ok) writeProgress("done", "Diagram ready", "done");
 
+          // The model still emits raw x/y for freeform docs -- graph-shaped
+          // requests (flowchart/ERD/org-chart) come back with crossing edges
+          // and colliding labels even when every shape and connection is
+          // correct, because pixel placement is not what LLMs are good at.
+          // Re-run the SAME layered graph layout the "Tidy Up" button uses,
+          // but only when the intent pass flagged this as a graph (never on
+          // patches -- that would blow away hand-edited positions -- and
+          // never on poster/dashboard compositions, where position is the
+          // design, not incidental).
+          let layoutApplied = false;
+          let layoutedSource: string | undefined;
+          if (
+            validation.ok &&
+            generationMode === "create" &&
+            effectiveDiagramType === "freeform" &&
+            intentPlan.layoutHint === "graph"
+          ) {
+            try {
+              const parsedDoc = JSON.parse(validation.source);
+              const laidOut = autoLayoutFreeformDocument(parsedDoc);
+              layoutedSource = JSON.stringify(laidOut);
+              layoutApplied = true;
+            } catch (err) {
+              console.warn(`[AI generate] auto-layout skipped: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+
           // Deterministic, authored follow-up suggestions computed against the
           // actual final source (not model-generated, not predicted blind before
           // generation) — see packages/core/src/followups.ts.
@@ -522,6 +559,7 @@ ${ANTI_GENERIC_DIRECTIVE}`;
                 effectiveDiagramType,
                 validation.ok ? validation.source : finalText
               ),
+              ...(layoutApplied ? { layoutApplied: true, correctedSource: layoutedSource } : {}),
             },
           });
 

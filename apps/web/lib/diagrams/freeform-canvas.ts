@@ -489,9 +489,38 @@ export function computeDynamicShapeDimensions(
     }
   }
 
+  // Card/table/metric/frame/mockup size themselves from content above; every
+  // other type has no such logic and, contrary to the AI-output validator's
+  // documented assumption, previously just returned whatever width/height it
+  // was given -- undefined when the AI omitted them, which is common. That
+  // silently broke rendering (NaN/zero-size shapes) instead of falling
+  // through to any auto-sizing. This is the actual fallback for those types.
   const s = shape as Exclude<CanvasShape, ArrowShape | PathShape>;
-  return { x: s.x, y: s.y, width: s.width, height: s.height };
+  const fallback = PRIMITIVE_DEFAULT_SIZE[s.type] ?? PRIMITIVE_DEFAULT_SIZE.rectangle;
+  return {
+    x: s.x,
+    y: s.y,
+    width: s.width ?? fallback.width,
+    height: s.height ?? fallback.height,
+  };
 }
+
+// Mirrors the click-to-place defaults in freeform-renderer.tsx's defaultSizeFor —
+// kept here too since this file is imported by the SVG exporter, which the
+// renderer file is not.
+export const PRIMITIVE_DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
+  rectangle: { width: 160, height: 90 },
+  ellipse: { width: 160, height: 90 },
+  sticky: { width: 180, height: 180 },
+  text: { width: 140, height: 36 },
+  frame: { width: 440, height: 320 },
+  triangle: { width: 160, height: 120 },
+  cylinder: { width: 160, height: 120 },
+  cloud: { width: 180, height: 110 },
+  hexagon: { width: 160, height: 110 },
+  star: { width: 130, height: 130 },
+  diamond: { width: 160, height: 100 },
+};
 
 export function getShapeBounds(doc: CanvasDocument, shape: CanvasShape): { x: number; y: number; width: number; height: number } {
   if (shape.type === "arrow" || shape.type === "line") {

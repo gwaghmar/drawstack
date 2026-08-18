@@ -468,11 +468,21 @@ export function EditorClient({
   useEffect(() => {
     if (!streamData || streamData.length === 0) return;
     for (const entry of streamData) {
-      const e = entry as { correctedSource?: string; validationRepaired?: boolean; validationFailed?: boolean; validationReason?: string };
+      const e = entry as {
+        correctedSource?: string;
+        validationRepaired?: boolean;
+        validationFailed?: boolean;
+        validationReason?: string;
+        layoutApplied?: boolean;
+      };
       if (e?.validationRepaired && typeof e.correctedSource === "string" && e.correctedSource.length > 5) {
         setSource(e.correctedSource);
         setToast("AI output had a structural issue — automatically repaired.");
         setTimeout(() => setToast(null), 3000);
+        break;
+      }
+      if (e?.layoutApplied && typeof e.correctedSource === "string" && e.correctedSource.length > 5) {
+        setSource(e.correctedSource);
         break;
       }
       if (e?.validationFailed && e?.validationReason) {

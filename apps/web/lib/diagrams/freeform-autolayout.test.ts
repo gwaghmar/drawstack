@@ -47,4 +47,25 @@ describe("autoLayoutFreeformDocument", () => {
     assert.equal(c1.y, c2.y, "Sibling children should be on the same vertical layer");
     assert.notEqual(c1.x, c2.x, "Sibling children should have distinct horizontal positions");
   });
+
+  it("never emits NaN when shapes are missing width/height (the common AI-authored case)", () => {
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        // No width/height at all -- computeDynamicShapeDimensions used to
+        // return undefined for these, which poisoned every downstream sum.
+        { id: "a", type: "rectangle", x: 0, y: 0 } as any,
+        { id: "b", type: "rectangle", x: 0, y: 0 } as any,
+        { id: "c", type: "rectangle", x: 0, y: 0, width: 160, height: 50 },
+        { id: "e1", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" } },
+        { id: "e2", type: "line", x: 0, y: 0, start: { shapeId: "b" }, end: { shapeId: "c" } },
+      ],
+    };
+
+    const laidOut = autoLayoutFreeformDocument(doc, { direction: "LR" });
+    for (const s of laidOut.shapes) {
+      assert.ok(Number.isFinite(s.x), `${s.id}.x should be finite, got ${s.x}`);
+      assert.ok(Number.isFinite(s.y), `${s.id}.y should be finite, got ${s.y}`);
+    }
+  });
 });

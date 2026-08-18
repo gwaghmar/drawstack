@@ -703,3 +703,28 @@ describe("fitTextFontSize", () => {
     assert.ok(tight <= roomy);
   });
 });
+
+describe("getShapeBounds — default size when a primitive omits width/height", () => {
+  it("gives an unsized rectangle a real, finite fallback instead of undefined", () => {
+    const doc: CanvasDocument = { version: 1, shapes: [{ id: "a", type: "rectangle", x: 10, y: 20 } as any] };
+    const bounds = getShapeBounds(doc, doc.shapes[0]);
+    assert.equal(bounds.x, 10);
+    assert.equal(bounds.y, 20);
+    assert.ok(Number.isFinite(bounds.width) && bounds.width > 0);
+    assert.ok(Number.isFinite(bounds.height) && bounds.height > 0);
+  });
+
+  it("still respects an explicit width/height when given", () => {
+    const doc: CanvasDocument = { version: 1, shapes: [{ id: "a", type: "diamond", x: 0, y: 0, width: 200, height: 77 }] };
+    const bounds = getShapeBounds(doc, doc.shapes[0]);
+    assert.equal(bounds.width, 200);
+    assert.equal(bounds.height, 77);
+  });
+
+  it("gives every primitive type its own sane default, not one universal box", () => {
+    const doc: CanvasDocument = { version: 1, shapes: [] };
+    const sticky = getShapeBounds(doc, { id: "s", type: "sticky", x: 0, y: 0 } as any);
+    const text = getShapeBounds(doc, { id: "t", type: "text", x: 0, y: 0 } as any);
+    assert.notEqual(sticky.width, text.width);
+  });
+});
