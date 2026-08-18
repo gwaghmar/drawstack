@@ -2,6 +2,12 @@ const fs = require('fs');
 
 let content = fs.readFileSync('apps/web/components/diagrams/freeform-renderer.tsx', 'utf8');
 
+// Fix React import
+content = content.replace(
+  'import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";',
+  'import React, { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";'
+);
+
 // 1. Add imports
 const imports = `import { LiveProvider, LiveError, LivePreview, LiveContext } from "react-live";
 import { Html } from "react-konva-utils";
@@ -9,12 +15,12 @@ import { Form } from "../canvas-ui/Form";
 import { Slider } from "../canvas-ui/Slider";
 import { Toggle } from "../canvas-ui/Toggle";
 import { Select } from "../canvas-ui/Select";
-import { Card, CardHeader, CardTitle, CardContent } from "../canvas-ui/Card";
+import { Card } from "../canvas-ui/Card";
 import { DataTable } from "../canvas-ui/DataTable";
 import { Input } from "../canvas-ui/Input";
 import { Button } from "../canvas-ui/Button";
 import { Badge } from "../canvas-ui/Badge";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "../canvas-ui/Tabs";
+import { Tabs } from "../canvas-ui/Tabs";
 import { Typography } from "../canvas-ui/Typography";
 import { Icon } from "../canvas-ui/Icon";
 import { BarChart } from "../canvas-ui/charts/BarChart";
@@ -144,8 +150,8 @@ const uiNodeCase = `
                         code={s.code} 
                         scope={{ 
                           React, useState, useEffect, useDataFetch, useSharedState,
-                          Form, Slider, Toggle, Select, Card, CardHeader, CardTitle, CardContent,
-                          DataTable, Input, Button, Badge, Tabs, TabsList, TabsTrigger, TabsContent,
+                          Form, Slider, Toggle, Select, Card,
+                          DataTable, Input, Button, Badge, Tabs,
                           Typography, Icon, BarChart, DonutChart, LineChart
                         }}
                       >

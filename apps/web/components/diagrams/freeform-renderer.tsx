@@ -1,10 +1,29 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";
+import React, { Fragment, useEffect, useMemo, useRef, useState, type ChangeEvent, type DragEvent as ReactDragEvent, type ReactNode } from "react";
 import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Path, Group, Image as KonvaImage, Circle as KonvaCircle } from "react-konva";
 import Konva from "konva";
 import rough from "roughjs";
 import { getStroke } from "perfect-freehand";
+import { LiveProvider, LiveError, LivePreview, LiveContext } from "react-live";
+import { Html } from "react-konva-utils";
+import { Form } from "../canvas-ui/Form";
+import { Slider } from "../canvas-ui/Slider";
+import { Toggle } from "../canvas-ui/Toggle";
+import { Select } from "../canvas-ui/Select";
+import { Card } from "../canvas-ui/Card";
+import { DataTable } from "../canvas-ui/DataTable";
+import { Input } from "../canvas-ui/Input";
+import { Button } from "../canvas-ui/Button";
+import { Badge } from "../canvas-ui/Badge";
+import { Tabs } from "../canvas-ui/Tabs";
+import { Typography } from "../canvas-ui/Typography";
+import { Icon } from "../canvas-ui/Icon";
+import { BarChart } from "../canvas-ui/charts/BarChart";
+import { DonutChart } from "../canvas-ui/charts/DonutChart";
+import { LineChart } from "../canvas-ui/charts/LineChart";
+import { ThemeProvider } from "../canvas-ui/ThemeProvider";
+
 import {
   MousePointer2,
   Pencil,
@@ -608,6 +627,26 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "pictogram_row",
   "mesh_connector",
 ]);
+
+
+const SelfHealingError = ({ shapeId, code, onHealShape }: { shapeId: string, code: string, onHealShape: (id: string, code: string) => void }) => {
+  const context = React.useContext(LiveContext);
+  React.useEffect(() => {
+    if (context.error) {
+      console.log("Self healing triggered for error:", context.error);
+      fetch('/api/ai/repair-node', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, error: context.error?.toString() ?? "Unknown error" })
+      }).then(res => res.json()).then(data => {
+        if (data.fixedCode) {
+          onHealShape(shapeId, data.fixedCode);
+        }
+      }).catch(console.error);
+    }
+  }, [context.error, shapeId, code, onHealShape]);
+  return <LiveError style={{ color: "red", background: "#fee2e2", padding: "8px", borderRadius: "4px", fontSize: "12px", fontFamily: "monospace", overflow: "auto", maxHeight: "100%" }} />;
+};
 
 // ─── Table cell editing (Konva-side only) ─────────────────────────────────
 // The "table" shape is a DB-schema table (tableName + columns[{name,type}]),
