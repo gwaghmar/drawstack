@@ -492,6 +492,13 @@ If the user says "keep going" without specifying, propose new work from the road
 - `apply_patch` / `update_node` results are applied client-side and not server-validated (lower risk — surgical edits). Only `update_diagram` goes through `validateAndRepairOutput`.
 - The `connect` op in `freeform-ops.ts` doesn't expose `waypoints`/`showJunctions` (see "Shape vocabulary" above) — reachable via `add`/`update` only.
 - **Two long-standing Konva/SVG default mismatches were fixed on 2026-08-17** — the exporter drew a drop shadow on every non-frame shape (Konva only ever drew one for sticky/card/table) and fell back to a pale border for a stroke-less shape (Konva uses `#1e293b`). Both now follow Konva. This *does* change how pre-existing projects export: primitives lose a shadow the canvas never showed, and unstroked shapes/connectors gain the outline the canvas always had. `shadow: true` restores a shadow per shape.
+  - **Follow-up same day:** the stroke-default fix initially applied to every shape,
+    which darkened the outer border of macro shapes (`metric`, `chart`, `card`, etc.)
+    too — but those never drifted, since Konva rasterizes them through this same
+    exporter, so the pale card border was always the intended look for them. Fixed to
+    apply the `#1e293b` fallback only to natively-Konva-drawn primitives and
+    connectors (`arrow`/`line`); macro shapes keep the pale `cardBorder` default. See
+    `usesNativeStrokeDefault` in `freeform-svg.ts`.
 - The repo root is littered with `*.png` audit/verification screenshots from past browser click-testing sessions. Don't add more at root; write new ones to a scratch dir.
 
 ## Supabase / database situation (as of 2026-08-17)
