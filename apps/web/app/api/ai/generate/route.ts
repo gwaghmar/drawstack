@@ -34,6 +34,7 @@ type IntentPlan = {
   requestedStyle: string[];
   assumptions: string[];
   missingInfo: string[];
+  requiredComponents: string[];
   ambiguityScore: number;
   detailLevel: DetailLevel;
   shouldAskClarification: boolean;
@@ -88,6 +89,7 @@ function defaultIntentPlan(prompt: string): IntentPlan {
     requestedStyle: [],
     assumptions: detailLevel === "low" ? ["User wants a sensible starter flow"] : [],
     missingInfo: detailLevel === "low" ? ["Domain specifics"] : [],
+    requiredComponents: [],
     ambiguityScore: detailLevel === "low" ? 65 : 35,
     detailLevel,
     shouldAskClarification: false,
@@ -123,8 +125,9 @@ function parseIntentPlan(raw: string, prompt: string): IntentPlan & { _fallback?
       steps: Array.isArray(parsed.steps) ? parsed.steps.map(String).slice(0, 30) : [],
       relationships: Array.isArray(parsed.relationships) ? parsed.relationships.map(String).slice(0, 30) : [],
       requestedStyle: Array.isArray(parsed.requestedStyle) ? parsed.requestedStyle.map(String).slice(0, 12) : [],
-      assumptions: Array.isArray(parsed.assumptions) ? parsed.assumptions.map(String).slice(0, 12) : [],
-      missingInfo: Array.isArray(parsed.missingInfo) ? parsed.missingInfo.map(String).slice(0, 10) : [],
+      assumptions: Array.isArray(parsed.assumptions) ? parsed.assumptions.map(String).slice(0, 5) : [],
+      missingInfo: Array.isArray(parsed.missingInfo) ? parsed.missingInfo.map(String).slice(0, 5) : [],
+      requiredComponents: Array.isArray(parsed.requiredComponents) ? parsed.requiredComponents.map(String) : [],
       ambiguityScore,
       detailLevel,
       shouldAskClarification:
@@ -336,8 +339,9 @@ Return ONLY JSON matching this shape:
   "steps": ["..."],
   "relationships": ["A -> B"],
   "requestedStyle": ["layout or design cues"],
-  "assumptions": ["safe assumptions"],
-  "missingInfo": ["critical unknowns"],
+  "assumptions": ["array of what you assumed"],
+  "missingInfo": ["array of what critical structure is completely missing, or empty"],
+  "requiredComponents": ["Button", "Card", "LineChart", "Form", "Select", "Slider", "Toggle", "DataTable"],
   "suggestedSubtype": "specific subtype recommendation if applicable",
   "ambiguityScore": 0-100,
   "detailLevel": "low|medium|high",
@@ -394,8 +398,13 @@ Rules:
       intentPlan.suggestedDiagramType && intentPlan.suggestedDiagramType !== diagramType
         ? intentPlan.suggestedDiagramType
         : diagramType;
-    const effectiveSystemPrompt =
-      effectiveDiagramType === diagramType ? systemPrompt : DIAGRAM_SYSTEM_PROMPTS[effectiveDiagramType];
+    let finalSystemPrompt = DIAGRAM_SYSTEM_PROMPTS[effectiveDiagramType];
+    if (intentPlan.requiredComponents && intentPlan.requiredComponents.length > 0) {
+      finalSystemPrompt = finalSystemPrompt.replace(
+        "CRITICAL RULES FOR UI NODES:",
+        "CRITICAL RULES FOR UI NODES:\\n     - ONLY use these required components: " + intentPlan.requiredComponents.join(", ") + ". Do NOT use other complex components to save tokens."
+      );
+    }
 
     const baseMaxOutputTokens = 3500;
     const maxTokens = compact ? Math.max(900, Math.round(baseMaxOutputTokens * 0.7)) : baseMaxOutputTokens;
@@ -492,7 +501,7 @@ ${ANTI_GENERIC_DIRECTIVE}`;
 
         const result = streamText({
           model: languageModel,
-          system: `${effectiveSystemPrompt}\n\n${generationInstruction}`,
+          system: `${finalSystemPrompt}\n\n${generationInstruction}`,
           messages,
           temperature: 0.3,
           maxOutputTokens: maxTokens,
@@ -573,7 +582,7 @@ Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanati
             try {
               const corrective = await generateText({
                 model: languageModel,
-                system: effectiveSystemPrompt,
+                system: finalSystemPrompt,
                 messages: [
                   ...messages,
                   { role: "assistant", content: finalText },

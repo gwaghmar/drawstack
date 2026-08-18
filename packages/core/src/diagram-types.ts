@@ -55,8 +55,27 @@ OUTPUT CONTRACT — a single JSON CanvasDocument:
 { "version": 1, "shapes": [ ...CanvasShape... ] }
 
 SHAPE TYPES (all shapes share: id, name, role, x, y, fill, stroke, strokeWidth, strokeDash, opacity, frameId, parentId, text):
-1. Infographics & Executive Dashboards:
-   - "dashboard": { "type": "dashboard", "title": "Apple Dashboard", "subtitle": "Financial Summary · FY26", "tabs": [{"label":"Exec Summary","active":true}], "actions": [{"label":"Filters"},{"label":"Download CSV"}], "highlightBanner": {"text":"...","variant":"coral"} }
+1. UI Components, Dashboards & Slides (REACT HYBRID ENGINE):
+   - "ui_node": { "type": "ui_node", "code": "export default function Dashboard() { const [count, setCount] = useState(0); return <ThemeProvider theme='brutalist'><Card><Typography variant='h1'>Sales</Typography><Button onClick={() => setCount(c => c+1)}>Refresh {count}</Button><LineChart data={[{n:'A', v:10}]} xKey='n' yKey='v' /></Card></ThemeProvider>; }" }
+     Use this for ALL dashboards, mockups, slides, and data-heavy interfaces. It natively renders React. The AI MUST output pure React functional components in the \`code\` field.
+     CRITICAL RULES FOR UI NODES: 
+     - **Components:** Do NOT use raw HTML like \`<button>\`, \`<input>\`, or \`<div>\` for cards. You MUST use our injected Design System:
+       - \`<ThemeProvider theme="editorial" | "brutalist" | "retro" | "wireframe" | "glass">\` (ALWAYS wrap your UI in this).
+       - \`<Card>\`, \`<Button variant="primary"|...>\`, \`<Badge variant="success"|...>\`, \`<Typography variant="h1"|...>\`, \`<Input error={false}>\`
+       - \`<Tabs tabs={['Tab1', 'Tab2']} activeTab='Tab1' onChange={(t)=>...} />\`
+       - \`<DataTable columns={['ID', 'Name']} data={[['1', 'Alice'], ['2', 'Bob']]} />\`
+       - \`<Form onSubmit={(e)=>...}>\`, \`<Slider value={0} onChange={(e)=>...}>\`, \`<Toggle checked={false} onChange={(v)=>...}>\`, \`<Select options={[{label:'A',value:'A'}]} />\`
+     - **Icons:** Use the injected \`<Icon name="IconName" />\` component. It uses \`lucide-react\`. Examples: \`ArrowRight\`, \`Database\`, \`User\`, \`Settings\`, \`ChevronDown\`, \`Activity\`, \`Menu\`, \`Search\`.
+     - **Charts:** Use our injected Recharts wrappers:
+       - \`<BarChart data={[{month:'Jan', revenue:400}]} xKey="month" yKey="revenue" height={300} />\`
+       - \`<LineChart data={[{time:'10am', users:20}]} xKey="time" yKey="users" />\`
+       - \`<DonutChart data={[{name:'Mobile', value:40}, {name:'Web', value:60}]} />\`
+     - **State & Hooks:** You CAN use \`useState\`, \`useEffect\`, \`useMemo\`, and \`useCallback\`. 
+       - **Multiplayer/Sync:** Use \`const [val, setVal] = useSharedState('myKey', initialVal)\` to sync state across all users in the room.
+       - **Live Data:** Use \`const { data, loading, error } = useDataFetch('https://api.example.com/data')\` to pull real-time data securely.
+     - **Animation:** \`motion\` and \`AnimatePresence\` from \`framer-motion\` are injected. Use \`<motion.div initial={{opacity:0}} animate={{opacity:1}}>\` for layout animations.
+     - **Styling:** You may use Tailwind utility classes (e.g. \`className="flex flex-col gap-4"\`) ONLY for layout and spacing. DO NOT use Tailwind for colors, borders, fonts, or shadows—the components handle that automatically based on the theme.
+2. Infographics & Executive Dashboards (Legacy Static Shapes):
    - "chart": { "type": "chart", "title": "Revenue by Quarter", "chartType": "grouped_bar" | "donut" | "horizontal_bar" | "progress_gauge" | "area" | "treemap", "groupedData": [{"category":"Q1 FY26","series":[{"name":"Revenue","value":143.8,"formatted":"$143.8B","color":"#3b82f6"}]}], "donutData": [{"label":"iPhone","value":"$196.5B","percent":54,"color":"#3b82f6"}], "centerLabel": {"primary":"$364.4B","secondary":"FY26 9mo"}, "progressSegments": [{"label":"Operating cash flow","value":"$117.0B","percent":85,"color":"#3b82f6"}], "treemapData": [{"label":"U.S.","value":591,"sublabel":"No. of locations","color":"#f6e7d7","group":"N. America"}], "treemapLegend": [{"label":"N. America","color":"#f6e7d7"}] } — treemap = proportional area blocks (market share, locations by region)
    - "feed_table": { "type": "feed_table", "title": "Recent Activity", "rows": [{"date":"Jul 30 '26","event":"Q4 guidance announced","amount":"$100.0B"}] }
    - "metric": { "type": "metric", "label": "Annual Run Rate", "value": "$4.28M", "delta": "+28.4% YoY", "deltaDirection": "up", "sparkline": [20,28,35,52,68], "icon": "activity" }

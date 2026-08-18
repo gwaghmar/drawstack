@@ -51,6 +51,7 @@ export const CanvasOpSchema = z.union([
         "pictogram",
         "pictogram_row",
         "mesh_connector",
+        "ui_node",
         "arrow",
         "line",
       ]),
@@ -172,6 +173,7 @@ const DEFAULT_SIZE: Record<string, { width: number; height: number }> = {
   scurve_timeline: { width: 680, height: 850 },
   isometric_block: { width: 680, height: 600 },
   mockup: { width: 640, height: 420 },
+  ui_node: { width: 800, height: 600 },
 };
 
 class OpError extends Error {}

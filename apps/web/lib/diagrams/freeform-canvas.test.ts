@@ -12,6 +12,8 @@ import {
   resolveColor,
   computeArrowHeadGeometry,
   computeConnectorLabelLayout,
+  computeSimpleOrthogonalRoute,
+  connectorLabelSize,
   fitTextFontSize,
   resolveArrowHeadStyle,
   type CanvasDocument,
@@ -775,5 +777,61 @@ describe("computeConnectorLabelLayout", () => {
       shapes: [rect("a", 0, 0), rect("b", 300, 0), { id: "e1", type: "line", x: 0, y: 0, start: { shapeId: "a" }, end: { shapeId: "b" } } as CanvasShape],
     };
     assert.equal(computeConnectorLabelLayout(doc).size, 0);
+  });
+});
+
+describe("computeConnectorLabelLayout — avoids connector lines, not just shapes", () => {
+  it("keeps a label off a line that isn't its own (shared trunk case)", () => {
+    // Two connectors converge on the same target with parallel orthogonal legs,
+    // the way a layered ERD does -- a label that only dodges shapes and other
+    // labels can still land squarely on the OTHER connector's line.
+    const doc: CanvasDocument = {
+      version: 1,
+      shapes: [
+        { id: "accounts", type: "rectangle", x: 0, y: 400, width: 140, height: 60 },
+        { id: "plans", type: "rectangle", x: 0, y: 600, width: 140, height: 60 },
+        { id: "subscriptions", type: "rectangle", x: 400, y: 900, width: 140, height: 60 },
+        {
+          id: "e1", type: "line", x: 0, y: 0,
+          start: { shapeId: "accounts" }, end: { shapeId: "subscriptions" },
+          routing: "orthogonal", label: "subscribes to",
+        } as CanvasShape,
+        {
+          id: "e2", type: "line", x: 0, y: 0,
+          start: { shapeId: "plans" }, end: { shapeId: "subscriptions" },
+          routing: "orthogonal", label: "chosen in",
+        } as CanvasShape,
+      ],
+    };
+
+    const layout = computeConnectorLabelLayout(doc);
+    const routeOf = (id: string) => {
+      const shape = doc.shapes.find((s) => s.id === id) as ArrowShape;
+      const { start, end } = resolveArrowRenderEndpoints(doc, shape);
+      return computeSimpleOrthogonalRoute([start, ...(shape.waypoints ?? []), end]);
+    };
+    const segments = [...doc.shapes]
+      .filter((s) => s.type === "line")
+      .flatMap((s) => {
+        const route = routeOf(s.id);
+        return route.slice(0, -1).map((a, i) => [a, route[i + 1]] as const);
+      });
+
+    for (const id of ["e1", "e2"]) {
+      const label = layout.get(id)!;
+      const { width, height } = connectorLabelSize((doc.shapes.find((s) => s.id === id) as ArrowShape).label!);
+      const rect = { x: label.x - width / 2, y: label.y - height / 2, width, height };
+      for (const [a, b] of segments) {
+        const segRect = {
+          x: Math.min(a.x, b.x),
+          y: Math.min(a.y, b.y),
+          width: Math.abs(b.x - a.x) || 1,
+          height: Math.abs(b.y - a.y) || 1,
+        };
+        const overlapW = Math.min(rect.x + rect.width, segRect.x + segRect.width) - Math.max(rect.x, segRect.x);
+        const overlapH = Math.min(rect.y + rect.height, segRect.y + segRect.height) - Math.max(rect.y, segRect.y);
+        assert.ok(overlapW <= 0 || overlapH <= 0, `label ${id} at (${label.x},${label.y}) overlaps a connector line`);
+      }
+    }
   });
 });

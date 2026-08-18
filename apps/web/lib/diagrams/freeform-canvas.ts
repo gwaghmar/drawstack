@@ -361,6 +361,13 @@ export type ArrowShape = BaseShape & {
   showJunctions?: boolean;
 };
 
+export type UINodeShape = BaseShape & {
+  type: "ui_node";
+  width: number;
+  height: number;
+  code: string;
+};
+
 export type CanvasShape =
   | RectShape
   | EllipseShape
@@ -393,6 +400,7 @@ export type CanvasShape =
   | PictogramShape
   | PictogramRowShape
   | MeshConnectorShape
+  | UINodeShape
   | ArrowShape;
 
 export function createEmptyDocument(): CanvasDocument {
@@ -918,18 +926,42 @@ export function computeConnectorLabelLayout(doc: CanvasDocument): Map<string, { 
     obstacles.push(getShapeBounds(doc, shape));
   }
 
+  // Every connector's own drawn route is an obstacle too -- not just the
+  // shapes and other labels. Without this, a label only dodges what it was
+  // scored against, and a line (its own, or a neighboring connector's
+  // parallel corridor) can still run straight through the text.
+  const LINE_BUFFER = 5;
+  const routeOf = (arrow: ArrowShape): { x: number; y: number }[] => {
+    const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
+    const logical = [start, ...(arrow.waypoints ?? []), end];
+    return arrow.routing === "orthogonal" ? computeSimpleOrthogonalRoute(logical) : logical;
+  };
+  const lineObstacles: LabelRect[] = [];
+  for (const shape of doc.shapes) {
+    if (shape.type !== "arrow" && shape.type !== "line") continue;
+    const route = routeOf(shape as ArrowShape);
+    for (let i = 0; i + 1 < route.length; i++) {
+      const a = route[i];
+      const b = route[i + 1];
+      lineObstacles.push({
+        x: Math.min(a.x, b.x) - LINE_BUFFER,
+        y: Math.min(a.y, b.y) - LINE_BUFFER,
+        width: Math.abs(b.x - a.x) + LINE_BUFFER * 2,
+        height: Math.abs(b.y - a.y) + LINE_BUFFER * 2,
+      });
+    }
+  }
+
   const placed: LabelRect[] = [];
   const FRACTIONS = [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74, 0.18, 0.82];
-  const SIDE_OFFSETS = [14, -14];
+  const SIDE_OFFSETS = [22, -22, 34, -34, 14, -14];
 
   for (const shape of doc.shapes) {
     if (shape.type !== "arrow" && shape.type !== "line") continue;
     const arrow = shape as ArrowShape;
     if (!arrow.label) continue;
 
-    const { start, end } = resolveArrowRenderEndpoints(doc, arrow);
-    const logical = [start, ...(arrow.waypoints ?? []), end];
-    const route = arrow.routing === "orthogonal" ? computeSimpleOrthogonalRoute(logical) : logical;
+    const route = routeOf(arrow);
     const { width, height } = connectorLabelSize(arrow.label, arrow.labelStyle);
 
     let best: { x: number; y: number } | null = null;
@@ -944,10 +976,12 @@ export function computeConnectorLabelLayout(doc: CanvasDocument): Map<string, { 
 
         let score = 0;
         for (const ob of obstacles) score += rectOverlapArea(rect, ob);
-        // A label burying another label is worse than clipping a shape corner.
+        // A line straight through the text is worse than clipping a shape corner.
+        for (const lo of lineObstacles) score += rectOverlapArea(rect, lo) * 2;
+        // A label burying another label is worse than either.
         for (const pl of placed) score += rectOverlapArea(rect, pl) * 3;
-        // All else equal, prefer the route midpoint and the "above" side.
-        score += Math.abs(frac - 0.5) * 40 + (side < 0 ? 4 : 0);
+        // All else equal, prefer the route midpoint and a small offset.
+        score += Math.abs(frac - 0.5) * 40 + Math.abs(side) * 0.3;
 
         if (score < bestScore) {
           bestScore = score;
@@ -955,7 +989,7 @@ export function computeConnectorLabelLayout(doc: CanvasDocument): Map<string, { 
         }
         if (bestScore === 0) break;
       }
-      if (bestScore <= Math.abs(frac - 0.5) * 40) break;
+      if (bestScore === 0) break;
     }
 
     if (best) {
