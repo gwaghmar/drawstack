@@ -59,6 +59,17 @@ progress:
 
 ## Pending Todos
 
+- **Dependency version bumps for real vulnerabilities (2026-08-17).** `pnpm audit` is at
+  87 (3 critical, 30 high, 46 moderate, 8 low) after removing dead diagram-engine
+  packages (down from 122). The remainder is in actively-used packages, so each needs a
+  real upgrade + testing pass, not a blind bump:
+  - `next-auth` (`5.0.0-beta.25`) + `@auth/core` — 3 critical + 2 high + 3 moderate. Test
+    the full login flow (mock-auth and real Supabase) after upgrading.
+  - `next` (`16.2.7`) — 4 high + 5 moderate. Test build + core routes after upgrading.
+  - `hono` (22 combined, via `@modelcontextprotocol/sdk@1.29.0`) — bump the SDK version
+    and re-test the MCP endpoint (`generate_diagram`, `apply_ops`, `list_diagram_types`)
+    end-to-end via direct JSON-RPC calls, same pattern used to verify `apply_ops` when it
+    shipped.
 - `apps/web/.env` Google AI key is invalid — set a valid key to run the live agent tool-card verifier (`RUN_AGENT_VERIFY=1 pnpm exec playwright test agent-mode-verify`)
 - PDF export embeds a high-res PNG (pixelRatio = pngScale) → files can be large (~10MB for a tall diagram at scale 2). Follow-up if size matters: JPEG-encode or cap the PDF pixelRatio.
 - `validateAndRepairOutput` lives in `lib/diagrams/validate-output.ts` (shared by generate + agent routes); agent `update_diagram` validates and self-corrects within its 5-step loop. apply_patch/update_node results are applied client-side and not server-validated (lower risk — surgical edits)
