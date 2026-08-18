@@ -1,4 +1,9 @@
-﻿# Roadmap: Flowchart AI â€” Diagram Platform
+﻿# Roadmap: Flowchart AI — Diagram Platform
+
+> **⚠️ SUPERSEDED (2026-08-17).** Historical record of the pre-single-engine roadmap
+> (multi-renderer product: Mermaid, Excalidraw, ReactFlow, ECharts, Nivo, BPMN, etc.).
+> Current source of truth: `CLAUDE.md` and `docs/planning/freeform-canvas-engine-plan.md`.
+> Don't add new phases here — this file is closed.
 
 ## Overview
 

@@ -1,5 +1,9 @@
 # Flowchart AI — Diagram Platform
 
+> **⚠️ SUPERSEDED (2026-08-17).** Historical record of the pre-single-engine product
+> (7 renderer types). The app is now one AI-native freeform canvas engine — see
+> `CLAUDE.md` for the current product description, stack, and architecture.
+
 ## What This Is
 
 A web-based diagram platform where users describe what they want in plain text and an AI assistant generates the correct diagram type at the right size for their intended use. Supports 7 renderer types (Mermaid, Excalidraw, ReactFlow, ECharts, Nivo, TLDraw, BPMN) and exports to PNG/SVG at exact output dimensions. Targeted at developers, designers, and business users who need precise, publication-ready diagrams fast.

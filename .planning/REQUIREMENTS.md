@@ -1,5 +1,9 @@
 # Requirements: Flowchart AI — Diagram Platform
 
+> **⚠️ SUPERSEDED (2026-08-17).** Historical record of the pre-single-engine product's
+> requirements (multi-renderer product: Mermaid, Excalidraw, ReactFlow, ECharts, Nivo,
+> TLDraw, BPMN). Current source of truth: `CLAUDE.md`.
+
 **Defined:** April 13, 2026
 **Core Value:** Preview canvas must always show exactly what the export will look like — correct aspect ratio, correct density, no surprises.
 

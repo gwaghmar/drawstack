@@ -1,5 +1,13 @@
 # Agent-Native Universal Canvas Engine — Master Architecture & Plan
 
+> **STATUS NOTE (2026-08-17).** This thesis has been substantially realized: the
+> freeform canvas (`apply_ops`, semantic id/name addressing, relative placement,
+> palette tokens) is now the product's only engine, and every other canvas listed
+> below as "why AI fails" has been deleted from the codebase in favor of it. Treat
+> this document as design rationale/history, not a pending plan — for current
+> architecture and status see `CLAUDE.md` and
+> `docs/planning/freeform-canvas-engine-plan.md`.
+
 > **The Vision**: The world's first universal visual canvas designed from first principles for **frictionless human + AI co-editing**, **extreme token efficiency**, and **limitless expressive power** (flowcharts, system architectures, UI mockups, mindmaps, sticky ideation, freehand art, and data diagrams).
 
 ---

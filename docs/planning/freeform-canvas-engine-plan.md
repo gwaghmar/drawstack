@@ -110,7 +110,7 @@ per committed change. Export: falls into the existing `html-to-image` fallback f
 
 ## STATUS (2026-08-17) — ALL MILESTONES & POLISH COMPLETED
 
-**All Milestones A–K and all Deferred Polish items are 100% complete, tested, and verified.** 192 unit tests green, tsc clean, Next.js production build clean.
+**All Milestones A–K and all Deferred Polish items are 100% complete, tested, and verified.**
 - **Universal Geometric Primitives**: Real Diamond polygons, Triangles, Cylinders, Clouds, Hexagons, Stars, Sticky notes, and Frames.
 - **Freehand Pen & Brush Tool**: `perfect-freehand` live coordinate stream into scene-graph `type: "path"`.
 - **Advanced Connectors**: Straight, curved, and 90-degree orthogonal routing with rotated anchor trigonometry and bidirectional arrowheads.
@@ -119,6 +119,39 @@ per committed change. Export: falls into the existing `html-to-image` fallback f
 - **Productivity Controls**: Clipboard Copy/Paste (`Ctrl+C`/`Ctrl+V`), 1-click Multi-Object Alignment (Left/Center/Right/Top/Middle/Bottom, Distribute), and 60 FPS Dot-Grid background.
 - **Milestone K (tldraw removal)**: `tldraw` and `@tldraw/tlschema` dependencies completely removed; 100% MIT-licensed commercial engine owned by Drawstack.
 - **AI Round-Trip & Agent Co-Editing**: `apply_ops` verified with 70% token savings and zero hand-layout destruction.
+
+### STATUS UPDATE — this doc is now history, not the ceiling
+
+Everything above was true on 2026-08-17 but the engine kept moving fast the same day and
+after. Don't treat the feature list above as current — it's the A–K build-out record.
+**`CLAUDE.md`'s "Freeform canvas engine" section is the living source of truth** for the
+architecture and full shape/ops vocabulary; this doc stays as history of the original
+design and build order. Highlights since A–K, roughly in order:
+
+- **The single-engine pivot**: every non-freeform diagram type (27 → 1) was deleted.
+  Freeform isn't "the canvas engine," it's the whole product now.
+- **Reference-image ladder (6 levels)**: `dot_matrix` (halftone/dot-density art),
+  `step_timeline`, `chart` treemap mode, `pictogram`/`pictogram_row` (20 built-in icons,
+  no vendor logo dependency), `mesh_connector`, and arrow `waypoints`/`showJunctions`.
+- **Render-path unification**: Konva used to render 11 macro shapes as nothing
+  (`default: return null`) while SVG export drew them correctly — a real, shipped WYSIWYG
+  violation. Fixed by having Konva rasterize `freeformToSvg` output via `Konva.Image`
+  (`MacroShapeNode`); one source of truth now, 16 macro shapes covered.
+- **AI-output validator hardened**: `validateAndRepairOutput` moved from all-or-nothing
+  array validation to per-shape validation + reference cleanup, plus null-field
+  stripping and bare-string `text` coercion — six real bugs found by testing against the
+  live model, not by inspection.
+- **Self-hosted Yjs multiplayer signaling**, presence cursors, and a batch of real editor
+  bug fixes (undo not capturing hand-edits, ⌘D hijacking tool-mode, ⌘V needing a live
+  selection, frame-rename writing the wrong field).
+- **ERD crow's-foot cardinality, arrowhead styles (UML inheritance/composition),
+  graph-structured `layout` op** (AI authors connections, engine derives geometry),
+  editable table cells, pinned comments/annotations, inline rich text, a real vector
+  `freeformToSvg`-backed SVG export button, sequential frame-stepping in Present Mode,
+  Agent Mode `check_layout` self-critique tool, and `apply_ops` exposed over the MCP
+  endpoint.
+- **Dependency cleanup**: the unused npm packages from the deleted engines (mermaid,
+  bpmn-js, d3, cytoscape, echarts, fabric, pixi.js, vis-network) have been removed.
 
 ### Remaining items (Platform Launch Gate)
 1. **Production Revenue Funnel verification**: Click-test production signup → generate → Stripe checkout funnel before public marketing launch.

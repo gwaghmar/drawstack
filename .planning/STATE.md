@@ -12,7 +12,16 @@ progress:
 
 # Project State
 
-## Current Position
+> **⚠️ SUPERSEDED (2026-08-17).** Everything below is historical record of the
+> pre-single-engine product (7 renderer types: Mermaid, Excalidraw, ReactFlow, ECharts,
+> Nivo, TLDraw/freeform, BPMN). That product no longer exists — the app is a single
+> freeform-canvas engine now, and has grown far past milestone 1.6 besides. Current
+> source of truth: `CLAUDE.md` (architecture, conventions, known issues) and
+> `docs/planning/freeform-canvas-engine-plan.md` (canvas engine history + STATUS UPDATE).
+> Don't update the phase table below to reflect new work — it's a closed record of an
+> earlier era; add new status to the docs above instead.
+
+## Current Position (as of milestone 1.6, pre-pivot — see notice above)
 
 **Milestone 1.0** — AI Diagram Quality & Precision — DONE
 **Milestone 1.1** — AI Iteration & Sharing — DONE
