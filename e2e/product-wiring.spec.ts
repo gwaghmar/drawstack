@@ -48,7 +48,7 @@ test("dashboard prompt reaches Engine v2 generation unchanged", async ({ page })
   await expect.poll(() => generationRequests).toBe(1);
   await page.waitForTimeout(300);
   expect(generationRequests).toBe(1);
-  await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Open AI composer" })).toBeVisible();
   expect(errors).toEqual([]);
 });
 
@@ -100,7 +100,8 @@ test("no-credit generation error exposes recovery actions", async ({ page }) => 
     body: JSON.stringify({ error: "No credits left. Add your own AI key or upgrade." }),
   }));
   await page.goto("/app/engine-v2");
-  await page.getByRole("button", { name: "Generate", exact: true }).click();
+  await page.getByRole("button", { name: "Open AI composer" }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(page.getByText("No credits left. Add your own AI key or upgrade.", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Add AI key" })).toHaveAttribute("href", "/app/settings");
   await expect(page.getByRole("link", { name: "Upgrade" })).toHaveAttribute("href", "/app/billing");

@@ -48,6 +48,7 @@ test("engine v2 supports focus-safe keyboard editing", async ({ page }) => {
   await page.keyboard.press("Control+Shift+z");
   await expect(page.locator('[data-tree-node-id="mrr-copy"]')).toHaveCount(0);
 
+  await page.getByRole("button", { name: "Open AI composer" }).click();
   await page.getByLabel("Describe what to build").focus();
   await page.keyboard.press("Control+d");
   await expect(page.locator('[data-tree-node-id="metrics-copy"]')).toHaveCount(0);
@@ -135,4 +136,35 @@ test("engine v2 inserts deterministic nodes and pastes fresh copies", async ({ p
   await expect(page.locator('[data-tree-node-id="graph"]')).toBeVisible();
   const frameTreeItem = page.locator('[data-tree-node-id="frame"]').locator("..");
   await expect(frameTreeItem.locator('[data-tree-node-id="graph"]')).toBeVisible();
+});
+
+test("engine v2 exposes and applies every current node field", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+
+  await page.locator('[data-tree-node-id="revenue-chart"]').click();
+  await page.getByLabel("Node name").fill("Primary revenue chart");
+  await page.getByLabel("Chart title").fill("Revenue test");
+  await page.getByLabel("Chart value prefix").fill("USD ");
+  await page.getByLabel("Node background").fill("#fff4e8");
+  await page.getByLabel("Node borderColor").fill("#ff5d2e");
+  await page.getByLabel("Node border width").fill("2");
+  await page.getByLabel("Node border radius").fill("20");
+  await expect(page.getByRole("heading", { name: "Revenue test" })).toBeVisible();
+  await expect(page.locator('[data-node-id="revenue-chart"]')).toHaveCSS("background-color", "rgb(255, 244, 232)");
+  await expect(page.locator('[data-tree-node-id="revenue-chart"]')).toContainText("Primary revenue chart");
+
+  await page.locator('[data-tree-node-id="eyebrow"]').click();
+  await page.getByLabel("Text style").selectOption("heading");
+  await page.getByLabel("Text content", { exact: true }).fill("Editable heading");
+  await expect(page.locator('[data-node-id="eyebrow"]')).toContainText("Editable heading");
+
+  await page.locator('[data-tree-node-id="status"]').click();
+  await page.getByLabel("Metric tone").selectOption("warning");
+  await expect(page.getByLabel("Metric tone")).toHaveValue("warning");
+
+  await page.locator('[data-tree-node-id="analysis"]').click();
+  await page.getByLabel("Frame alignment").selectOption("center");
+  await page.getByLabel("Frame justification").selectOption("space-between");
+  await expect(page.locator('[data-node-id="analysis"]')).toHaveCSS("align-items", "center");
+  await expect(page.locator('[data-node-id="analysis"]')).toHaveCSS("justify-content", "space-between");
 });

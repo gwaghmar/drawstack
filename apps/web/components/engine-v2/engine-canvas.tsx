@@ -33,7 +33,7 @@ const EMPTY_SELECTION = new Set<string>();
 function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void }) {
   const layout = node.layout;
   const layoutStyle = layout.mode === "grid"
-    ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding, justifyContent: layout.justify }
+    ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify }
     : { display: "flex", flexDirection: layout.direction ?? "row", gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify };
 
   return (
@@ -257,6 +257,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [hydrated, setHydrated] = useState(false);
   const [prompt, setPrompt] = useState(initialPrompt);
   const [generating, setGenerating] = useState(false);
+  const [aiComposerOpen, setAiComposerOpen] = useState(autoGenerate);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
   const [hasPersistenceConflict, setHasPersistenceConflict] = useState(false);
@@ -776,6 +777,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
         closeDrawer();
         return;
       }
+      if (event.key === "Escape" && aiComposerOpen) {
+        event.preventDefault();
+        setAiComposerOpen(false);
+        return;
+      }
       if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
@@ -857,8 +863,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       if (!response.ok || !body.document) throw new Error(body.error || "Generation failed");
       commitDocument(body.document, "ai");
       replaceSelection([body.document.children[0]?.id ?? ""]);
+      setAiComposerOpen(false);
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Generation failed");
+      setAiComposerOpen(true);
     } finally {
       setGenerating(false);
     }
@@ -903,27 +911,6 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       </aside>
 
       <section className="min-w-0 flex-1 overflow-auto p-3 md:p-8">
-        <form onSubmit={generateDocument} className="mx-auto mb-5 max-w-[1080px] rounded-xl border border-[#C8CEC4] bg-[#F7F8F4] p-2 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Sparkles size={16} className="ml-2 shrink-0 text-[#3157F6]" />
-            <input aria-label="Describe what to build" value={prompt} onChange={(event) => setPrompt(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none" placeholder="Describe the chart, graph, or visual you need" />
-            <button ref={generateButtonRef} type="submit" disabled={generating || !prompt.trim()} className="flex shrink-0 items-center gap-2 rounded-lg bg-[#15171A] px-3 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 sm:px-4">
-              {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
-              <span className="max-[420px]:sr-only">{generating ? "Compiling" : "Generate"}</span>
-            </button>
-          </div>
-          {generationError ? (
-            <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-1 pt-2 text-xs text-[#B93815]">
-              <span>{generationError}</span>
-              {generationError.toLowerCase().includes("credit") ? (
-                <span className="flex items-center gap-2">
-                  <Link href="/app/settings" className="font-semibold underline underline-offset-2">Add AI key</Link>
-                  <Link href="/app/billing" className="font-semibold underline underline-offset-2">Upgrade</Link>
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-        </form>
         {hasPersistenceConflict ? (
           <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#E6A23C] bg-[#FFF8E8] px-4 py-3 text-xs text-[#6E4A00]">
             <span className="flex items-center gap-2"><AlertTriangle size={15} />This project changed elsewhere. Your local edits were not overwritten.</span>
@@ -946,6 +933,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em] md:flex"><MousePointer2 size={13} /> Select any element to edit its real node</div>
           <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto pb-1 2xl:w-auto 2xl:pb-0">
             <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#CED3CA] bg-[#F7F8F4] p-1">
+              <button type="button" onClick={() => setAiComposerOpen(true)} aria-label="Open AI composer" className="flex items-center gap-1.5 rounded-md bg-[#15171A] px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-white hover:bg-[#2B2E33]"><Sparkles size={13} />AI</button>
               <button ref={layersButtonRef} type="button" onClick={() => setOpenDrawer("layers")} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] hover:bg-[#E4E7E1] lg:hidden" aria-label="Open layers"><Layers3 size={13} />Layers</button>
               <button ref={inspectButtonRef} type="button" onClick={() => setOpenDrawer("inspect")} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={13} />Inspect</button>
             </div>
@@ -1022,7 +1010,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             <div className="rounded-lg border border-[#D7DBD2] bg-white p-3 font-mono text-[10px] leading-5 text-[#566057]">
               <div><span className="text-[#3157F6]">id</span> {selected.id}</div>
               <div><span className="text-[#3157F6]">type</span> {selected.type}</div>
-              <div><span className="text-[#3157F6]">name</span> {selected.name}</div>
+              <label className="mt-2 block">
+                <span className="mb-1 block text-[#3157F6]">name</span>
+                <input aria-label="Node name" value={selected.name} onChange={(event) => updateSelected((node) => ({ ...node, name: event.target.value }))} className="w-full rounded-md border border-[#C8CEC4] bg-white px-2 py-1.5 font-sans text-xs outline-none focus:border-[#3157F6]" />
+              </label>
             </div>
 
             <div className="grid grid-cols-3 gap-2">
@@ -1066,11 +1057,46 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <p className="mt-2 text-[10px] leading-4 text-[#667067]">Auto keeps the node fluid. A width stays inside layout flow.</p>
             </fieldset>
 
+            <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
+              <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Appearance</legend>
+              <div className="grid grid-cols-2 gap-3">
+                {(["background", "color", "borderColor"] as const).map((property) => (
+                  <label key={property} className={property === "borderColor" ? "col-span-2" : ""}>
+                    <span className="mb-1 block text-xs capitalize text-[#667067]">{property.replace(/([A-Z])/g, " $1")}</span>
+                    <input aria-label={`Node ${property}`} placeholder="Default or $token" value={selected.style?.[property] ?? ""} onChange={(event) => updateSelected((node) => {
+                      const style = { ...node.style };
+                      if (event.target.value) style[property] = event.target.value;
+                      else delete style[property];
+                      return { ...node, style };
+                    })} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" />
+                  </label>
+                ))}
+                <label>
+                  <span className="mb-1 block text-xs text-[#667067]">Border width</span>
+                  <input aria-label="Node border width" type="number" min="0" max="24" placeholder="0" value={selected.style?.borderWidth ?? ""} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, borderWidth: event.target.value ? Number(event.target.value) : undefined } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs text-[#667067]">Radius</span>
+                  <input aria-label="Node border radius" type="number" min="0" max="999" placeholder="Default" value={selected.style?.borderRadius ?? ""} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, borderRadius: event.target.value ? Number(event.target.value) : undefined } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs text-[#667067]">Flex grow</span>
+                  <input aria-label="Node flex grow" type="number" min="0" max="12" placeholder="None" value={selected.style?.flex ?? ""} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, flex: event.target.value ? Number(event.target.value) : undefined } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" />
+                </label>
+                <label>
+                  <span className="mb-1 block text-xs text-[#667067]">Self alignment</span>
+                  <select aria-label="Node self alignment" value={selected.style?.alignSelf ?? ""} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, alignSelf: event.target.value ? event.target.value as NonNullable<EngineNode["style"]>["alignSelf"] : undefined } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]">
+                    <option value="">Auto</option><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="stretch">Stretch</option>
+                  </select>
+                </label>
+              </div>
+            </fieldset>
+
             {selected.type === "text" ? (
-              <label className="block">
-                <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Text content</span>
-                <textarea value={selected.content} onChange={(event) => updateSelected((node) => node.type === "text" ? { ...node, content: event.target.value } : node)} rows={4} className="w-full resize-none rounded-lg border border-[#C8CEC4] bg-white p-3 text-sm outline-none focus:border-[#3157F6] focus:ring-2 focus:ring-[#3157F6]/15" />
-              </label>
+              <div className="space-y-3">
+                <label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Text style</span><select aria-label="Text style" value={selected.variant} onChange={(event) => updateSelected((node) => node.type === "text" ? { ...node, variant: event.target.value as typeof selected.variant } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="eyebrow">Eyebrow</option><option value="display">Display</option><option value="heading">Heading</option><option value="body">Body</option><option value="caption">Caption</option></select></label>
+                <label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Text content</span><textarea aria-label="Text content" value={selected.content} onChange={(event) => updateSelected((node) => node.type === "text" ? { ...node, content: event.target.value } : node)} rows={4} className="w-full resize-none rounded-lg border border-[#C8CEC4] bg-white p-3 text-sm outline-none focus:border-[#3157F6] focus:ring-2 focus:ring-[#3157F6]/15" /></label>
+              </div>
             ) : null}
 
             {selected.type === "metric" ? (
@@ -1081,26 +1107,27 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
                     <input value={selected[field]} onChange={(event) => updateSelected((node) => node.type === "metric" ? { ...node, [field]: event.target.value } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
                   </label>
                 ))}
+                <label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Tone</span><select aria-label="Metric tone" value={selected.tone} onChange={(event) => updateSelected((node) => node.type === "metric" ? { ...node, tone: event.target.value as typeof selected.tone } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="neutral">Neutral</option><option value="positive">Positive</option><option value="warning">Warning</option></select></label>
               </div>
             ) : null}
 
             {selected.type === "chart" ? (
-              <label className="block">
+              <div className="space-y-3"><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart title</span><input aria-label="Chart title" value={selected.title} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, title: event.target.value } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label><label className="block">
                 <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart family</span>
                 <select value={selected.chartType} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, chartType: event.target.value as EngineChartNode["chartType"] } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
                   {CHART_FAMILY_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
-              </label>
+              </label><div className="grid grid-cols-2 gap-3"><label><span className="mb-2 block text-xs text-[#667067]">Value prefix</span><input aria-label="Chart value prefix" value={selected.valuePrefix ?? ""} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, valuePrefix: event.target.value || undefined } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label><label><span className="mb-2 block text-xs text-[#667067]">Value suffix</span><input aria-label="Chart value suffix" value={selected.valueSuffix ?? ""} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, valueSuffix: event.target.value || undefined } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label></div><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart data JSON</span><textarea key={`${selected.id}-data`} aria-label="Chart data JSON" defaultValue={JSON.stringify(selected.data, null, 2)} onBlur={(event) => { try { const data = JSON.parse(event.target.value); if (!Array.isArray(data)) throw new Error(); updateSelected((node) => node.type === "chart" ? { ...node, data } : node); setGenerationError(null); } catch { setGenerationError("Chart data must be a valid JSON array."); } }} rows={8} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-3 font-mono text-[11px] outline-none focus:border-[#3157F6]" /></label></div>
             ) : null}
 
             {selected.type === "graph" ? (
-              <label className="block">
+              <div className="space-y-3"><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Graph title</span><input aria-label="Graph title" value={selected.title} onChange={(event) => updateSelected((node) => node.type === "graph" ? { ...node, title: event.target.value } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label><label className="block">
                 <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Graph direction</span>
                 <select value={selected.graph.direction ?? "TB"} onChange={(event) => updateSelected((node) => node.type === "graph" ? { ...node, graph: { ...node.graph, direction: event.target.value as "TB" | "LR" } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
                   <option value="TB">Top to bottom</option>
                   <option value="LR">Left to right</option>
                 </select>
-              </label>
+              </label><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Graph nodes and edges JSON</span><textarea key={`${selected.id}-graph`} aria-label="Graph data JSON" defaultValue={JSON.stringify(selected.graph, null, 2)} onBlur={(event) => { try { const graph = JSON.parse(event.target.value); if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) throw new Error(); updateSelected((node) => node.type === "graph" ? { ...node, graph } : node); setGenerationError(null); } catch { setGenerationError("Graph data must contain valid nodes and edges arrays."); } }} rows={10} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-3 font-mono text-[11px] outline-none focus:border-[#3157F6]" /></label></div>
             ) : null}
 
             {selected.type === "frame" ? (
@@ -1138,6 +1165,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
                     </label>
                   )}
                 </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <label><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Align</span><select aria-label="Frame alignment" value={selected.layout.align ?? "stretch"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, align: event.target.value as EngineFrameNode["layout"]["align"] } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="stretch">Stretch</option></select></label>
+                  <label><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Justify</span><select aria-label="Frame justification" value={selected.layout.justify ?? "flex-start"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, justify: event.target.value as EngineFrameNode["layout"]["justify"] } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="space-between">Space between</option><option value="space-around">Space around</option><option value="space-evenly">Space evenly</option></select></label>
+                </div>
               </>
             ) : null}
 
@@ -1165,6 +1196,27 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             {!revisions.length ? <p className="px-3 py-6 text-center text-xs text-[#667067]">No saved versions yet.</p> : null}
           </div>
         </section>
+      ) : null}
+      {aiComposerOpen ? (
+        <form onSubmit={generateDocument} aria-label="AI visual composer" className="fixed bottom-4 left-1/2 z-[100] w-[min(calc(100vw-24px),760px)] -translate-x-1/2 rounded-2xl border border-white/15 bg-[#15171A]/92 p-3 text-white shadow-[0_24px_80px_rgba(0,0,0,0.38)] backdrop-blur-xl sm:bottom-6 sm:p-4">
+          <div className="mb-2 flex items-center justify-between gap-3 px-1">
+            <div className="flex items-center gap-2 font-mono text-[10px] font-semibold uppercase tracking-[0.14em] text-white/60"><Sparkles size={13} />Build with AI</div>
+            <button type="button" onClick={() => setAiComposerOpen(false)} aria-label="Close AI composer" className="rounded-md p-1.5 text-white/60 hover:bg-white/10 hover:text-white"><X size={15} /></button>
+          </div>
+          <div className="flex items-end gap-2 rounded-xl border border-white/10 bg-black/20 p-2 focus-within:border-white/30">
+            <textarea autoFocus aria-label="Describe what to build" value={prompt} onChange={(event) => setPrompt(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); generateButtonRef.current?.click(); } }} rows={2} className="min-h-[58px] min-w-0 flex-1 resize-none bg-transparent px-2 py-2 text-sm leading-5 text-white outline-none placeholder:text-white/40" placeholder="Describe the chart, graph, or visual you need" />
+            <button ref={generateButtonRef} type="submit" disabled={generating || !prompt.trim()} className="flex shrink-0 items-center gap-2 rounded-lg border border-white/10 bg-white px-3 py-2.5 text-xs font-semibold text-[#15171A] hover:bg-[#F0F2ED] disabled:cursor-not-allowed disabled:opacity-40 sm:px-4">
+              {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              <span>{generating ? "Compiling" : "Create"}</span>
+            </button>
+          </div>
+          {generationError ? (
+            <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 pt-3 text-xs text-[#FFB59F]">
+              <span>{generationError}</span>
+              {generationError.toLowerCase().includes("credit") ? <span className="flex items-center gap-2"><Link href="/app/settings" className="font-semibold text-white underline underline-offset-2">Add AI key</Link><Link href="/app/billing" className="font-semibold text-white underline underline-offset-2">Upgrade</Link></span> : null}
+            </div>
+          ) : null}
+        </form>
       ) : null}
     </main>
   );
