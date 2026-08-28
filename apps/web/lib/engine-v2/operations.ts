@@ -129,6 +129,32 @@ export function moveNodeDown(nodes: EngineNode[], id: string): EngineNode[] {
   return moveNode(nodes, id, "down");
 }
 
+function containsNode(node: EngineNode, id: string): boolean {
+  if (node.id === id) return true;
+  return node.type === "frame" && node.children.some((child) => containsNode(child, id));
+}
+
+export function moveNodeToParent(
+  nodes: EngineNode[],
+  id: string,
+  parentId: string | null,
+  insertionIndex?: number,
+): EngineNode[] {
+  const source = findParent(nodes, id);
+  if (!source || id === parentId) return nodes;
+  const destination = parentId === null ? null : findParent(nodes, parentId)?.node;
+  if (parentId !== null && (!destination || destination.type !== "frame")) return nodes;
+  if (source.node.type === "frame" && parentId !== null && containsNode(source.node, parentId)) return nodes;
+
+  const destinationChildren = destination?.type === "frame" ? destination.children : nodes;
+  let target = boundedIndex(insertionIndex, destinationChildren.length);
+  if (source.parentId === parentId && source.index < target) target -= 1;
+  if (source.parentId === parentId && source.index === target) return nodes;
+
+  const withoutSource = removeNode(nodes, id);
+  return insertNode(withoutSource, source.node, parentId, target);
+}
+
 function collectIds(nodes: EngineNode[], ids = new Set<string>()): Set<string> {
   for (const node of nodes) {
     ids.add(node.id);

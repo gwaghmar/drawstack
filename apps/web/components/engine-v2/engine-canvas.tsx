@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Check, Code2, Copy, CopyPlus, Download, History, Loader2, MousePointer2, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
 import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { DeterministicChart } from "@/components/engine-v2/charts";
@@ -20,8 +20,8 @@ import {
   type EngineTokens,
 } from "@/lib/engine-v2/document";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
-import { duplicateNode, findParent, moveNodeDown, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
+import { duplicateNode, findParent, moveNodeDown, moveNodeToParent, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
 
 function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
   const layout = node.layout;
@@ -124,23 +124,81 @@ function Node({ node, tokens, selectedId, onSelect }: { node: EngineNode; tokens
   );
 }
 
-function Tree({ nodes, selectedId, depth = 0, onSelect }: { nodes: EngineNode[]; selectedId: string; depth?: number; onSelect: (id: string) => void }) {
+type TreeDropPosition = "before" | "inside" | "after";
+
+type TreeDropTarget = {
+  nodeId: string;
+  position: TreeDropPosition;
+};
+
+type TreeProps = {
+  nodes: EngineNode[];
+  selectedId: string;
+  draggedId: string | null;
+  dropTarget: TreeDropTarget | null;
+  parentId?: string | null;
+  depth?: number;
+  onSelect: (id: string) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+  onDropTarget: (target: TreeDropTarget | null) => void;
+  onMove: (id: string, parentId: string | null, insertionIndex: number) => void;
+};
+
+function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth = 0, onSelect, onDragStart, onDragEnd, onDropTarget, onMove }: TreeProps) {
+  const positionForPointer = (node: EngineNode, element: HTMLElement, clientY: number): TreeDropPosition => {
+    const bounds = element.getBoundingClientRect();
+    const ratio = bounds.height ? (clientY - bounds.top) / bounds.height : 0.5;
+    if (node.type === "frame" && ratio >= 0.25 && ratio <= 0.75) return "inside";
+    return ratio < 0.5 ? "before" : "after";
+  };
+
   return (
     <div className="space-y-0.5">
-      {nodes.map((node) => (
-        <div key={node.id}>
-          <button
-            type="button"
-            onClick={() => onSelect(node.id)}
-            style={{ paddingLeft: 10 + depth * 14 }}
-            className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-xs ${selectedId === node.id ? "bg-[#E9EDFF] text-[#2448D8]" : "text-[#566057] hover:bg-[#F0F2EC]"}`}
-          >
-            <span className="w-12 shrink-0 font-mono text-[9px] uppercase tracking-wide opacity-70">{node.type}</span>
-            <span className="truncate font-medium">{node.name}</span>
-          </button>
-          {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} depth={depth + 1} onSelect={onSelect} /> : null}
-        </div>
-      ))}
+      {nodes.map((node, index) => {
+        const activePosition = dropTarget?.nodeId === node.id ? dropTarget.position : null;
+        return (
+          <div key={node.id} className="relative">
+            {activePosition === "before" ? <div className="pointer-events-none absolute inset-x-1 -top-[2px] z-10 h-0.5 rounded-full bg-[#3157F6]" /> : null}
+            <button
+              type="button"
+              onClick={() => onSelect(node.id)}
+              draggable
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", node.id);
+                onDragStart(node.id);
+              }}
+              onDragEnd={onDragEnd}
+              onDragOver={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                event.dataTransfer.dropEffect = "move";
+                onDropTarget({ nodeId: node.id, position: positionForPointer(node, event.currentTarget, event.clientY) });
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                const sourceId = draggedId ?? event.dataTransfer.getData("text/plain");
+                const position = positionForPointer(node, event.currentTarget, event.clientY);
+                if (sourceId) {
+                  if (position === "inside" && node.type === "frame") onMove(sourceId, node.id, node.children.length);
+                  else onMove(sourceId, parentId, index + (position === "after" ? 1 : 0));
+                }
+                onDragEnd();
+              }}
+              style={{ paddingLeft: 10 + depth * 14 }}
+              className={`flex w-full items-center gap-1 rounded-md py-1.5 pr-2 text-left text-xs transition-colors ${draggedId === node.id ? "opacity-45" : ""} ${activePosition === "inside" ? "bg-[#DCE3FF] ring-1 ring-inset ring-[#3157F6]" : selectedId === node.id ? "bg-[#E9EDFF] text-[#2448D8]" : "text-[#566057] hover:bg-[#F0F2EC]"}`}
+            >
+              <GripVertical size={12} className="shrink-0 cursor-grab opacity-35" aria-hidden="true" />
+              <span className="w-12 shrink-0 font-mono text-[9px] uppercase tracking-wide opacity-70">{node.type}</span>
+              <span className="truncate font-medium">{node.name}</span>
+            </button>
+            {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} draggedId={draggedId} dropTarget={dropTarget} parentId={node.id} depth={depth + 1} onSelect={onSelect} onDragStart={onDragStart} onDragEnd={onDragEnd} onDropTarget={onDropTarget} onMove={onMove} /> : null}
+            {activePosition === "after" ? <div className="pointer-events-none absolute inset-x-1 bottom-[-2px] z-10 h-0.5 rounded-full bg-[#3157F6]" /> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -168,6 +226,8 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
+  const [treeDraggedId, setTreeDraggedId] = useState<string | null>(null);
+  const [treeDropTarget, setTreeDropTarget] = useState<TreeDropTarget | null>(null);
   const [revisions, setRevisions] = useState<Array<{ id: string; label: string | null; createdAt: Date }>>([]);
   const artboardRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
@@ -329,6 +389,19 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     if (children !== document.children) commitDocument({ ...document, children });
   };
 
+  const moveTreeNode = (id: string, parentId: string | null, insertionIndex: number) => {
+    commitDocument((current) => {
+      const children = moveNodeToParent(current.children, id, parentId, insertionIndex);
+      return children === current.children ? current : { ...current, children };
+    });
+    setSelectedId(id);
+  };
+
+  const endTreeDrag = () => {
+    setTreeDraggedId(null);
+    setTreeDropTarget(null);
+  };
+
   const exportPng = async () => {
     if (!artboardRef.current) return;
     const { toPng } = await import("html-to-image");
@@ -391,7 +464,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold ${hydrated ? "bg-[#B7FF4A]" : "bg-[#E4E7E1]"}`}>{hydrated ? "LIVE DOM" : "CONNECTING"}</span>
         </div>
         <div className="min-h-0 flex-1 overflow-auto px-2 pb-4">
-          <Tree nodes={document.children} selectedId={selectedId} onSelect={setSelectedId} />
+          <Tree nodes={document.children} selectedId={selectedId} draggedId={treeDraggedId} dropTarget={treeDropTarget} onSelect={setSelectedId} onDragStart={setTreeDraggedId} onDragEnd={endTreeDrag} onDropTarget={setTreeDropTarget} onMove={moveTreeNode} />
         </div>
         <button type="button" onClick={copyDocument} className="m-3 flex items-center justify-center gap-2 rounded-lg border border-[#C8CEC4] bg-white px-3 py-2.5 text-xs font-semibold hover:border-[#3157F6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3157F6]">
           {copied ? <Check size={14} /> : <Copy size={14} />}

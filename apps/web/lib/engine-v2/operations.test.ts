@@ -6,6 +6,7 @@ import {
   findParent,
   insertNode,
   moveNodeDown,
+  moveNodeToParent,
   moveNodeUp,
   removeNode,
   reorderNode,
@@ -106,5 +107,33 @@ describe("engine-v2 tree operations", () => {
     visit(second.nodes);
     assert.equal(new Set(allIds).size, allIds.length);
     assert.equal(findParent(nodes, "nested-copy"), null);
+  });
+
+  it("moves nodes across parents at an exact insertion boundary", () => {
+    const nodes = tree();
+    const movedToRoot = moveNodeToParent(nodes, "b", null, 1);
+    assert.deepEqual(movedToRoot.map((node) => node.id), ["frame", "b", "c"]);
+    assert.equal(findParent(movedToRoot, "b")?.parentId, null);
+    assert.deepEqual((findParent(movedToRoot, "nested")!.node as Extract<EngineNode, { type: "frame" }>).children.map((node) => node.id), ["b-copy"]);
+
+    const movedIntoFrame = moveNodeToParent(nodes, "c", "nested", 1);
+    assert.deepEqual((findParent(movedIntoFrame, "nested")!.node as Extract<EngineNode, { type: "frame" }>).children.map((node) => node.id), ["b", "c", "b-copy"]);
+    assert.equal(findParent(movedIntoFrame, "c")?.parentId, "nested");
+    assert.ok(findParent(nodes, "c")?.parentId === null);
+  });
+
+  it("normalizes same-parent insertion boundaries after removal", () => {
+    const nodes = [text("a"), text("b"), text("c")];
+    assert.deepEqual(moveNodeToParent(nodes, "a", null, 2).map((node) => node.id), ["b", "a", "c"]);
+    assert.deepEqual(moveNodeToParent(nodes, "c", null, 1).map((node) => node.id), ["a", "c", "b"]);
+    assert.equal(moveNodeToParent(nodes, "b", null, 2), nodes);
+  });
+
+  it("rejects cyclic and invalid cross-parent moves", () => {
+    const nodes = tree();
+    assert.equal(moveNodeToParent(nodes, "frame", "nested", 0), nodes);
+    assert.equal(moveNodeToParent(nodes, "frame", "frame", 0), nodes);
+    assert.equal(moveNodeToParent(nodes, "a", "c", 0), nodes);
+    assert.equal(moveNodeToParent(nodes, "missing", null, 0), nodes);
   });
 });
