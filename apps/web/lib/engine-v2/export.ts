@@ -3,10 +3,13 @@ import {
   finiteCandlestickData,
   finiteCartesianData,
   finiteHeatmapData,
+  finiteSankeyData,
   finiteScatterData,
   formatChartValue,
   interpolateHexColor,
   layoutTreemap,
+  layoutSankey,
+  layoutWaterfall,
   linePath,
   numericDomain,
   orderedUnique,
@@ -151,6 +154,17 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
   const muted = escapeMarkup(color(tokens, "quiet"));
   const surface = color(tokens, "panel");
   const grid = escapeMarkup(color(tokens, "rule"));
+  if (node.chartType === "sankey") {
+    const layout = layoutSankey(finiteSankeyData(node.data), CHART.right - CHART.left, CHART.bottom - CHART.top);
+    if (!layout) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No valid acyclic flow data</text></svg>`;
+    const maxLayer = Math.max(...layout.nodes.map((layoutNode) => layoutNode.layer));
+    const links = layout.links.map((link) => `<path d="${link.path}" fill="none" stroke="${SERIES_COLORS[link.colorIndex % SERIES_COLORS.length]}" stroke-width="${number(link.width)}" stroke-opacity=".3"><title>${escapeMarkup(`${link.source} to ${link.target}: ${formatChartValue(link.value, node.valuePrefix, node.valueSuffix)}`)}</title></path>`).join("");
+    const nodes = layout.nodes.map((layoutNode) => {
+      const finalLayer = layoutNode.layer === maxLayer;
+      return `<rect x="${number(layoutNode.x)}" y="${number(layoutNode.y)}" width="${number(layoutNode.width)}" height="${number(layoutNode.height)}" rx="2" fill="${SERIES_COLORS[layoutNode.colorIndex % SERIES_COLORS.length]}"/><text x="${number(finalLayer ? layoutNode.x - 7 : layoutNode.x + layoutNode.width + 7)}" y="${number(layoutNode.y + layoutNode.height / 2 + 4)}" text-anchor="${finalLayer ? "end" : "start"}" font-size="11" font-weight="600" fill="${foreground}">${escapeMarkup(layoutNode.id)}</text>`;
+    }).join("");
+    return `${open}<g transform="translate(${CHART.left} ${CHART.top})">${links}${nodes}</g></svg>`;
+  }
   if (node.chartType === "heatmap") {
     const data = finiteHeatmapData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
@@ -188,6 +202,21 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     return `${open}${chartGrid(domain, node, tokens)}${candles}</svg>`;
   }
   const data = finiteCartesianData(node.data);
+  if (node.chartType === "waterfall") {
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const waterfall = layoutWaterfall(data);
+    const band = (CHART.right - CHART.left) / waterfall.steps.length;
+    const barWidth = Math.max(3, band * 0.64);
+    const marks = waterfall.steps.map((step, index) => {
+      const x = CHART.left + band * index + (band - barWidth) / 2;
+      const startY = scaleLinear(step.start, waterfall.domain, CHART.bottom, CHART.top);
+      const endY = scaleLinear(step.end, waterfall.domain, CHART.bottom, CHART.top);
+      const nextX = CHART.left + band * (index + 1) + (band - barWidth) / 2;
+      const connector = index < waterfall.steps.length - 1 ? `<line x1="${number(x + barWidth)}" y1="${number(endY)}" x2="${number(nextX)}" y2="${number(endY)}" stroke="${muted}" stroke-dasharray="3 3"/>` : "";
+      return `${connector}<rect x="${number(x)}" y="${number(Math.min(startY, endY))}" width="${number(barWidth)}" height="${number(Math.max(Math.abs(startY - endY), 1))}" rx="2" fill="${step.value >= 0 ? SERIES_COLORS[2] : SERIES_COLORS[1]}"/><text x="${number(x + barWidth / 2)}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(step.label)}</text>`;
+    }).join("");
+    return `${open}${chartGrid(waterfall.domain, node, tokens)}${marks}</svg>`;
+  }
   if (!["radar", "treemap", "funnel", "gauge"].includes(node.chartType)) return null;
   if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
   if (node.chartType === "treemap") {
@@ -540,5 +569,5 @@ export function createEngineV2ReactTsxExport(document: EngineDocument): EngineV2
 }
 
 export function supportedEngineV2ExportChartTypes(): readonly DeterministicChartType[] {
-  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick"];
+  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall"];
 }

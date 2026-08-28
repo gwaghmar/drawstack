@@ -11,6 +11,8 @@ import type {
   EngineTokens,
   FrameLayout,
 } from "./document";
+import { hasSankeyCycle } from "./chart-layout.ts";
+import { isCartesianDatum, isSankeyDatum } from "./chart-types.ts";
 import type { GraphDocument, GraphEdge, GraphField, GraphNode } from "./graph";
 
 const MAX_PROMPT_LENGTH = 4_000;
@@ -47,14 +49,14 @@ const STYLE_KEYS = new Set([
   "alignSelf",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
-const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "row", "column", "open", "high", "low", "close"]);
+const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "row", "column", "open", "high", "low", "close", "source", "target"]);
 const GRAPH_DOCUMENT_KEYS = new Set(["name", "direction", "nodes", "edges"]);
 const GRAPH_NODE_KEYS = new Set(["id", "label", "kind", "subtitle", "fields", "group", "width", "height", "tone"]);
 const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sourceLabel", "targetLabel"]);
 const GRAPH_FIELD_KEYS = new Set(["name", "type", "key"]);
 
 export type EngineV2Composition = "chart" | "graph" | "dashboard" | "document";
-export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | null;
+export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | "sankey" | "waterfall" | null;
 
 export type EngineV2PromptIntent = {
   normalizedPrompt: string;
@@ -384,6 +386,13 @@ function validateDatum(
   }
   hasExactKeys(value, DATUM_KEYS, context, path);
   const series = value.series === undefined ? undefined : readString(value.series, context, `${path}.series`, 1, 80) ?? undefined;
+  if (value.source !== undefined || value.target !== undefined) {
+    const source = readString(value.source, context, `${path}.source`, 1, 80);
+    const target = readString(value.target, context, `${path}.target`, 1, 80);
+    const number = readNumber(value.value, context, `${path}.value`, 0.000001, 1_000_000_000_000);
+    if (source !== null && target !== null && source === target) addIssue(context, `${path}.target`, "Sankey source and target must differ");
+    return source !== null && target !== null && source !== target && number !== null ? { source, target, value: number } : null;
+  }
   if (value.row !== undefined || value.column !== undefined) {
     const row = readString(value.row, context, `${path}.row`, 1, 80);
     const column = readString(value.column, context, `${path}.column`, 1, 80);
@@ -536,7 +545,7 @@ function validateNode(
   }
   if (type === "chart") {
     const title = readString(value.title, context, `${path}.title`, 1, 160);
-    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick"], context, `${path}.chartType`);
+    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall"], context, `${path}.chartType`);
     if (!Array.isArray(value.data) || value.data.length < 1 || value.data.length > MAX_CHART_POINTS) {
       addIssue(context, `${path}.data`, `Expected 1-${MAX_CHART_POINTS} data points`);
       return null;
@@ -545,7 +554,22 @@ function validateNode(
     const valuePrefix = value.valuePrefix === undefined ? undefined : readString(value.valuePrefix, context, `${path}.valuePrefix`, 0, 16) ?? undefined;
     const valueSuffix = value.valueSuffix === undefined ? undefined : readString(value.valueSuffix, context, `${path}.valueSuffix`, 0, 16) ?? undefined;
     if (title === null || chartType === null || data.some((datum) => datum === null)) return null;
-    return { ...base, type, title, chartType, data: data as EngineChartDatum[], valuePrefix, valueSuffix } satisfies EngineChartNode;
+    const chartData = data as EngineChartDatum[];
+    if (chartType === "sankey") {
+      if (!chartData.every(isSankeyDatum)) {
+        addIssue(context, `${path}.data`, "Sankey data must use source, target, and positive value");
+        return null;
+      }
+      if (hasSankeyCycle(chartData)) {
+        addIssue(context, `${path}.data`, "Sankey data must be acyclic");
+        return null;
+      }
+    }
+    if (chartType === "waterfall" && !chartData.every(isCartesianDatum)) {
+      addIssue(context, `${path}.data`, "Waterfall data must use label and value");
+      return null;
+    }
+    return { ...base, type, title, chartType, data: chartData, valuePrefix, valueSuffix } satisfies EngineChartNode;
   }
   if (type === "graph") {
     const title = readString(value.title, context, `${path}.title`, 1, 160);
@@ -610,7 +634,9 @@ export function classifyEngineV2Prompt(prompt: string): EngineV2PromptIntent {
   if (normalizedPrompt.length > MAX_PROMPT_LENGTH) throw new Error(`Prompt cannot exceed ${MAX_PROMPT_LENGTH} characters`);
   const words = ` ${normalizedPrompt.toLowerCase()} `;
   let chartType: EngineV2ChartIntent = null;
-  if (/\b(?:donut|doughnut|pie)\s+(?:chart|graph)\b/.test(words)) chartType = "donut";
+  if (/\bsankey\s+(?:chart|diagram|graph)\b/.test(words)) chartType = "sankey";
+  else if (/\bwaterfall\s+(?:chart|graph)\b/.test(words)) chartType = "waterfall";
+  else if (/\b(?:donut|doughnut|pie)\s+(?:chart|graph)\b/.test(words)) chartType = "donut";
   else if (/\bcandlestick\s+chart\b/.test(words)) chartType = "candlestick";
   else if (/\bheatmap\b|\bheat\s+map\b/.test(words)) chartType = "heatmap";
   else if (/\btreemap\b|\btree\s+map\b/.test(words)) chartType = "treemap";
@@ -634,13 +660,14 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Create one EngineDocument JSON object for the user's request.",
     "Return JSON only. Do not include Markdown, explanations, or JavaScript.",
     'The root must use version 2 and engine "dom-css".',
-    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, and candlestick.",
+    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, candlestick, sankey, and waterfall.",
     "Use flex or grid frames for layout. Every node id must be unique.",
     "Document fields: version, engine, name, artboard {width,minHeight,background}, tokens {colors,spacing,radii}, children.",
     "Every node needs id, name, and type. Text needs content and variant. Metric needs label, value, detail, and tone.",
     "Chart needs title, chartType, and data [{label,value}]. Frame needs layout {mode,gap,padding} and children.",
     "Scatter data uses [{x,y,label?,series?}]. Other chart data can add series for multiple series.",
     "Heatmap data uses [{row,column,value}]. Candlestick data uses [{label,open,high,low,close}].",
+    "Sankey data uses acyclic positive flows [{source,target,value}]. Waterfall data uses ordered changes [{label,value}].",
     "Graph needs title and graph {name,direction,nodes,edges}. Graph nodes use id,label,kind. Kinds: process, decision, entity, database, person, service, system. Graph edges use id,source,target and optional kind or label.",
     "Flex layout also needs direction. Grid layout also needs columns.",
     "Do not invent facts presented as user data. Clearly label illustrative data.",

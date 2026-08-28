@@ -62,6 +62,8 @@ describe("classifyEngineV2Prompt", () => {
     assert.equal(classifyEngineV2Prompt("Show a pie chart").chartType, "donut");
     assert.equal(classifyEngineV2Prompt("Create a heatmap").chartType, "heatmap");
     assert.equal(classifyEngineV2Prompt("Build a candlestick chart").chartType, "candlestick");
+    assert.equal(classifyEngineV2Prompt("Build a Sankey diagram").chartType, "sankey");
+    assert.equal(classifyEngineV2Prompt("Create a waterfall chart").chartType, "waterfall");
   });
 
   it("does not invent a chart type when one is not specified", () => {
@@ -125,7 +127,7 @@ describe("validateEngineV2Document", () => {
     const root = (document.children as Array<Record<string, unknown>>)[0];
     const rootChildren = root.children as Array<Record<string, unknown>>;
     rootChildren[0].type = "html";
-    rootChildren[1].chartType = "sankey";
+    rootChildren[1].chartType = "map";
     const result = validateEngineV2Document(document);
     assert.equal(result.ok, false);
     if (result.ok) return;
@@ -144,6 +146,31 @@ describe("validateEngineV2Document", () => {
     if (result.ok) return;
     assert.ok(result.issues.some((issue) => issue.path.endsWith(".columns")));
     assert.ok(result.issues.some((issue) => issue.path.endsWith(".data")));
+  });
+
+  it("validates Sankey shape and rejects cyclic flows", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const chart = (root.children as Array<Record<string, unknown>>)[1];
+    chart.chartType = "sankey";
+    chart.data = [
+      { source: "Visitors", target: "Trials", value: 80 },
+      { source: "Trials", target: "Paid", value: 30 },
+    ];
+    assert.equal(validateEngineV2Document(document).ok, true);
+
+    chart.data = [
+      { source: "A", target: "B", value: 3 },
+      { source: "B", target: "A", value: 2 },
+    ];
+    const cyclic = validateEngineV2Document(document);
+    assert.equal(cyclic.ok, false);
+    if (!cyclic.ok) assert.ok(cyclic.issues.some((issue) => issue.message === "Sankey data must be acyclic"));
+
+    chart.data = [{ label: "Not a flow", value: 3 }];
+    const wrongShape = validateEngineV2Document(document);
+    assert.equal(wrongShape.ok, false);
+    if (!wrongShape.ok) assert.ok(wrongShape.issues.some((issue) => issue.message.includes("Sankey data must use")));
   });
 });
 

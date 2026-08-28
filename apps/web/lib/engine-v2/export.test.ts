@@ -105,6 +105,8 @@ describe("serializeEngineV2Svg", () => {
       chart.chartType = chartType;
       chart.data = chartType === "scatter"
         ? [{ label: "A", x: 1, y: 2 }, { label: "B", x: 2, y: 4 }]
+        : chartType === "sankey"
+          ? [{ source: "Visits", target: "Signup", value: 10 }, { source: "Signup", target: "Paid", value: 4 }]
         : chartType === "heatmap"
           ? [{ row: "North", column: "Q1", value: 3 }, { row: "South", column: "Q1", value: 5 }]
           : chartType === "candlestick"
@@ -113,6 +115,7 @@ describe("serializeEngineV2Svg", () => {
       const svg = serializeEngineV2Svg(document);
       assert.match(svg, new RegExp(`deterministic ${chartType}`));
       assert.doesNotMatch(svg, /No chart data/);
+      if (chartType === "sankey") assert.match(svg, /Visits to Signup/);
     }
   });
 });

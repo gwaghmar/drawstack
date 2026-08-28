@@ -5,10 +5,14 @@ import {
   finiteCandlestickData,
   finiteCartesianData,
   finiteHeatmapData,
+  finiteSankeyData,
   finiteScatterData,
   formatChartValue,
   interpolateHexColor,
+  hasSankeyCycle,
+  layoutSankey,
   layoutTreemap,
+  layoutWaterfall,
   numericDomain,
   polarPoint,
   scaleLinear,
@@ -108,5 +112,43 @@ describe("engine-v2 chart layout", () => {
     const point = polarPoint(10, 10, 5, 0);
     assert.equal(point.x, 15);
     assert.equal(point.y, 10);
+  });
+
+  it("lays out proportional acyclic Sankey flows", () => {
+    const data = finiteSankeyData([
+      { source: "Visits", target: "Signup", value: 80 },
+      { source: "Signup", target: "Paid", value: 30 },
+      { source: "Signup", target: "Churn", value: 50 },
+      { source: "Ignored", target: "Ignored", value: 10 },
+      { source: "Bad", target: "Value", value: -1 },
+    ]);
+    assert.equal(data.length, 3);
+    assert.equal(hasSankeyCycle(data), false);
+    const layout = layoutSankey(data, 540, 240);
+    assert.ok(layout);
+    assert.equal(layout.nodes.length, 4);
+    assert.equal(layout.links.length, 3);
+    assert.ok(layout.links.every((link) => link.width > 0 && link.path.startsWith("M")));
+    assert.ok(layout.nodes.find((node) => node.id === "Visits")!.x < layout.nodes.find((node) => node.id === "Signup")!.x);
+  });
+
+  it("rejects cyclic Sankey flows", () => {
+    const data = [
+      { source: "A", target: "B", value: 3 },
+      { source: "B", target: "A", value: 2 },
+    ];
+    assert.equal(hasSankeyCycle(data), true);
+    assert.equal(layoutSankey(data, 500, 200), null);
+  });
+
+  it("builds waterfall steps from ordered changes", () => {
+    const waterfall = layoutWaterfall([
+      { label: "Revenue", value: 100 },
+      { label: "Returns", value: -25 },
+      { label: "Expansion", value: 40 },
+    ]);
+    assert.deepEqual(waterfall.steps.map(({ start, end }) => [start, end]), [[0, 100], [100, 75], [75, 115]]);
+    assert.ok(waterfall.domain.min <= 0);
+    assert.ok(waterfall.domain.max >= 115);
   });
 });

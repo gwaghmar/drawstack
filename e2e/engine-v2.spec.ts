@@ -25,30 +25,3 @@ test("engine v2 exposes editable document structure", async ({ page }) => {
   await page.getByTitle("Delete node").click();
   await expect(page.getByRole("button", { name: "METRIC Monthly revenue copy" })).toHaveCount(0);
 });
-
-test("engine v2 supports focus-safe keyboard editing", async ({ page }) => {
-  await page.goto("/app/engine-v2");
-
-  const revenue = page.locator('[data-tree-node-id="mrr"]');
-  await revenue.focus();
-  await page.keyboard.press("Alt+ArrowDown");
-  await expect(revenue).toBeFocused();
-  const order = await page.locator("[data-tree-node-id]").evaluateAll((nodes) => nodes.map((node) => node.getAttribute("data-tree-node-id")));
-  expect(order.indexOf("mrr")).toBeGreaterThan(order.indexOf("retention"));
-
-  await page.keyboard.press("Control+d");
-  const copy = page.locator('[data-tree-node-id="mrr-copy"]');
-  await expect(copy).toBeFocused();
-  await page.keyboard.press("Backspace");
-  await expect(copy).toHaveCount(0);
-  await expect(page.locator('[data-tree-node-id="metrics"]')).toBeFocused();
-
-  await page.keyboard.press("Control+z");
-  await expect(page.locator('[data-tree-node-id="mrr-copy"]')).toBeVisible();
-  await page.keyboard.press("Control+Shift+z");
-  await expect(page.locator('[data-tree-node-id="mrr-copy"]')).toHaveCount(0);
-
-  await page.getByLabel("Describe what to build").focus();
-  await page.keyboard.press("Control+d");
-  await expect(page.locator('[data-tree-node-id="metrics-copy"]')).toHaveCount(0);
-});

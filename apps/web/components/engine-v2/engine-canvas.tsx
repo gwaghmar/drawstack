@@ -20,7 +20,7 @@ import {
   type EngineTokens,
 } from "@/lib/engine-v2/document";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
-import { duplicateNode, findParent, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
+import { duplicateNode, findParent, moveNodeDown, moveNodeToParent, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 
 function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
@@ -143,10 +143,9 @@ type TreeProps = {
   onDragEnd: () => void;
   onDropTarget: (target: TreeDropTarget | null) => void;
   onMove: (id: string, parentId: string | null, insertionIndex: number) => void;
-  onKeyboardMove: (id: string, direction: "up" | "down" | "left" | "right") => void;
 };
 
-function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth = 0, onSelect, onDragStart, onDragEnd, onDropTarget, onMove, onKeyboardMove }: TreeProps) {
+function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth = 0, onSelect, onDragStart, onDragEnd, onDropTarget, onMove }: TreeProps) {
   const positionForPointer = (node: EngineNode, element: HTMLElement, clientY: number): TreeDropPosition => {
     const bounds = element.getBoundingClientRect();
     const ratio = bounds.height ? (clientY - bounds.top) / bounds.height : 0.5;
@@ -155,22 +154,15 @@ function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth
   };
 
   return (
-    <div className="space-y-0.5" role={depth === 0 ? "tree" : "group"} aria-label={depth === 0 ? "Document structure" : undefined}>
+    <div className="space-y-0.5">
       {nodes.map((node, index) => {
         const activePosition = dropTarget?.nodeId === node.id ? dropTarget.position : null;
         return (
-          <div key={node.id} className="relative" role="treeitem" aria-level={depth + 1} aria-selected={selectedId === node.id} aria-expanded={node.type === "frame" ? true : undefined}>
+          <div key={node.id} className="relative">
             {activePosition === "before" ? <div className="pointer-events-none absolute inset-x-1 -top-[2px] z-10 h-0.5 rounded-full bg-[#3157F6]" /> : null}
             <button
               type="button"
               onClick={() => onSelect(node.id)}
-              onKeyDown={(event) => {
-                if (!event.altKey || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
-                event.preventDefault();
-                onKeyboardMove(node.id, event.key.slice(5).toLowerCase() as "up" | "down" | "left" | "right");
-              }}
-              aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown Alt+ArrowLeft Alt+ArrowRight"
-              data-tree-node-id={node.id}
               draggable
               onDragStart={(event) => {
                 event.dataTransfer.effectAllowed = "move";
@@ -202,7 +194,7 @@ function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth
               <span className="w-12 shrink-0 font-mono text-[9px] uppercase tracking-wide opacity-70">{node.type}</span>
               <span className="truncate font-medium">{node.name}</span>
             </button>
-            {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} draggedId={draggedId} dropTarget={dropTarget} parentId={node.id} depth={depth + 1} onSelect={onSelect} onDragStart={onDragStart} onDragEnd={onDragEnd} onDropTarget={onDropTarget} onMove={onMove} onKeyboardMove={onKeyboardMove} /> : null}
+            {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} draggedId={draggedId} dropTarget={dropTarget} parentId={node.id} depth={depth + 1} onSelect={onSelect} onDragStart={onDragStart} onDragEnd={onDragEnd} onDropTarget={onDropTarget} onMove={onMove} /> : null}
             {activePosition === "after" ? <div className="pointer-events-none absolute inset-x-1 bottom-[-2px] z-10 h-0.5 rounded-full bg-[#3157F6]" /> : null}
           </div>
         );
@@ -239,7 +231,6 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [revisions, setRevisions] = useState<Array<{ id: string; label: string | null; createdAt: Date }>>([]);
   const artboardRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const treeRef = useRef<HTMLDivElement>(null);
   const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
   const storageKey = `drawstack.engine-v2.document.${projectId ?? "draft"}`;
 
@@ -379,23 +370,18 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   };
 
   const duplicateSelected = () => {
-    const restoreTreeFocus = treeRef.current?.contains(window.document.activeElement) ?? false;
     const result = duplicateNode(document.children, selectedId);
     if (result.nodes === document.children) return;
     commitDocument({ ...document, children: result.nodes });
     setSelectedId(result.duplicatedId);
-    if (restoreTreeFocus) focusTreeNode(result.duplicatedId);
   };
 
   const removeSelected = () => {
-    const restoreTreeFocus = treeRef.current?.contains(window.document.activeElement) ?? false;
     const location = findParent(document.children, selectedId);
     if (!location || (location.parentId === null && document.children.length === 1)) return;
     const next = removeNode(document.children, selectedId);
     commitDocument({ ...document, children: next });
-    const nextSelectedId = location.parentId ?? next[Math.min(location.index, next.length - 1)]?.id ?? next[0]?.id ?? "";
-    setSelectedId(nextSelectedId);
-    if (restoreTreeFocus && nextSelectedId) focusTreeNode(nextSelectedId);
+    setSelectedId(location.parentId ?? next[0]?.id ?? "");
   };
 
   const moveSelected = (direction: "up" | "down") => {
@@ -415,47 +401,6 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     setTreeDraggedId(null);
     setTreeDropTarget(null);
   };
-
-  const focusTreeNode = (id: string) => {
-    window.requestAnimationFrame(() => {
-      const buttons = treeRef.current?.querySelectorAll<HTMLButtonElement>("[data-tree-node-id]");
-      [...(buttons ?? [])].find((button) => button.dataset.treeNodeId === id)?.focus();
-    });
-  };
-
-  const moveTreeNodeByKeyboard = (id: string, direction: "up" | "down" | "left" | "right") => {
-    commitDocument((current) => {
-      const children = moveNodeByArrow(current.children, id, direction);
-      return children === current.children ? current : { ...current, children };
-    });
-    setSelectedId(id);
-    focusTreeNode(id);
-  };
-
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      const modifier = event.metaKey || event.ctrlKey;
-      const key = event.key.toLowerCase();
-      if (modifier && key === "z") {
-        event.preventDefault();
-        if (event.shiftKey) redo();
-        else undo();
-      } else if (modifier && key === "y") {
-        event.preventDefault();
-        redo();
-      } else if (modifier && key === "d") {
-        event.preventDefault();
-        duplicateSelected();
-      } else if (!modifier && !event.altKey && (event.key === "Delete" || event.key === "Backspace")) {
-        event.preventDefault();
-        removeSelected();
-      }
-    };
-    window.document.addEventListener("keydown", handleShortcut);
-    return () => window.document.removeEventListener("keydown", handleShortcut);
-  });
 
   const exportPng = async () => {
     if (!artboardRef.current) return;
@@ -518,8 +463,8 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Structure</span>
           <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold ${hydrated ? "bg-[#B7FF4A]" : "bg-[#E4E7E1]"}`}>{hydrated ? "LIVE DOM" : "CONNECTING"}</span>
         </div>
-        <div ref={treeRef} className="min-h-0 flex-1 overflow-auto px-2 pb-4">
-          <Tree nodes={document.children} selectedId={selectedId} draggedId={treeDraggedId} dropTarget={treeDropTarget} onSelect={setSelectedId} onDragStart={setTreeDraggedId} onDragEnd={endTreeDrag} onDropTarget={setTreeDropTarget} onMove={moveTreeNode} onKeyboardMove={moveTreeNodeByKeyboard} />
+        <div className="min-h-0 flex-1 overflow-auto px-2 pb-4">
+          <Tree nodes={document.children} selectedId={selectedId} draggedId={treeDraggedId} dropTarget={treeDropTarget} onSelect={setSelectedId} onDragStart={setTreeDraggedId} onDragEnd={endTreeDrag} onDropTarget={setTreeDropTarget} onMove={moveTreeNode} />
         </div>
         <button type="button" onClick={copyDocument} className="m-3 flex items-center justify-center gap-2 rounded-lg border border-[#C8CEC4] bg-white px-3 py-2.5 text-xs font-semibold hover:border-[#3157F6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3157F6]">
           {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -606,7 +551,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <label className="block">
                 <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart family</span>
                 <select value={selected.chartType} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, chartType: event.target.value as EngineChartNode["chartType"] } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
-                  {["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick"].map((type) => <option key={type} value={type}>{type}</option>)}
+                  {["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall"].map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </label>
             ) : null}

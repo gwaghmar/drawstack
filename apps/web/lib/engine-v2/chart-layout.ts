@@ -2,11 +2,13 @@ import {
   isCartesianDatum,
   isCandlestickDatum,
   isHeatmapDatum,
+  isSankeyDatum,
   isScatterDatum,
   type CandlestickChartDatum,
   type CartesianChartDatum,
   type DeterministicChartDatum,
   type HeatmapChartDatum,
+  type SankeyChartDatum,
   type ScatterChartDatum,
 } from "./chart-types.ts";
 
@@ -31,6 +33,33 @@ export type TreemapRect = {
   y: number;
   width: number;
   height: number;
+};
+
+export type SankeyLayoutNode = {
+  id: string;
+  layer: number;
+  value: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  colorIndex: number;
+};
+
+export type SankeyLayoutLink = SankeyChartDatum & {
+  width: number;
+  path: string;
+  colorIndex: number;
+};
+
+export type SankeyLayout = {
+  nodes: SankeyLayoutNode[];
+  links: SankeyLayoutLink[];
+};
+
+export type WaterfallStep = CartesianChartDatum & {
+  start: number;
+  end: number;
 };
 
 export function finiteCartesianData(data: DeterministicChartDatum[]): CartesianChartDatum[] {
@@ -61,6 +90,17 @@ export function finiteCandlestickData(data: DeterministicChartDatum[]): Candlest
     high: Math.max(datum.high, datum.open, datum.low, datum.close),
     low: Math.min(datum.low, datum.open, datum.high, datum.close),
   }));
+}
+
+export function finiteSankeyData(data: DeterministicChartDatum[]): SankeyChartDatum[] {
+  return data.filter((datum): datum is SankeyChartDatum =>
+    isSankeyDatum(datum)
+      && Number.isFinite(datum.value)
+      && datum.value > 0
+      && datum.source.trim().length > 0
+      && datum.target.trim().length > 0
+      && datum.source !== datum.target,
+  );
 }
 
 function niceStep(span: number, targetTicks: number): number {
@@ -229,4 +269,123 @@ export function layoutTreemap(
 
   place(items, 0, 0, Math.max(width, 0), Math.max(height, 0));
   return rectangles;
+}
+
+function aggregateSankeyLinks(data: SankeyChartDatum[]): SankeyChartDatum[] {
+  const links = new Map<string, SankeyChartDatum>();
+  for (const datum of data) {
+    const key = `${datum.source}\u0000${datum.target}`;
+    const current = links.get(key);
+    links.set(key, { ...datum, value: (current?.value ?? 0) + datum.value });
+  }
+  return [...links.values()];
+}
+
+export function hasSankeyCycle(data: SankeyChartDatum[]): boolean {
+  const links = aggregateSankeyLinks(data);
+  const ids = orderedUnique(links.flatMap((link) => [link.source, link.target]));
+  const indegree = new Map(ids.map((id) => [id, 0]));
+  const outgoing = new Map(ids.map((id) => [id, [] as string[]]));
+  for (const link of links) {
+    indegree.set(link.target, (indegree.get(link.target) ?? 0) + 1);
+    outgoing.get(link.source)?.push(link.target);
+  }
+  const queue = ids.filter((id) => indegree.get(id) === 0);
+  let visited = 0;
+  while (queue.length) {
+    const id = queue.shift()!;
+    visited += 1;
+    for (const target of outgoing.get(id) ?? []) {
+      const next = (indegree.get(target) ?? 0) - 1;
+      indegree.set(target, next);
+      if (next === 0) queue.push(target);
+    }
+  }
+  return visited !== ids.length;
+}
+
+export function layoutSankey(
+  rawData: SankeyChartDatum[],
+  width: number,
+  height: number,
+): SankeyLayout | null {
+  const data = aggregateSankeyLinks(rawData.filter((datum) => datum.value > 0 && datum.source !== datum.target));
+  if (!data.length || hasSankeyCycle(data) || width <= 0 || height <= 0) return null;
+  const ids = orderedUnique(data.flatMap((link) => [link.source, link.target]));
+  const incoming = new Map(ids.map((id) => [id, [] as SankeyChartDatum[]]));
+  const outgoing = new Map(ids.map((id) => [id, [] as SankeyChartDatum[]]));
+  const indegree = new Map(ids.map((id) => [id, 0]));
+  for (const link of data) {
+    incoming.get(link.target)?.push(link);
+    outgoing.get(link.source)?.push(link);
+    indegree.set(link.target, (indegree.get(link.target) ?? 0) + 1);
+  }
+
+  const layers = new Map(ids.map((id) => [id, 0]));
+  const queue = ids.filter((id) => indegree.get(id) === 0);
+  while (queue.length) {
+    const id = queue.shift()!;
+    for (const link of outgoing.get(id) ?? []) {
+      layers.set(link.target, Math.max(layers.get(link.target) ?? 0, (layers.get(id) ?? 0) + 1));
+      const next = (indegree.get(link.target) ?? 0) - 1;
+      indegree.set(link.target, next);
+      if (next === 0) queue.push(link.target);
+    }
+  }
+  const maxLayer = Math.max(...layers.values(), 1);
+  for (const id of ids) if ((outgoing.get(id)?.length ?? 0) === 0) layers.set(id, maxLayer);
+  const nodeWidth = Math.min(18, width / Math.max(maxLayer * 5, 1));
+  const layerGap = 10;
+  const idsByLayer = Array.from({ length: maxLayer + 1 }, (_, layer) => ids.filter((id) => layers.get(id) === layer));
+  const nodeValue = (id: string) => Math.max(
+    (incoming.get(id) ?? []).reduce((sum, link) => sum + link.value, 0),
+    (outgoing.get(id) ?? []).reduce((sum, link) => sum + link.value, 0),
+  );
+  const scale = Math.min(...idsByLayer.filter((layer) => layer.length).map((layer) => {
+    const available = Math.max(height - layerGap * (layer.length - 1), 1);
+    return available / layer.reduce((sum, id) => sum + nodeValue(id), 0);
+  }));
+  const nodes: SankeyLayoutNode[] = [];
+  idsByLayer.forEach((layerIds, layer) => {
+    const used = layerIds.reduce((sum, id) => sum + nodeValue(id) * scale, 0) + Math.max(layerIds.length - 1, 0) * layerGap;
+    let y = Math.max((height - used) / 2, 0);
+    for (const id of layerIds) {
+      const nodeHeight = Math.max(nodeValue(id) * scale, 1);
+      nodes.push({ id, layer, value: nodeValue(id), x: (width - nodeWidth) * layer / maxLayer, y, width: nodeWidth, height: nodeHeight, colorIndex: ids.indexOf(id) });
+      y += nodeHeight + layerGap;
+    }
+  });
+
+  const nodeById = new Map(nodes.map((node) => [node.id, node]));
+  const sourceOffsets = new Map(ids.map((id) => [id, 0]));
+  const targetOffsets = new Map(ids.map((id) => [id, 0]));
+  const links: SankeyLayoutLink[] = data.map((link) => {
+    const source = nodeById.get(link.source)!;
+    const target = nodeById.get(link.target)!;
+    const linkWidth = Math.max(link.value * scale, 1);
+    const sourceY = source.y + (sourceOffsets.get(link.source) ?? 0) + linkWidth / 2;
+    const targetY = target.y + (targetOffsets.get(link.target) ?? 0) + linkWidth / 2;
+    sourceOffsets.set(link.source, (sourceOffsets.get(link.source) ?? 0) + linkWidth);
+    targetOffsets.set(link.target, (targetOffsets.get(link.target) ?? 0) + linkWidth);
+    const sourceX = source.x + source.width;
+    const targetX = target.x;
+    const control = (targetX - sourceX) * 0.48;
+    return {
+      ...link,
+      width: linkWidth,
+      path: `M${sourceX},${sourceY} C${sourceX + control},${sourceY} ${targetX - control},${targetY} ${targetX},${targetY}`,
+      colorIndex: source.colorIndex,
+    };
+  });
+  return { nodes, links };
+}
+
+export function layoutWaterfall(data: CartesianChartDatum[]): { steps: WaterfallStep[]; domain: NumericDomain } {
+  let cumulative = 0;
+  const steps = data.map((datum) => {
+    const start = cumulative;
+    cumulative += datum.value;
+    return { ...datum, start, end: cumulative };
+  });
+  return { steps, domain: numericDomain([0, ...steps.flatMap((step) => [step.start, step.end])], { includeZero: true }) };
 }

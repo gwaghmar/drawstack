@@ -10,7 +10,9 @@ export type DeterministicChartType =
   | "treemap"
   | "funnel"
   | "gauge"
-  | "candlestick";
+  | "candlestick"
+  | "sankey"
+  | "waterfall";
 
 export type CartesianChartDatum = {
   label: string;
@@ -39,11 +41,18 @@ export type CandlestickChartDatum = {
   close: number;
 };
 
+export type SankeyChartDatum = {
+  source: string;
+  target: string;
+  value: number;
+};
+
 export type DeterministicChartDatum =
   | CartesianChartDatum
   | ScatterChartDatum
   | HeatmapChartDatum
-  | CandlestickChartDatum;
+  | CandlestickChartDatum
+  | SankeyChartDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;
@@ -92,4 +101,8 @@ export function isHeatmapDatum(datum: DeterministicChartDatum): datum is Heatmap
 
 export function isCandlestickDatum(datum: DeterministicChartDatum): datum is CandlestickChartDatum {
   return "open" in datum && "high" in datum && "low" in datum && "close" in datum && "label" in datum;
+}
+
+export function isSankeyDatum(datum: DeterministicChartDatum): datum is SankeyChartDatum {
+  return "source" in datum && "target" in datum && "value" in datum;
 }

@@ -6,7 +6,6 @@ import {
   findParent,
   insertNode,
   moveNodeDown,
-  moveNodeByArrow,
   moveNodeToParent,
   moveNodeUp,
   removeNode,
@@ -136,27 +135,5 @@ describe("engine-v2 tree operations", () => {
     assert.equal(moveNodeToParent(nodes, "frame", "frame", 0), nodes);
     assert.equal(moveNodeToParent(nodes, "a", "c", 0), nodes);
     assert.equal(moveNodeToParent(nodes, "missing", null, 0), nodes);
-  });
-
-  it("supports accessible arrow reorder, indent, and outdent", () => {
-    const nodes = tree();
-    const movedDown = moveNodeByArrow(nodes, "b", "down");
-    assert.deepEqual((findParent(movedDown, "nested")!.node as Extract<EngineNode, { type: "frame" }>).children.map((node) => node.id), ["b-copy", "b"]);
-
-    assert.equal(moveNodeByArrow(nodes, "nested", "right"), nodes);
-    const indentCandidate: EngineNode[] = [{
-      id: "outer",
-      name: "Outer",
-      type: "frame",
-      layout: { mode: "flex", gap: 0, padding: 0 },
-      children: [],
-    }, text("loose")];
-    const nestedIntoPrevious = moveNodeByArrow(indentCandidate, "loose", "right");
-    assert.equal(findParent(nestedIntoPrevious, "loose")?.parentId, "outer");
-
-    const outdented = moveNodeByArrow(nodes, "b", "left");
-    assert.equal(findParent(outdented, "b")?.parentId, "frame");
-    assert.deepEqual((findParent(outdented, "frame")!.node as Extract<EngineNode, { type: "frame" }>).children.map((node) => node.id), ["a", "nested", "b"]);
-    assert.equal(moveNodeByArrow(nodes, "frame", "left"), nodes);
   });
 });

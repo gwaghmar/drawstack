@@ -155,27 +155,6 @@ export function moveNodeToParent(
   return insertNode(withoutSource, source.node, parentId, target);
 }
 
-export function moveNodeByArrow(
-  nodes: EngineNode[],
-  id: string,
-  direction: "up" | "down" | "left" | "right",
-): EngineNode[] {
-  const location = findParent(nodes, id);
-  if (!location) return nodes;
-  if (direction === "up" || direction === "down") return moveNode(nodes, id, direction);
-
-  if (direction === "right") {
-    const siblings = location.parent?.children ?? nodes;
-    const previous = siblings[location.index - 1];
-    if (!previous || previous.type !== "frame") return nodes;
-    return moveNodeToParent(nodes, id, previous.id, previous.children.length);
-  }
-
-  if (!location.parent) return nodes;
-  const parentLocation = findParent(nodes, location.parent.id)!;
-  return moveNodeToParent(nodes, id, parentLocation.parentId, parentLocation.index + 1);
-}
-
 function collectIds(nodes: EngineNode[], ids = new Set<string>()): Set<string> {
   for (const node of nodes) {
     ids.add(node.id);

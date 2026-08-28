@@ -7,5 +7,6 @@ export type {
   DeterministicChartSpec,
   DeterministicChartType,
   HeatmapChartDatum,
+  SankeyChartDatum,
   ScatterChartDatum,
 } from "@/lib/engine-v2/chart-types";
