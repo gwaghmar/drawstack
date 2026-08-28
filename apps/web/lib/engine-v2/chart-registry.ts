@@ -9,7 +9,9 @@ export type ChartDataContract =
   | "bubble"
   | "combo"
   | "gantt"
-  | "hierarchy";
+  | "hierarchy"
+  | "symbol-map"
+  | "route-map";
 
 export const CHART_RENDERER_KEYS = [
   "cartesian",
@@ -34,6 +36,7 @@ export const CHART_RENDERER_KEYS = [
   "icicle",
   "circle-pack",
   "chord",
+  "geographic",
 ] as const;
 
 export type ChartRendererKey = typeof CHART_RENDERER_KEYS[number];
@@ -56,6 +59,8 @@ export type ChartFamilyDefinition = {
 };
 
 export const CHART_FAMILY_REGISTRY = {
+  "symbol-map": { dataContract: "symbol-map", previewRenderer: "geographic", exportRenderer: "geographic", promptPatterns: [/\b(?:symbol|point|location)\s+map\b/], generationHint: "Symbol-map data uses real coordinates [{label,latitude,longitude,value?,series?}]. It renders a coordinate grid without geographic boundaries.", enforceContract: true, contractError: "Symbol map data must use label, latitude from -90 to 90, and longitude from -180 to 180" },
+  "route-map": { dataContract: "route-map", previewRenderer: "geographic", exportRenderer: "geographic", promptPatterns: [/\b(?:route|flight|shipping|network)\s+map\b/], generationHint: "Route-map data uses real coordinates [{label,sourceLatitude,sourceLongitude,targetLatitude,targetLongitude,value?,series?}]. It renders a coordinate grid without geographic boundaries.", enforceContract: true, contractError: "Route map data must use label and valid source and target coordinates" },
   sunburst: { dataContract: "hierarchy", previewRenderer: "sunburst", exportRenderer: "sunburst", promptPatterns: [/\bsunburst\s+(?:chart|diagram)?\b/], generationHint: "Sunburst data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Sunburst data must use path and positive value" },
   icicle: { dataContract: "hierarchy", previewRenderer: "icicle", exportRenderer: "icicle", promptPatterns: [/\bicicle\s+(?:chart|diagram)?\b/], generationHint: "Icicle data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Icicle data must use path and positive value" },
   "circle-pack": { dataContract: "hierarchy", previewRenderer: "circle-pack", exportRenderer: "circle-pack", promptPatterns: [/\bcircle[ -]pack(?:ing)?\s+(?:chart|diagram)?\b/], generationHint: "Circle-pack data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Circle-pack data must use path and positive value" },

@@ -21,6 +21,7 @@ import { CandlestickChart, FunnelChart, GaugeChart, HeatmapChart, RadarChart, Tr
 import { SankeyChart, WaterfallChart } from "./flow-charts";
 import { BoxPlotChart, BubbleChart, HistogramChart } from "./statistical-charts";
 import { ComboChart, GanttChart, StackedAreaChart } from "./series-charts";
+import { GeographicChart } from "./geographic-charts";
 import { ChordChart, CirclePackChart, IcicleChart, SunburstChart } from "./hierarchy-charts";
 
 const VIEWBOX = { width: 640, height: 330 };
@@ -281,6 +282,7 @@ const CHART_PREVIEW_RENDERERS = {
   icicle: IcicleChart,
   "circle-pack": CirclePackChart,
   chord: ChordChart,
+  geographic: GeographicChart,
 } satisfies Record<ChartRendererKey, ComponentType<ChartRendererProps>>;
 
 export function DeterministicChart({ spec, className = "" }: ChartProps) {

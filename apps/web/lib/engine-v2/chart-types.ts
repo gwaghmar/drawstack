@@ -70,6 +70,24 @@ export type HierarchyChartDatum = {
   value: number;
 };
 
+export type SymbolMapDatum = {
+  label: string;
+  latitude: number;
+  longitude: number;
+  value?: number;
+  series?: string;
+};
+
+export type RouteMapDatum = {
+  label: string;
+  sourceLatitude: number;
+  sourceLongitude: number;
+  targetLatitude: number;
+  targetLongitude: number;
+  value?: number;
+  series?: string;
+};
+
 export type DeterministicChartDatum =
   | CartesianChartDatum
   | ScatterChartDatum
@@ -81,7 +99,9 @@ export type DeterministicChartDatum =
   | BubbleChartDatum
   | ComboChartDatum
   | GanttChartDatum
-  | HierarchyChartDatum;
+  | HierarchyChartDatum
+  | SymbolMapDatum
+  | RouteMapDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;

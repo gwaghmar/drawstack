@@ -10,6 +10,8 @@ import {
 import { chartSvgFromGeneratedTsx, readChartGeometry, readNodeLayouts, readPngDimensions, readSvgGeometryForNode, renderGeneratedTsx, type SvgGeometry } from "./helpers/engine-v2-wysiwyg.ts";
 
 function dataFor(type: DeterministicChartType): DeterministicChartDatum[] {
+  if (type === "symbol-map") return [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }, { label: "Tokyo", latitude: 35.6762, longitude: 139.6503, value: 14 }];
+  if (type === "route-map") return [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503, value: 12 }];
   if (["sunburst", "icicle", "circle-pack"].includes(type)) return [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }];
   if (type === "chord") return [{ source: "A", target: "B", value: 10 }, { source: "B", target: "A", value: 4 }];
   if (type === "scatter") return [{ label: "Alpha", x: 1, y: 3 }, { label: "Beta", x: 4, y: 8 }];
@@ -155,12 +157,22 @@ test("Engine v2 preview, SVG, and TSX exports preserve chart content and geometr
   const exportedSvg = await readChartGeometry(svgPage, "foreignObject");
   assertHealthyGeometry(exportedSvg, chartTypes);
 
+  const printPage = await context.newPage();
+  await printPage.setContent(serializeEngineV2PrintHtml(document));
+  const printed = await readChartGeometry(printPage, "body");
+  assertHealthyGeometry(printed, chartTypes);
+
   const tsxCharts = chartSvgFromGeneratedTsx(serializeEngineV2ReactTsx(document));
   expect(tsxCharts).toHaveLength(chartTypes.length);
   const tsxPage = await context.newPage();
   await tsxPage.setContent(`<main>${tsxCharts.map((svg, index) => `<section data-node-id="chart-${chartTypes[index]}">${svg}</section>`).join("")}</main>`);
   const exportedTsx = await readChartGeometry(tsxPage, "main");
   assertHealthyGeometry(exportedTsx, chartTypes);
+
+  const mountedTsxPage = await context.newPage();
+  await mountedTsxPage.setContent(renderGeneratedTsx(serializeEngineV2ReactTsx(document)));
+  const mountedTsx = await readChartGeometry(mountedTsxPage, "main");
+  assertHealthyGeometry(mountedTsx, chartTypes);
 
   for (const type of chartTypes) {
     const id = `chart-${type}`;
@@ -173,14 +185,18 @@ test("Engine v2 preview, SVG, and TSX exports preserve chart content and geometr
     expect(tsxChart.primitiveCount).toBe(svgChart.primitiveCount);
   }
 
-  for (const type of ["bar", "line"] as const) {
+  for (const type of ["bar", "line", "symbol-map", "route-map"] as const) {
     const id = `chart-${type}`;
     const previewChart = preview.find((chart) => chart.id === id)!;
     const svgChart = exportedSvg.find((chart) => chart.id === id)!;
+    const printChart = printed.find((chart) => chart.id === id)!;
+    const mountedTsxChart = mountedTsx.find((chart) => chart.id === id)!;
     expect(svgChart.viewBox).toEqual(previewChart.viewBox);
     expect(svgChart.bounds).toEqual(previewChart.bounds);
     expect(svgChart.primitiveCount).toBe(previewChart.primitiveCount);
     expect(svgChart.labels).toBe(previewChart.labels);
+    expect(printChart).toEqual(svgChart);
+    expect(mountedTsxChart).toEqual(svgChart);
   }
 });
 

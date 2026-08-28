@@ -103,7 +103,11 @@ describe("serializeEngineV2Svg", () => {
       assert.ok(chart && chart.type === "chart");
       if (!chart || chart.type !== "chart") return;
       chart.chartType = chartType;
-      chart.data = ["sunburst", "icicle", "circle-pack"].includes(chartType)
+      chart.data = chartType === "symbol-map"
+        ? [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }]
+        : chartType === "route-map"
+          ? [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503, value: 12 }]
+        : ["sunburst", "icicle", "circle-pack"].includes(chartType)
         ? [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }]
         : chartType === "chord"
           ? [{ source: "A", target: "B", value: 10 }, { source: "B", target: "A", value: 4 }]
@@ -130,6 +134,7 @@ describe("serializeEngineV2Svg", () => {
       assert.match(svg, new RegExp(`deterministic ${chartType}`));
       assert.doesNotMatch(svg, /No chart data/);
       if (chartType === "sankey") assert.match(svg, /Visits to Signup/);
+      if (chartType === "symbol-map" || chartType === "route-map") assert.match(svg, /no boundary dataset/i);
       const tsx = serializeEngineV2ReactTsx(document);
       assert.match(tsx, new RegExp(`deterministic ${chartType}`));
       assert.doesNotMatch(tsx, /No chart data/);

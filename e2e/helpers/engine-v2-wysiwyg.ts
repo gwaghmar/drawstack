@@ -62,6 +62,7 @@ export function chartSvgFromGeneratedTsx(source: string): string[] {
     .replace(/\bstrokeDashoffset=/g, "stroke-dashoffset=")
     .replace(/\bstrokeLinecap=/g, "stroke-linecap=")
     .replace(/\bstrokeLinejoin=/g, "stroke-linejoin=")
+    .replace(/\bstrokeOpacity=/g, "stroke-opacity=")
     .replace(/\bstrokeWidth=/g, "stroke-width=")
     .replace(/\btextAnchor=/g, "text-anchor="));
 }

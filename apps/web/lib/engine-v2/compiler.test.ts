@@ -70,6 +70,9 @@ describe("classifyEngineV2Prompt", () => {
     assert.equal(classifyEngineV2Prompt("Create a dual-axis chart").chartType, "combo");
     assert.equal(classifyEngineV2Prompt("Create a stacked area chart").chartType, "stacked-area");
     assert.equal(classifyEngineV2Prompt("Create a Gantt chart").chartType, "gantt");
+    assert.equal(classifyEngineV2Prompt("Create a symbol map").chartType, "symbol-map");
+    assert.equal(classifyEngineV2Prompt("Create a flight route map").chartType, "route-map");
+    assert.equal(classifyEngineV2Prompt("Create a choropleth map").chartType, null);
   });
 
   it("does not invent a chart type when one is not specified", () => {
@@ -92,6 +95,7 @@ describe("buildEngineV2GenerationPrompt", () => {
     assert.match(prompt, /Return JSON only/);
     assert.match(prompt, /frame, text, metric, chart, and graph/);
     assert.match(prompt, /User request: "Chart titled \\"Revenue\\""/);
+    assert.match(prompt, /Choropleth maps are not supported/);
   });
 });
 
@@ -225,6 +229,25 @@ describe("validateEngineV2Document", () => {
     chart.data = [{ label: "Build", start: "2026-01-01", end: "2026-01-20" }];
     assert.equal(validateEngineV2Document(document).ok, true);
     chart.data = [{ label: "Build", start: "Jan 1", end: "Jan 20" }];
+    assert.equal(validateEngineV2Document(document).ok, false);
+  });
+
+  it("validates geographic coordinates without accepting invented boundaries", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const chart = (root.children as Array<Record<string, unknown>>)[1];
+    chart.chartType = "symbol-map";
+    chart.data = [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+
+    chart.data = [{ label: "Invalid", latitude: 91, longitude: 0 }];
+    assert.equal(validateEngineV2Document(document).ok, false);
+
+    chart.chartType = "route-map";
+    chart.data = [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503 }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+
+    chart.data = [{ label: "Invalid", sourceLatitude: 0, sourceLongitude: -181, targetLatitude: 0, targetLongitude: 0 }];
     assert.equal(validateEngineV2Document(document).ok, false);
   });
 });

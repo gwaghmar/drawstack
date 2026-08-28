@@ -21,6 +21,8 @@ import {
 
 function dataFor(type: RegisteredChartType): DeterministicChartDatum[] {
   const contract = CHART_FAMILY_REGISTRY[type].dataContract;
+  if (contract === "symbol-map") return [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }];
+  if (contract === "route-map") return [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503, value: 12 }];
   if (contract === "hierarchy") return [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }];
   if (contract === "scatter") return [{ label: "A", x: 1, y: 2 }, { label: "B", x: 3, y: 5 }];
   if (contract === "heatmap") return [{ row: "North", column: "Q1", value: 3 }, { row: "South", column: "Q1", value: 5 }];

@@ -1,5 +1,6 @@
 import { chartFamilyDefinition, type RegisteredChartType } from "./chart-registry.ts";
 import { hasSankeyCycle } from "./chart-layout.ts";
+import { isRouteMapDatum, isSymbolMapDatum } from "./geographic-chart.ts";
 import {
   isBoxPlotDatum,
   isBubbleDatum,
@@ -27,6 +28,8 @@ const CONTRACT_LABELS = {
   combo: "label, value, and display",
   gantt: "label, ISO start, and ISO end",
   hierarchy: "path and positive value",
+  "symbol-map": "label, valid latitude, and valid longitude",
+  "route-map": "label and valid source and target coordinates",
 } as const;
 
 const CONTRACT_VALIDATORS = {
@@ -41,6 +44,8 @@ const CONTRACT_VALIDATORS = {
   combo: (datum: DeterministicChartDatum) => isComboDatum(datum),
   gantt: (datum: DeterministicChartDatum) => isGanttDatum(datum),
   hierarchy: (datum: DeterministicChartDatum) => isHierarchyDatum(datum),
+  "symbol-map": (datum: DeterministicChartDatum) => isSymbolMapDatum(datum),
+  "route-map": (datum: DeterministicChartDatum) => isRouteMapDatum(datum),
 } as const;
 
 function familyLabel(type: RegisteredChartType): string {

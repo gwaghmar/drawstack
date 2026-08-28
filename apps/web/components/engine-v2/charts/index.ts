@@ -14,4 +14,6 @@ export type {
   GanttChartDatum,
   SankeyChartDatum,
   ScatterChartDatum,
+  RouteMapDatum,
+  SymbolMapDatum,
 } from "@/lib/engine-v2/chart-types";

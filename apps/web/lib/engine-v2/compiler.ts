@@ -49,7 +49,7 @@ const STYLE_KEYS = new Set([
   "alignSelf",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
-const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max", "display", "axis", "start", "end", "path"]);
+const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max", "display", "axis", "start", "end", "path", "latitude", "longitude", "sourceLatitude", "sourceLongitude", "targetLatitude", "targetLongitude"]);
 const GRAPH_DOCUMENT_KEYS = new Set(["name", "direction", "nodes", "edges"]);
 const GRAPH_NODE_KEYS = new Set(["id", "label", "kind", "subtitle", "fields", "group", "width", "height", "tone"]);
 const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sourceLabel", "targetLabel"]);
@@ -386,6 +386,24 @@ function validateDatum(
   }
   hasExactKeys(value, DATUM_KEYS, context, path);
   const series = value.series === undefined ? undefined : readString(value.series, context, `${path}.series`, 1, 80) ?? undefined;
+  if (value.sourceLatitude !== undefined || value.sourceLongitude !== undefined || value.targetLatitude !== undefined || value.targetLongitude !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const sourceLatitude = readNumber(value.sourceLatitude, context, `${path}.sourceLatitude`, -90, 90);
+    const sourceLongitude = readNumber(value.sourceLongitude, context, `${path}.sourceLongitude`, -180, 180);
+    const targetLatitude = readNumber(value.targetLatitude, context, `${path}.targetLatitude`, -90, 90);
+    const targetLongitude = readNumber(value.targetLongitude, context, `${path}.targetLongitude`, -180, 180);
+    const number = value.value === undefined ? undefined : readNumber(value.value, context, `${path}.value`, 0, 1_000_000_000_000) ?? undefined;
+    return label !== null && sourceLatitude !== null && sourceLongitude !== null && targetLatitude !== null && targetLongitude !== null
+      ? { label, sourceLatitude, sourceLongitude, targetLatitude, targetLongitude, value: number, series }
+      : null;
+  }
+  if (value.latitude !== undefined || value.longitude !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const latitude = readNumber(value.latitude, context, `${path}.latitude`, -90, 90);
+    const longitude = readNumber(value.longitude, context, `${path}.longitude`, -180, 180);
+    const number = value.value === undefined ? undefined : readNumber(value.value, context, `${path}.value`, 0, 1_000_000_000_000) ?? undefined;
+    return label !== null && latitude !== null && longitude !== null ? { label, latitude, longitude, value: number, series } : null;
+  }
   if (value.path !== undefined) {
     const hierarchyPath = readString(value.path, context, `${path}.path`, 1, 240);
     const number = readNumber(value.value, context, `${path}.value`, 0.000001, 1_000_000_000_000);
@@ -685,6 +703,7 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
       const hint = chartFamilyDefinition(type).generationHint;
       return hint ? [hint] : [];
     }),
+    "Choropleth maps are not supported without validated user-supplied GeoJSON or a licensed local boundary dataset. Never invent geographic boundaries.",
     "Graph needs title and graph {name,direction,nodes,edges}. Graph nodes use id,label,kind. Kinds: process, decision, entity, database, person, service, system. Graph edges use id,source,target and optional kind or label.",
     "Flex layout also needs direction. Grid layout also needs columns.",
     "Do not invent facts presented as user data. Clearly label illustrative data.",

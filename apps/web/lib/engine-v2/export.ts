@@ -26,6 +26,7 @@ import {
   stackAreaData,
 } from "./chart-layout.ts";
 import type { DeterministicChartType } from "./chart-types.ts";
+import { geographicChartSvg } from "./geographic-chart.ts";
 import { CHART_FAMILY_TYPES, exportRendererForChart, type ChartRendererKey } from "./chart-registry.ts";
 import type {
   EngineChartNode,
@@ -423,6 +424,15 @@ function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
   const scatter = finiteScatterData(node.data);
   const open = `<svg class="engine-chart" viewBox="0 0 ${CHART.width} ${CHART.height}" role="img" aria-label="${escapeMarkup(`${node.title}, ${node.chartType} chart`)}"><title>${escapeMarkup(node.title)}</title>`;
   const renderer = exportRendererForChart(node.chartType);
+  if (renderer === "geographic") {
+    return geographicChartSvg({ type: node.chartType, title: node.title, data: node.data }, {
+      foreground: color(tokens, "ink"),
+      muted: color(tokens, "quiet"),
+      grid: color(tokens, "rule"),
+      surface: color(tokens, "panel"),
+      series: [color(tokens, "cobalt"), color(tokens, "orange"), "#1D8A6A", "#8755D9"],
+    });
+  }
   const advanced = advancedChartSvg(node, tokens, open, renderer);
   if (advanced) return advanced;
   if (renderer === "donut") {
@@ -601,6 +611,7 @@ function svgMarkupToJsx(markup: string): string {
     "stroke-dashoffset": "strokeDashoffset",
     "stroke-linecap": "strokeLinecap",
     "stroke-linejoin": "strokeLinejoin",
+    "stroke-opacity": "strokeOpacity",
     "stroke-width": "strokeWidth",
     "text-anchor": "textAnchor",
   };
