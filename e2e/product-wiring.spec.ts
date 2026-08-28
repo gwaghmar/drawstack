@@ -62,6 +62,17 @@ test("mobile app menu exposes the main destinations without overflow", async ({ 
   expect(errors).toEqual([]);
 });
 
+test("templates use one shared app header", async ({ page }) => {
+  const errors = collectPageErrors(page);
+  await page.goto("/app/templates");
+
+  await expect(page.locator("header")).toHaveCount(1);
+  await expect(page.getByRole("link", { name: "Projects", exact: true })).toHaveAttribute("href", "/app");
+  await expect(page.getByRole("link", { name: "Studio", exact: true })).toHaveAttribute("href", "/app/engine-v2");
+  await expect(page.getByRole("link", { name: /New visual/ })).toHaveAttribute("href", "/app/engine-v2");
+  expect(errors).toEqual([]);
+});
+
 test("billing checkout failure is visible and retryable", async ({ page }) => {
   const errors = collectPageErrors(page);
   await page.route("**/api/billing/checkout", (route) => route.fulfill({
