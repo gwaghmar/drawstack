@@ -2,12 +2,18 @@ import {
   isCartesianDatum,
   isCandlestickDatum,
   isHeatmapDatum,
+  isHistogramDatum,
+  isBoxPlotDatum,
+  isBubbleDatum,
   isSankeyDatum,
   isScatterDatum,
   type CandlestickChartDatum,
+  type BoxPlotChartDatum,
+  type BubbleChartDatum,
   type CartesianChartDatum,
   type DeterministicChartDatum,
   type HeatmapChartDatum,
+  type HistogramChartDatum,
   type SankeyChartDatum,
   type ScatterChartDatum,
 } from "./chart-types.ts";
@@ -62,6 +68,12 @@ export type WaterfallStep = CartesianChartDatum & {
   end: number;
 };
 
+export type HistogramBin = {
+  start: number;
+  end: number;
+  count: number;
+};
+
 export function finiteCartesianData(data: DeterministicChartDatum[]): CartesianChartDatum[] {
   return data.filter((datum): datum is CartesianChartDatum =>
     isCartesianDatum(datum) && Number.isFinite(datum.value) && datum.label.trim().length > 0,
@@ -100,6 +112,28 @@ export function finiteSankeyData(data: DeterministicChartDatum[]): SankeyChartDa
       && datum.source.trim().length > 0
       && datum.target.trim().length > 0
       && datum.source !== datum.target,
+  );
+}
+
+export function finiteHistogramData(data: DeterministicChartDatum[]): HistogramChartDatum[] {
+  return data.filter((datum): datum is HistogramChartDatum => isHistogramDatum(datum) && Number.isFinite(datum.value));
+}
+
+export function finiteBoxPlotData(data: DeterministicChartDatum[]): BoxPlotChartDatum[] {
+  return data.filter((datum): datum is BoxPlotChartDatum =>
+    isBoxPlotDatum(datum)
+      && datum.label.trim().length > 0
+      && [datum.min, datum.q1, datum.median, datum.q3, datum.max].every(Number.isFinite)
+      && datum.min <= datum.q1
+      && datum.q1 <= datum.median
+      && datum.median <= datum.q3
+      && datum.q3 <= datum.max,
+  );
+}
+
+export function finiteBubbleData(data: DeterministicChartDatum[]): BubbleChartDatum[] {
+  return data.filter((datum): datum is BubbleChartDatum =>
+    isBubbleDatum(datum) && Number.isFinite(datum.x) && Number.isFinite(datum.y) && Number.isFinite(datum.size) && datum.size > 0,
   );
 }
 
@@ -388,4 +422,23 @@ export function layoutWaterfall(data: CartesianChartDatum[]): { steps: Waterfall
     return { ...datum, start, end: cumulative };
   });
   return { steps, domain: numericDomain([0, ...steps.flatMap((step) => [step.start, step.end])], { includeZero: true }) };
+}
+
+export function binHistogram(data: HistogramChartDatum[], requestedBins?: number): { bins: HistogramBin[]; domain: NumericDomain } {
+  const values = data.map((datum) => datum.value).filter(Number.isFinite);
+  const domain = numericDomain(values);
+  if (!values.length) return { bins: [], domain };
+  const binCount = Math.min(Math.max(Math.round(requestedBins ?? Math.sqrt(values.length)), 1), 40);
+  const span = domain.max - domain.min || 1;
+  const binWidth = span / binCount;
+  const bins = Array.from({ length: binCount }, (_, index) => ({
+    start: domain.min + index * binWidth,
+    end: domain.min + (index + 1) * binWidth,
+    count: 0,
+  }));
+  for (const value of values) {
+    const index = Math.min(Math.floor((value - domain.min) / binWidth), binCount - 1);
+    bins[Math.max(index, 0)].count += 1;
+  }
+  return { bins, domain };
 }

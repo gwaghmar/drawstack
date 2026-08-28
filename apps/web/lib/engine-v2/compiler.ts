@@ -12,7 +12,7 @@ import type {
   FrameLayout,
 } from "./document";
 import { hasSankeyCycle } from "./chart-layout.ts";
-import { isCartesianDatum, isSankeyDatum } from "./chart-types.ts";
+import { isBoxPlotDatum, isBubbleDatum, isCartesianDatum, isHistogramDatum, isSankeyDatum } from "./chart-types.ts";
 import type { GraphDocument, GraphEdge, GraphField, GraphNode } from "./graph";
 
 const MAX_PROMPT_LENGTH = 4_000;
@@ -49,14 +49,14 @@ const STYLE_KEYS = new Set([
   "alignSelf",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
-const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "row", "column", "open", "high", "low", "close", "source", "target"]);
+const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max"]);
 const GRAPH_DOCUMENT_KEYS = new Set(["name", "direction", "nodes", "edges"]);
 const GRAPH_NODE_KEYS = new Set(["id", "label", "kind", "subtitle", "fields", "group", "width", "height", "tone"]);
 const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sourceLabel", "targetLabel"]);
 const GRAPH_FIELD_KEYS = new Set(["name", "type", "key"]);
 
 export type EngineV2Composition = "chart" | "graph" | "dashboard" | "document";
-export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | "sankey" | "waterfall" | null;
+export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | "sankey" | "waterfall" | "histogram" | "box-plot" | "bubble" | null;
 
 export type EngineV2PromptIntent = {
   normalizedPrompt: string;
@@ -393,6 +393,17 @@ function validateDatum(
     if (source !== null && target !== null && source === target) addIssue(context, `${path}.target`, "Sankey source and target must differ");
     return source !== null && target !== null && source !== target && number !== null ? { source, target, value: number } : null;
   }
+  if (value.min !== undefined || value.q1 !== undefined || value.median !== undefined || value.q3 !== undefined || value.max !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const min = readNumber(value.min, context, `${path}.min`, -1_000_000_000_000, 1_000_000_000_000);
+    const q1 = readNumber(value.q1, context, `${path}.q1`, -1_000_000_000_000, 1_000_000_000_000);
+    const median = readNumber(value.median, context, `${path}.median`, -1_000_000_000_000, 1_000_000_000_000);
+    const q3 = readNumber(value.q3, context, `${path}.q3`, -1_000_000_000_000, 1_000_000_000_000);
+    const max = readNumber(value.max, context, `${path}.max`, -1_000_000_000_000, 1_000_000_000_000);
+    const ordered = min !== null && q1 !== null && median !== null && q3 !== null && max !== null && min <= q1 && q1 <= median && median <= q3 && q3 <= max;
+    if (!ordered) addIssue(context, path, "Box plot values must satisfy min <= q1 <= median <= q3 <= max");
+    return label !== null && ordered ? { label, min: min!, q1: q1!, median: median!, q3: q3!, max: max!, series } : null;
+  }
   if (value.row !== undefined || value.column !== undefined) {
     const row = readString(value.row, context, `${path}.row`, 1, 80);
     const column = readString(value.column, context, `${path}.column`, 1, 80);
@@ -411,7 +422,15 @@ function validateDatum(
     const x = readNumber(value.x, context, `${path}.x`, -1_000_000_000_000, 1_000_000_000_000);
     const y = readNumber(value.y, context, `${path}.y`, -1_000_000_000_000, 1_000_000_000_000);
     const label = value.label === undefined ? undefined : readString(value.label, context, `${path}.label`, 1, 80) ?? undefined;
+    if (value.size !== undefined) {
+      const size = readNumber(value.size, context, `${path}.size`, 0.000001, 1_000_000_000_000);
+      return x !== null && y !== null && size !== null ? { x, y, size, label, series } : null;
+    }
     return x !== null && y !== null ? { x, y, label, series } : null;
+  }
+  if (value.label === undefined && value.value !== undefined) {
+    const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
+    return number !== null ? { value: number } : null;
   }
   const label = readString(value.label, context, `${path}.label`, 1, 80);
   const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
@@ -545,7 +564,7 @@ function validateNode(
   }
   if (type === "chart") {
     const title = readString(value.title, context, `${path}.title`, 1, 160);
-    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall"], context, `${path}.chartType`);
+    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble"], context, `${path}.chartType`);
     if (!Array.isArray(value.data) || value.data.length < 1 || value.data.length > MAX_CHART_POINTS) {
       addIssue(context, `${path}.data`, `Expected 1-${MAX_CHART_POINTS} data points`);
       return null;
@@ -567,6 +586,18 @@ function validateNode(
     }
     if (chartType === "waterfall" && !chartData.every(isCartesianDatum)) {
       addIssue(context, `${path}.data`, "Waterfall data must use label and value");
+      return null;
+    }
+    if (chartType === "histogram" && !chartData.every(isHistogramDatum)) {
+      addIssue(context, `${path}.data`, "Histogram data must use raw numeric values");
+      return null;
+    }
+    if (chartType === "box-plot" && !chartData.every(isBoxPlotDatum)) {
+      addIssue(context, `${path}.data`, "Box plot data must use label, min, q1, median, q3, and max");
+      return null;
+    }
+    if (chartType === "bubble" && !chartData.every(isBubbleDatum)) {
+      addIssue(context, `${path}.data`, "Bubble data must use x, y, and positive size");
       return null;
     }
     return { ...base, type, title, chartType, data: chartData, valuePrefix, valueSuffix } satisfies EngineChartNode;
@@ -636,6 +667,9 @@ export function classifyEngineV2Prompt(prompt: string): EngineV2PromptIntent {
   let chartType: EngineV2ChartIntent = null;
   if (/\bsankey\s+(?:chart|diagram|graph)\b/.test(words)) chartType = "sankey";
   else if (/\bwaterfall\s+(?:chart|graph)\b/.test(words)) chartType = "waterfall";
+  else if (/\bhistogram\b/.test(words)) chartType = "histogram";
+  else if (/\bbox(?:\s+and\s+whisker|\s*plot)\b/.test(words)) chartType = "box-plot";
+  else if (/\bbubble\s+(?:chart|plot)\b/.test(words)) chartType = "bubble";
   else if (/\b(?:donut|doughnut|pie)\s+(?:chart|graph)\b/.test(words)) chartType = "donut";
   else if (/\bcandlestick\s+chart\b/.test(words)) chartType = "candlestick";
   else if (/\bheatmap\b|\bheat\s+map\b/.test(words)) chartType = "heatmap";
@@ -660,7 +694,7 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Create one EngineDocument JSON object for the user's request.",
     "Return JSON only. Do not include Markdown, explanations, or JavaScript.",
     'The root must use version 2 and engine "dom-css".',
-    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, candlestick, sankey, and waterfall.",
+    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, candlestick, sankey, waterfall, histogram, box-plot, and bubble.",
     "Use flex or grid frames for layout. Every node id must be unique.",
     "Document fields: version, engine, name, artboard {width,minHeight,background}, tokens {colors,spacing,radii}, children.",
     "Every node needs id, name, and type. Text needs content and variant. Metric needs label, value, detail, and tone.",
@@ -668,6 +702,7 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Scatter data uses [{x,y,label?,series?}]. Other chart data can add series for multiple series.",
     "Heatmap data uses [{row,column,value}]. Candlestick data uses [{label,open,high,low,close}].",
     "Sankey data uses acyclic positive flows [{source,target,value}]. Waterfall data uses ordered changes [{label,value}].",
+    "Histogram data uses raw samples [{value}]. Box plot data uses [{label,min,q1,median,q3,max}]. Bubble data uses [{x,y,size,label?,series?}].",
     "Graph needs title and graph {name,direction,nodes,edges}. Graph nodes use id,label,kind. Kinds: process, decision, entity, database, person, service, system. Graph edges use id,source,target and optional kind or label.",
     "Flex layout also needs direction. Grid layout also needs columns.",
     "Do not invent facts presented as user data. Clearly label illustrative data.",

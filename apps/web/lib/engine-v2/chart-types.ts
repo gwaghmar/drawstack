@@ -12,7 +12,10 @@ export type DeterministicChartType =
   | "gauge"
   | "candlestick"
   | "sankey"
-  | "waterfall";
+  | "waterfall"
+  | "histogram"
+  | "box-plot"
+  | "bubble";
 
 export type CartesianChartDatum = {
   label: string;
@@ -47,12 +50,33 @@ export type SankeyChartDatum = {
   value: number;
 };
 
+export type HistogramChartDatum = {
+  value: number;
+};
+
+export type BoxPlotChartDatum = {
+  label: string;
+  min: number;
+  q1: number;
+  median: number;
+  q3: number;
+  max: number;
+  series?: string;
+};
+
+export type BubbleChartDatum = ScatterChartDatum & {
+  size: number;
+};
+
 export type DeterministicChartDatum =
   | CartesianChartDatum
   | ScatterChartDatum
   | HeatmapChartDatum
   | CandlestickChartDatum
-  | SankeyChartDatum;
+  | SankeyChartDatum
+  | HistogramChartDatum
+  | BoxPlotChartDatum
+  | BubbleChartDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;
@@ -105,4 +129,16 @@ export function isCandlestickDatum(datum: DeterministicChartDatum): datum is Can
 
 export function isSankeyDatum(datum: DeterministicChartDatum): datum is SankeyChartDatum {
   return "source" in datum && "target" in datum && "value" in datum;
+}
+
+export function isHistogramDatum(datum: DeterministicChartDatum): datum is HistogramChartDatum {
+  return "value" in datum && !("label" in datum) && !("source" in datum) && !("row" in datum);
+}
+
+export function isBoxPlotDatum(datum: DeterministicChartDatum): datum is BoxPlotChartDatum {
+  return "min" in datum && "q1" in datum && "median" in datum && "q3" in datum && "max" in datum && "label" in datum;
+}
+
+export function isBubbleDatum(datum: DeterministicChartDatum): datum is BubbleChartDatum {
+  return "x" in datum && "y" in datum && "size" in datum;
 }

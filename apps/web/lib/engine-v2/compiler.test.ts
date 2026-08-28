@@ -64,6 +64,9 @@ describe("classifyEngineV2Prompt", () => {
     assert.equal(classifyEngineV2Prompt("Build a candlestick chart").chartType, "candlestick");
     assert.equal(classifyEngineV2Prompt("Build a Sankey diagram").chartType, "sankey");
     assert.equal(classifyEngineV2Prompt("Create a waterfall chart").chartType, "waterfall");
+    assert.equal(classifyEngineV2Prompt("Create a histogram").chartType, "histogram");
+    assert.equal(classifyEngineV2Prompt("Create a box plot").chartType, "box-plot");
+    assert.equal(classifyEngineV2Prompt("Create a bubble chart").chartType, "bubble");
   });
 
   it("does not invent a chart type when one is not specified", () => {
@@ -171,6 +174,26 @@ describe("validateEngineV2Document", () => {
     const wrongShape = validateEngineV2Document(document);
     assert.equal(wrongShape.ok, false);
     if (!wrongShape.ok) assert.ok(wrongShape.issues.some((issue) => issue.message.includes("Sankey data must use")));
+  });
+
+  it("validates statistical chart data contracts", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const chart = (root.children as Array<Record<string, unknown>>)[1];
+    chart.chartType = "box-plot";
+    chart.data = [{ label: "Latency", min: 2, q1: 4, median: 5, q3: 7, max: 10 }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+    chart.data = [{ label: "Latency", min: 2, q1: 7, median: 5, q3: 8, max: 10 }];
+    assert.equal(validateEngineV2Document(document).ok, false);
+
+    chart.chartType = "histogram";
+    chart.data = [{ value: 1 }, { value: 2 }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+    chart.chartType = "bubble";
+    chart.data = [{ x: 1, y: 2, size: 5, label: "A" }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+    chart.data = [{ x: 1, y: 2, size: 0 }];
+    assert.equal(validateEngineV2Document(document).ok, false);
   });
 });
 

@@ -18,6 +18,7 @@ import {
 } from "@/lib/engine-v2/chart-types";
 import { CandlestickChart, FunnelChart, GaugeChart, HeatmapChart, RadarChart, TreemapChart } from "./advanced-charts";
 import { SankeyChart, WaterfallChart } from "./flow-charts";
+import { BoxPlotChart, BubbleChart, HistogramChart } from "./statistical-charts";
 
 const VIEWBOX = { width: 640, height: 330 };
 const PLOT = { left: 62, top: 24, right: 616, bottom: 270 };
@@ -265,7 +266,10 @@ export function DeterministicChart({ spec, className = "" }: ChartProps) {
                     : spec.type === "candlestick" ? <CandlestickChart spec={spec} palette={palette} />
                       : spec.type === "sankey" ? <SankeyChart spec={spec} palette={palette} />
                         : spec.type === "waterfall" ? <WaterfallChart spec={spec} palette={palette} />
-                          : <CartesianChart spec={spec} palette={palette} />}
+                          : spec.type === "histogram" ? <HistogramChart spec={spec} palette={palette} />
+                            : spec.type === "box-plot" ? <BoxPlotChart spec={spec} palette={palette} />
+                              : spec.type === "bubble" ? <BubbleChart spec={spec} palette={palette} />
+                                : <CartesianChart spec={spec} palette={palette} />}
     </figure>
   );
 }

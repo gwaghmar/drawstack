@@ -3,11 +3,15 @@ import { describe, it } from "node:test";
 import {
   areaPath,
   finiteCandlestickData,
+  finiteBoxPlotData,
+  finiteBubbleData,
   finiteCartesianData,
   finiteHeatmapData,
+  finiteHistogramData,
   finiteSankeyData,
   finiteScatterData,
   formatChartValue,
+  binHistogram,
   interpolateHexColor,
   hasSankeyCycle,
   layoutSankey,
@@ -150,5 +154,24 @@ describe("engine-v2 chart layout", () => {
     assert.deepEqual(waterfall.steps.map(({ start, end }) => [start, end]), [[0, 100], [100, 75], [75, 115]]);
     assert.ok(waterfall.domain.min <= 0);
     assert.ok(waterfall.domain.max >= 115);
+  });
+
+  it("bins raw histogram samples without losing observations", () => {
+    const data = finiteHistogramData([{ value: 1 }, { value: 2 }, { value: 2.5 }, { value: 9 }, { label: "Not raw", value: 4 }]);
+    const histogram = binHistogram(data, 3);
+    assert.equal(histogram.bins.length, 3);
+    assert.equal(histogram.bins.reduce((sum, bin) => sum + bin.count, 0), 4);
+    assert.ok(histogram.bins.every((bin) => bin.end > bin.start));
+  });
+
+  it("requires ordered box summaries and positive bubble sizes", () => {
+    assert.deepEqual(finiteBoxPlotData([
+      { label: "Valid", min: 1, q1: 2, median: 3, q3: 4, max: 5 },
+      { label: "Invalid", min: 1, q1: 4, median: 3, q3: 5, max: 6 },
+    ]).map((datum) => datum.label), ["Valid"]);
+    assert.deepEqual(finiteBubbleData([
+      { x: 1, y: 2, size: 10, label: "Valid" },
+      { x: 2, y: 3, size: 0, label: "Invalid" },
+    ]).map((datum) => datum.label), ["Valid"]);
   });
 });

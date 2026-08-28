@@ -1,11 +1,15 @@
 import {
   areaPath,
   finiteCandlestickData,
+  finiteBoxPlotData,
+  finiteBubbleData,
   finiteCartesianData,
   finiteHeatmapData,
+  finiteHistogramData,
   finiteSankeyData,
   finiteScatterData,
   formatChartValue,
+  binHistogram,
   interpolateHexColor,
   layoutTreemap,
   layoutSankey,
@@ -154,6 +158,45 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
   const muted = escapeMarkup(color(tokens, "quiet"));
   const surface = color(tokens, "panel");
   const grid = escapeMarkup(color(tokens, "rule"));
+  if (node.chartType === "histogram") {
+    const histogram = binHistogram(finiteHistogramData(node.data));
+    if (!histogram.bins.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const countDomain = numericDomain(histogram.bins.map((bin) => bin.count), { includeZero: true });
+    const band = (CHART.right - CHART.left) / histogram.bins.length;
+    const marks = histogram.bins.map((bin, index) => {
+      const y = scaleLinear(bin.count, countDomain, CHART.bottom, CHART.top);
+      return `<rect x="${number(CHART.left + index * band + 0.5)}" y="${number(y)}" width="${number(Math.max(band - 1, 1))}" height="${number(Math.max(CHART.bottom - y, bin.count ? 1 : 0))}" fill="${SERIES_COLORS[0]}" fill-opacity=".86"><title>${escapeMarkup(`${formatChartValue(bin.start)} to ${formatChartValue(bin.end)}: ${bin.count}`)}</title></rect>`;
+    }).join("");
+    return `${open}${chartGrid(countDomain, { ...node, valuePrefix: undefined, valueSuffix: undefined }, tokens)}${marks}</svg>`;
+  }
+  if (node.chartType === "box-plot") {
+    const data = finiteBoxPlotData(node.data);
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const domain = numericDomain(data.flatMap((datum) => [datum.min, datum.max]));
+    const rowHeight = (CHART.bottom - CHART.top) / data.length;
+    const boxHeight = Math.min(30, rowHeight * 0.55);
+    const ticks = domain.ticks.map((tick) => { const x = scaleLinear(tick, domain, CHART.left, CHART.right); return `<line x1="${number(x)}" y1="${CHART.top}" x2="${number(x)}" y2="${CHART.bottom}" stroke="${grid}"/><text x="${number(x)}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(tick, node.valuePrefix, node.valueSuffix))}</text>`; }).join("");
+    const marks = data.map((datum, index) => {
+      const y = CHART.top + rowHeight * (index + 0.5);
+      const values = [datum.min, datum.q1, datum.median, datum.q3, datum.max].map((value) => scaleLinear(value, domain, CHART.left, CHART.right));
+      const mark = SERIES_COLORS[index % SERIES_COLORS.length];
+      return `<text x="${CHART.left - 10}" y="${number(y + 4)}" text-anchor="end" font-size="11" fill="${muted}">${escapeMarkup(datum.label)}</text><line x1="${number(values[0])}" y1="${number(y)}" x2="${number(values[4])}" y2="${number(y)}" stroke="${mark}" stroke-width="2"/><line x1="${number(values[0])}" y1="${number(y - boxHeight * .28)}" x2="${number(values[0])}" y2="${number(y + boxHeight * .28)}" stroke="${mark}" stroke-width="2"/><line x1="${number(values[4])}" y1="${number(y - boxHeight * .28)}" x2="${number(values[4])}" y2="${number(y + boxHeight * .28)}" stroke="${mark}" stroke-width="2"/><rect x="${number(values[1])}" y="${number(y - boxHeight / 2)}" width="${number(Math.max(values[3] - values[1], 1))}" height="${number(boxHeight)}" fill="${mark}" fill-opacity=".2" stroke="${mark}" stroke-width="2"/><line x1="${number(values[2])}" y1="${number(y - boxHeight / 2)}" x2="${number(values[2])}" y2="${number(y + boxHeight / 2)}" stroke="${mark}" stroke-width="3"/>`;
+    }).join("");
+    return `${open}${ticks}${marks}</svg>`;
+  }
+  if (node.chartType === "bubble") {
+    const data = finiteBubbleData(node.data);
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const xDomain = numericDomain(data.map((datum) => datum.x));
+    const yDomain = numericDomain(data.map((datum) => datum.y));
+    const sizeDomain = numericDomain(data.map((datum) => Math.sqrt(datum.size)), { includeZero: true });
+    const series = orderedUnique(data.map((datum) => datum.series?.trim() || "Value"));
+    const marks = [...data].sort((a, b) => b.size - a.size).map((datum) => {
+      const seriesName = datum.series?.trim() || "Value";
+      return `<circle cx="${number(scaleLinear(datum.x, xDomain, CHART.left, CHART.right))}" cy="${number(scaleLinear(datum.y, yDomain, CHART.bottom, CHART.top))}" r="${number(scaleLinear(Math.sqrt(datum.size), sizeDomain, 5, 28))}" fill="${SERIES_COLORS[series.indexOf(seriesName) % SERIES_COLORS.length]}" fill-opacity=".58" stroke="${surface}" stroke-width="1.5"><title>${escapeMarkup(`${datum.label ? `${datum.label}: ` : ""}${datum.x}, ${datum.y}, size ${datum.size}`)}</title></circle>`;
+    }).join("");
+    return `${open}${chartGrid(yDomain, node, tokens)}${marks}</svg>`;
+  }
   if (node.chartType === "sankey") {
     const layout = layoutSankey(finiteSankeyData(node.data), CHART.right - CHART.left, CHART.bottom - CHART.top);
     if (!layout) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No valid acyclic flow data</text></svg>`;
@@ -569,5 +612,5 @@ export function createEngineV2ReactTsxExport(document: EngineDocument): EngineV2
 }
 
 export function supportedEngineV2ExportChartTypes(): readonly DeterministicChartType[] {
-  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall"];
+  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble"];
 }

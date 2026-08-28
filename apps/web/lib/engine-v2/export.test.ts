@@ -105,6 +105,12 @@ describe("serializeEngineV2Svg", () => {
       chart.chartType = chartType;
       chart.data = chartType === "scatter"
         ? [{ label: "A", x: 1, y: 2 }, { label: "B", x: 2, y: 4 }]
+        : chartType === "bubble"
+          ? [{ label: "A", x: 1, y: 2, size: 10 }, { label: "B", x: 2, y: 4, size: 25 }]
+        : chartType === "histogram"
+          ? [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 8 }]
+        : chartType === "box-plot"
+          ? [{ label: "A", min: 1, q1: 2, median: 3, q3: 4, max: 6 }]
         : chartType === "sankey"
           ? [{ source: "Visits", target: "Signup", value: 10 }, { source: "Signup", target: "Paid", value: 4 }]
         : chartType === "heatmap"
