@@ -39,6 +39,7 @@ export function AppHeader({ creditsLabel, showAdmin, headerIdentity, signOutActi
         <nav className="hidden md:flex" style={{ alignItems: "center", gap: 20 }}>
           <Link href="/app" style={navLinkStyle}>Projects</Link>
           <Link href="/app/editor" style={navLinkStyle}>Editor</Link>
+          <Link href="/app/engine-v2" style={navLinkStyle}>Engine v2</Link>
           {creditsLabel && (
             <span style={badgeStyle}>{creditsLabel}</span>
           )}
@@ -105,6 +106,7 @@ export function AppHeader({ creditsLabel, showAdmin, headerIdentity, signOutActi
           )}
           <Link href="/app" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Projects</Link>
           <Link href="/app/editor" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Editor</Link>
+          <Link href="/app/engine-v2" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Engine v2</Link>
           {showAdmin && (
             <Link href="/app/admin" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Admin</Link>
           )}

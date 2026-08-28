@@ -27,6 +27,8 @@ function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; 
     <div
       data-node-id={node.id}
       data-node-type={node.type}
+      data-layout={layout.mode}
+      data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}
       style={{ ...layoutStyle, ...nodeStyle(node.style, tokens) }}
       className={`relative box-border ${selectedId === node.id ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
@@ -53,7 +55,7 @@ function Node({ node, tokens, selectedId, onSelect }: { node: EngineNode; tokens
   if (node.type === "text") {
     const variants = {
       eyebrow: "font-mono text-[11px] font-semibold tracking-[0.18em]",
-      display: "max-w-[720px] text-[58px] font-semibold leading-[0.94] tracking-[-0.055em]",
+      display: "max-w-[720px] text-[clamp(38px,5.4vw,58px)] font-semibold leading-[0.94] tracking-[-0.055em]",
       heading: "text-2xl font-semibold tracking-[-0.03em]",
       body: "text-[15px] leading-6",
       caption: "font-mono text-[11px] tracking-wide",
@@ -215,8 +217,8 @@ export function EngineCanvas() {
   };
 
   return (
-    <main className="flex min-h-0 flex-1 overflow-hidden bg-[#E9ECE6] text-[#15171A]">
-      <aside className="flex w-[248px] shrink-0 flex-col border-r border-[#CED3CA] bg-[#F7F8F4]">
+    <main className="flex min-h-0 flex-1 overflow-hidden bg-[#E9ECE6] text-[#15171A] max-[700px]:[&_[data-direction=row]]:!flex-col max-[700px]:[&_[data-layout=grid]]:!grid-cols-1">
+      <aside className="hidden w-[248px] shrink-0 flex-col border-r border-[#CED3CA] bg-[#F7F8F4] lg:flex">
         <div className="border-b border-[#D7DBD2] px-4 py-4">
           <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#3157F6]">Engine v2 laboratory</div>
           <h1 className="mt-1 text-lg font-semibold tracking-[-0.035em]">A document, not a picture</h1>
@@ -234,7 +236,7 @@ export function EngineCanvas() {
         </button>
       </aside>
 
-      <section className="min-w-0 flex-1 overflow-auto p-8">
+      <section className="min-w-0 flex-1 overflow-auto p-3 md:p-8">
         <form onSubmit={generateDocument} className="mx-auto mb-5 max-w-[1080px] rounded-xl border border-[#C8CEC4] bg-[#F7F8F4] p-2 shadow-sm">
           <div className="flex items-center gap-2">
             <Sparkles size={16} className="ml-2 shrink-0 text-[#3157F6]" />
@@ -263,7 +265,7 @@ export function EngineCanvas() {
         </div>
       </section>
 
-      <aside className="w-[284px] shrink-0 overflow-auto border-l border-[#CED3CA] bg-[#F7F8F4] p-4">
+      <aside className="hidden w-[284px] shrink-0 overflow-auto border-l border-[#CED3CA] bg-[#F7F8F4] p-4 xl:block">
         <div className="mb-5 flex items-center gap-2"><Code2 size={15} /><h2 className="text-sm font-semibold">Computed node</h2></div>
         {selected ? (
           <div className="space-y-5">
