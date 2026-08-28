@@ -77,3 +77,33 @@ test("engine v2 resizes selected nodes without leaving document flow", async ({ 
   await expect(selectedNode).toHaveCSS("min-height", "180px");
   await expect(selectedNode).toHaveCSS("position", "static");
 });
+
+test("engine v2 multi-selects and edits sibling nodes in layout flow", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+
+  await page.locator('[data-tree-node-id="mrr"]').click();
+  await page.locator('[data-tree-node-id="retention"]').click({ modifiers: ["Shift"] });
+  await expect(page.getByText("2 nodes selected", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-selection-box]" )).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Align selected nodes center" }).click();
+  await expect(page.locator('[data-node-id="mrr"]')).toHaveCSS("align-self", "center");
+  await expect(page.locator('[data-node-id="retention"]')).toHaveCSS("align-self", "center");
+  await page.getByRole("button", { name: "Distribute selected nodes evenly" }).click();
+  await expect(page.locator('[data-node-id="metrics"]')).toHaveCSS("justify-content", "space-evenly");
+
+  await page.keyboard.press("Control+d");
+  await expect(page.locator('[data-tree-node-id="mrr-copy"]')).toBeVisible();
+  await expect(page.locator('[data-tree-node-id="retention-copy"]')).toBeVisible();
+  await page.keyboard.press("Delete");
+  await expect(page.locator('[data-tree-node-id="mrr-copy"]')).toHaveCount(0);
+  await expect(page.locator('[data-tree-node-id="retention-copy"]')).toHaveCount(0);
+
+  await page.locator('[data-node-id="mrr"]').click();
+  await page.locator('[data-node-id="retention"]').click({ modifiers: ["Shift"] });
+  await expect(page.getByText("2 nodes selected", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.locator('[data-tree-node-id="mrr"]').focus();
+  await page.keyboard.press("Control+a");
+  await expect(page.getByText("3 nodes selected", { exact: true })).toBeVisible();
+});

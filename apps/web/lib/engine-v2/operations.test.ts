@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { EngineNode } from "./document.ts";
 import {
+  alignNodes,
   duplicateNode,
+  duplicateNodes,
+  distributeNodes,
   findParent,
   insertNode,
   moveNodeDown,
@@ -10,6 +13,7 @@ import {
   moveNodeToParent,
   moveNodeUp,
   removeNode,
+  removeNodes,
   reorderNode,
   replaceNode,
 } from "./operations.ts";
@@ -158,5 +162,32 @@ describe("engine-v2 tree operations", () => {
     assert.equal(findParent(outdented, "b")?.parentId, "frame");
     assert.deepEqual((findParent(outdented, "frame")!.node as Extract<EngineNode, { type: "frame" }>).children.map((node) => node.id), ["a", "nested", "b"]);
     assert.equal(moveNodeByArrow(nodes, "frame", "left"), nodes);
+  });
+
+  it("duplicates and removes multi-selections without duplicating descendants twice", () => {
+    const nodes = tree();
+    const duplicate = duplicateNodes(nodes, ["nested", "b", "c"]);
+    assert.deepEqual(duplicate.duplicatedIds, ["nested-copy", "c-copy"]);
+    assert.ok(findParent(duplicate.nodes, "nested-copy"));
+    assert.ok(findParent(duplicate.nodes, "c-copy"));
+
+    const removed = removeNodes(nodes, ["nested", "b", "c"]);
+    assert.equal(findParent(removed, "nested"), null);
+    assert.equal(findParent(removed, "c"), null);
+    assert.deepEqual((findParent(removed, "frame")!.node as Extract<EngineNode, { type: "frame" }>).children.map((node) => node.id), ["a"]);
+    assert.equal(removeNodes(nodes, ["frame", "c"]), nodes);
+  });
+
+  it("aligns and distributes only sibling selections through layout properties", () => {
+    const nodes = tree();
+    const aligned = alignNodes(nodes, ["b", "b-copy"], "center");
+    assert.equal(findParent(aligned, "b")!.node.style?.alignSelf, "center");
+    assert.equal(findParent(aligned, "b-copy")!.node.style?.alignSelf, "center");
+    assert.equal(alignNodes(nodes, ["a", "b"], "end"), nodes);
+
+    const distributed = distributeNodes(nodes, ["b", "b-copy"], "evenly");
+    const nested = findParent(distributed, "nested")!.node as Extract<EngineNode, { type: "frame" }>;
+    assert.equal(nested.layout.justify, "space-evenly");
+    assert.equal(distributeNodes(nodes, ["a", "c"], "between"), nodes);
   });
 });

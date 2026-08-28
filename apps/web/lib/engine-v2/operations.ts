@@ -12,6 +12,11 @@ export type DuplicateNodeResult = {
   duplicatedId: string;
 };
 
+export type DuplicateNodesResult = {
+  nodes: EngineNode[];
+  duplicatedIds: string[];
+};
+
 export function findParent(nodes: EngineNode[], id: string): EngineNodeLocation | null {
   const visit = (children: EngineNode[], parent: EngineFrameNode | null): EngineNodeLocation | null => {
     for (let index = 0; index < children.length; index += 1) {
@@ -215,4 +220,97 @@ export function duplicateNode(nodes: EngineNode[], id: string): DuplicateNodeRes
     nodes: insertNode(nodes, duplicate, location.parentId, location.index + 1),
     duplicatedId: duplicate.id,
   };
+}
+
+function selectedRoots(nodes: EngineNode[], ids: ReadonlySet<string>): string[] {
+  const roots: string[] = [];
+  const visit = (items: EngineNode[], ancestorSelected: boolean) => {
+    for (const node of items) {
+      const selected = ids.has(node.id);
+      if (selected && !ancestorSelected) roots.push(node.id);
+      if (node.type === "frame") visit(node.children, ancestorSelected || selected);
+    }
+  };
+  visit(nodes, false);
+  return roots;
+}
+
+export function duplicateNodes(nodes: EngineNode[], ids: Iterable<string>): DuplicateNodesResult {
+  const selected = new Set(ids);
+  const roots = selectedRoots(nodes, selected);
+  let next = nodes;
+  const duplicatedIds: string[] = [];
+  for (const id of roots) {
+    const result = duplicateNode(next, id);
+    if (result.nodes !== next) duplicatedIds.push(result.duplicatedId);
+    next = result.nodes;
+  }
+  return { nodes: next, duplicatedIds };
+}
+
+export function removeNodes(nodes: EngineNode[], ids: Iterable<string>): EngineNode[] {
+  const selected = new Set(ids);
+  const roots = new Set(selectedRoots(nodes, selected));
+  if (!roots.size) return nodes;
+  if (nodes.every((node) => roots.has(node.id))) return nodes;
+
+  const remove = (items: EngineNode[]): EngineNode[] => {
+    let changed = false;
+    const next: EngineNode[] = [];
+    for (const node of items) {
+      if (roots.has(node.id)) {
+        changed = true;
+        continue;
+      }
+      if (node.type === "frame") {
+        const children = remove(node.children);
+        if (children !== node.children) {
+          next.push({ ...node, children });
+          changed = true;
+          continue;
+        }
+      }
+      next.push(node);
+    }
+    return changed ? next : items;
+  };
+  return remove(nodes);
+}
+
+function sharedFrameParent(nodes: EngineNode[], ids: string[]): EngineFrameNode | null {
+  if (ids.length < 2) return null;
+  const locations = ids.map((id) => findParent(nodes, id));
+  if (locations.some((location) => !location)) return null;
+  const parentId = locations[0]!.parentId;
+  if (parentId === null || locations.some((location) => location!.parentId !== parentId)) return null;
+  const parent = findParent(nodes, parentId)?.node;
+  return parent?.type === "frame" ? parent : null;
+}
+
+export function alignNodes(
+  nodes: EngineNode[],
+  ids: string[],
+  alignment: "start" | "center" | "end" | "stretch",
+): EngineNode[] {
+  if (!sharedFrameParent(nodes, ids)) return nodes;
+  const selected = new Set(ids);
+  const alignSelf = alignment === "start" ? "flex-start" : alignment === "end" ? "flex-end" : alignment;
+  const update = (items: EngineNode[]): EngineNode[] => items.map((node) => {
+    if (selected.has(node.id)) return { ...node, style: { ...node.style, alignSelf } };
+    if (node.type !== "frame") return node;
+    const children = update(node.children);
+    return children.some((child, index) => child !== node.children[index]) ? { ...node, children } : node;
+  });
+  return update(nodes);
+}
+
+export function distributeNodes(
+  nodes: EngineNode[],
+  ids: string[],
+  distribution: "packed" | "between" | "around" | "evenly",
+): EngineNode[] {
+  const parent = sharedFrameParent(nodes, ids);
+  if (!parent) return nodes;
+  const justify = distribution === "packed" ? "flex-start" : `space-${distribution}` as "space-between" | "space-around" | "space-evenly";
+  return replaceNode(nodes, parent.id, { ...parent, layout: { ...parent.layout, justify } });
 }

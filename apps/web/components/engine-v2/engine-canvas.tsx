@@ -20,13 +20,15 @@ import {
   type EngineTokens,
 } from "@/lib/engine-v2/document";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
-import { duplicateNode, findParent, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
+import { alignNodes, distributeNodes, duplicateNodes, findParent, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, removeNodes } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 
-function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
+const EMPTY_SELECTION = new Set<string>();
+
+function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void }) {
   const layout = node.layout;
   const layoutStyle = layout.mode === "grid"
-    ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding }
+    ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding, justifyContent: layout.justify }
     : { display: "flex", flexDirection: layout.direction ?? "row", gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify };
 
   return (
@@ -35,25 +37,25 @@ function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; 
       data-node-type={node.type}
       data-layout={layout.mode}
       data-direction={layout.direction}
-      onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}
+      onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
       style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%" }}
-      className={`relative box-border ${selectedId === node.id ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
+      className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
-        <Node key={child.id} node={child} tokens={tokens} selectedId={selectedId} onSelect={onSelect} />
+        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} />
       ))}
     </div>
   );
 }
 
-function Node({ node, tokens, selectedId, onSelect }: { node: EngineNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
-  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedId={selectedId} onSelect={onSelect} />;
+function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void }) {
+  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} />;
 
-  const selected = selectedId === node.id;
+  const selected = selectedIds.has(node.id);
   const shared = {
     "data-node-id": node.id,
     "data-node-type": node.type,
-    onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id); },
+    onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
     style: { ...nodeStyle(node.style, tokens), maxWidth: "100%" },
     className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
@@ -151,11 +153,12 @@ type ResizeSession = {
 type TreeProps = {
   nodes: EngineNode[];
   selectedId: string;
+  selectedIds: ReadonlySet<string>;
   draggedId: string | null;
   dropTarget: TreeDropTarget | null;
   parentId?: string | null;
   depth?: number;
-  onSelect: (id: string) => void;
+  onSelect: (id: string, additive: boolean) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
   onDropTarget: (target: TreeDropTarget | null) => void;
@@ -163,7 +166,7 @@ type TreeProps = {
   onKeyboardMove: (id: string, direction: "up" | "down" | "left" | "right") => void;
 };
 
-function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth = 0, onSelect, onDragStart, onDragEnd, onDropTarget, onMove, onKeyboardMove }: TreeProps) {
+function Tree({ nodes, selectedId, selectedIds = EMPTY_SELECTION, draggedId, dropTarget, parentId = null, depth = 0, onSelect, onDragStart, onDragEnd, onDropTarget, onMove, onKeyboardMove }: TreeProps) {
   const positionForPointer = (node: EngineNode, element: HTMLElement, clientY: number): TreeDropPosition => {
     const bounds = element.getBoundingClientRect();
     const ratio = bounds.height ? (clientY - bounds.top) / bounds.height : 0.5;
@@ -176,11 +179,11 @@ function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth
       {nodes.map((node, index) => {
         const activePosition = dropTarget?.nodeId === node.id ? dropTarget.position : null;
         return (
-          <div key={node.id} className="relative" role="treeitem" aria-level={depth + 1} aria-selected={selectedId === node.id} aria-expanded={node.type === "frame" ? true : undefined}>
+          <div key={node.id} className="relative" role="treeitem" aria-level={depth + 1} aria-selected={selectedIds.has(node.id)} aria-expanded={node.type === "frame" ? true : undefined}>
             {activePosition === "before" ? <div className="pointer-events-none absolute inset-x-1 -top-[2px] z-10 h-0.5 rounded-full bg-[#3157F6]" /> : null}
             <button
               type="button"
-              onClick={() => onSelect(node.id)}
+              onClick={(event) => onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey)}
               onKeyDown={(event) => {
                 if (!event.altKey || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
                 event.preventDefault();
@@ -213,13 +216,13 @@ function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth
                 onDragEnd();
               }}
               style={{ paddingLeft: 10 + depth * 14 }}
-              className={`flex w-full items-center gap-1 rounded-md py-1.5 pr-2 text-left text-xs transition-colors ${draggedId === node.id ? "opacity-45" : ""} ${activePosition === "inside" ? "bg-[#DCE3FF] ring-1 ring-inset ring-[#3157F6]" : selectedId === node.id ? "bg-[#E9EDFF] text-[#2448D8]" : "text-[#566057] hover:bg-[#F0F2EC]"}`}
+              className={`flex w-full items-center gap-1 rounded-md py-1.5 pr-2 text-left text-xs transition-colors ${draggedId === node.id ? "opacity-45" : ""} ${activePosition === "inside" ? "bg-[#DCE3FF] ring-1 ring-inset ring-[#3157F6]" : selectedIds.has(node.id) ? selectedId === node.id ? "bg-[#E9EDFF] text-[#2448D8] ring-1 ring-inset ring-[#3157F6]" : "bg-[#F0F2FF] text-[#2448D8]" : "text-[#566057] hover:bg-[#F0F2EC]"}`}
             >
               <GripVertical size={12} className="shrink-0 cursor-grab opacity-35" aria-hidden="true" />
               <span className="w-12 shrink-0 font-mono text-[9px] uppercase tracking-wide opacity-70">{node.type}</span>
               <span className="truncate font-medium">{node.name}</span>
             </button>
-            {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} draggedId={draggedId} dropTarget={dropTarget} parentId={node.id} depth={depth + 1} onSelect={onSelect} onDragStart={onDragStart} onDragEnd={onDragEnd} onDropTarget={onDropTarget} onMove={onMove} onKeyboardMove={onKeyboardMove} /> : null}
+            {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} selectedIds={selectedIds} draggedId={draggedId} dropTarget={dropTarget} parentId={node.id} depth={depth + 1} onSelect={onSelect} onDragStart={onDragStart} onDragEnd={onDragEnd} onDropTarget={onDropTarget} onMove={onMove} onKeyboardMove={onKeyboardMove} /> : null}
             {activePosition === "after" ? <div className="pointer-events-none absolute inset-x-1 bottom-[-2px] z-10 h-0.5 rounded-full bg-[#3157F6]" /> : null}
           </div>
         );
@@ -231,7 +234,7 @@ function Tree({ nodes, selectedId, draggedId, dropTarget, parentId = null, depth
 export function EngineDocumentView({ document, className = "" }: { document: EngineDocument; className?: string }) {
   return (
     <div className={className} data-engine-document="v2" style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}>
-      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedId="" onSelect={() => {}} />)}
+      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={EMPTY_SELECTION} onSelect={() => {}} />)}
     </div>
   );
 }
@@ -243,6 +246,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [past, setPast] = useState<EngineDocument[]>([]);
   const [future, setFuture] = useState<EngineDocument[]>([]);
   const [selectedId, setSelectedId] = useState("title");
+  const [selectedIds, setSelectedIds] = useState<string[]>(["title"]);
   const [copied, setCopied] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [prompt, setPrompt] = useState("Create a concise product launch dashboard with revenue, conversion, and channel performance");
@@ -261,6 +265,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const resizeSessionRef = useRef<ResizeSession | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const storageKey = `drawstack.engine-v2.document.${projectId ?? "draft"}`;
 
   useEffect(() => {
@@ -298,7 +303,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
 
   const measureSelectedNode = () => {
     const artboard = artboardRef.current;
-    if (!artboard) return setSelectedBounds(null);
+    if (!artboard || selectedIds.length !== 1) return setSelectedBounds(null);
     const element = [...artboard.querySelectorAll<HTMLElement>("[data-node-id]")]
       .find((candidate) => candidate.dataset.nodeId === selectedId);
     if (!element) return setSelectedBounds(null);
@@ -312,7 +317,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     });
   };
 
-  useLayoutEffect(measureSelectedNode, [document, selectedId]);
+  useLayoutEffect(measureSelectedNode, [document, selectedId, selectedIds.length]);
 
   useEffect(() => {
     const artboard = artboardRef.current;
@@ -324,12 +329,31 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       observer.disconnect();
       window.removeEventListener("resize", measureSelectedNode);
     };
-  }, [selectedId]);
+  }, [selectedId, selectedIds.length]);
 
   useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   const updateSelected = (update: (node: EngineNode) => EngineNode) => {
     commitDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
+  };
+
+  const selectNode = (id: string, additive: boolean) => {
+    if (!additive) {
+      setSelectedId(id);
+      setSelectedIds([id]);
+      return;
+    }
+    const included = selectedIds.includes(id);
+    if (included && selectedIds.length === 1) return;
+    const next = included ? selectedIds.filter((selectedNodeId) => selectedNodeId !== id) : [...selectedIds, id];
+    setSelectedIds(next);
+    setSelectedId(included && selectedId === id ? next.at(-1)! : id);
+  };
+
+  const replaceSelection = (ids: string[]) => {
+    const next = ids.length ? ids : [document.children[0]?.id ?? ""];
+    setSelectedIds(next.filter(Boolean));
+    setSelectedId(next.at(-1) ?? "");
   };
 
   const copyDocument = async () => {
@@ -340,7 +364,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
 
   const resetDocument = () => {
     commitDocument(ENGINE_V2_SAMPLE);
-    setSelectedId("title");
+    replaceSelection(["title"]);
     setGenerationError(null);
   };
 
@@ -407,7 +431,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const result = validateEngineV2Document(parsed);
       if (!result.ok) throw new Error(result.issues[0]?.message || "Invalid document");
       commitDocument(result.document);
-      setSelectedId(result.document.children[0]?.id ?? "");
+      replaceSelection([result.document.children[0]?.id ?? ""]);
       setGenerationError(null);
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Import failed");
@@ -423,6 +447,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const result = validateEngineV2Document(JSON.parse(source) as unknown);
       if (!result.ok) throw new Error("Stored revision is invalid");
       commitDocument(result.document);
+      replaceSelection([result.document.children[0]?.id ?? ""]);
       setHistoryOpen(false);
       setSaveState("saved");
     } catch {
@@ -432,21 +457,23 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
 
   const duplicateSelected = () => {
     const restoreTreeFocus = treeRef.current?.contains(window.document.activeElement) ?? false;
-    const result = duplicateNode(document.children, selectedId);
+    const result = duplicateNodes(document.children, selectedIds);
     if (result.nodes === document.children) return;
     commitDocument({ ...document, children: result.nodes });
-    setSelectedId(result.duplicatedId);
-    if (restoreTreeFocus) focusTreeNode(result.duplicatedId);
+    replaceSelection(result.duplicatedIds);
+    if (restoreTreeFocus && result.duplicatedIds.length) focusTreeNode(result.duplicatedIds.at(-1)!);
   };
 
   const removeSelected = () => {
     const restoreTreeFocus = treeRef.current?.contains(window.document.activeElement) ?? false;
-    const location = findParent(document.children, selectedId);
-    if (!location || (location.parentId === null && document.children.length === 1)) return;
-    const next = removeNode(document.children, selectedId);
+    const location = findParent(document.children, selectedIds[0] ?? selectedId);
+    if (!location) return;
+    const next = removeNodes(document.children, selectedIds);
+    if (next === document.children) return;
     commitDocument({ ...document, children: next });
-    const nextSelectedId = location.parentId ?? next[Math.min(location.index, next.length - 1)]?.id ?? next[0]?.id ?? "";
-    setSelectedId(nextSelectedId);
+    const parentStillExists = location.parentId && findParent(next, location.parentId);
+    const nextSelectedId = parentStillExists ? location.parentId! : next[Math.min(location.index, next.length - 1)]?.id ?? next[0]?.id ?? "";
+    replaceSelection([nextSelectedId]);
     if (restoreTreeFocus && nextSelectedId) focusTreeNode(nextSelectedId);
   };
 
@@ -460,7 +487,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const children = moveNodeToParent(current.children, id, parentId, insertionIndex);
       return children === current.children ? current : { ...current, children };
     });
-    setSelectedId(id);
+    replaceSelection([id]);
   };
 
   const endTreeDrag = () => {
@@ -480,7 +507,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const children = moveNodeByArrow(current.children, id, direction);
       return children === current.children ? current : { ...current, children };
     });
-    setSelectedId(id);
+    replaceSelection([id]);
     focusTreeNode(id);
   };
 
@@ -552,6 +579,27 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     });
   };
 
+  const alignSelection = (alignment: "start" | "center" | "end" | "stretch") => {
+    commitDocument((current) => {
+      const children = alignNodes(current.children, selectedIds, alignment);
+      return children === current.children ? current : { ...current, children };
+    });
+  };
+
+  const distributeSelection = (distribution: "packed" | "between" | "around" | "evenly") => {
+    commitDocument((current) => {
+      const children = distributeNodes(current.children, selectedIds, distribution);
+      return children === current.children ? current : { ...current, children };
+    });
+  };
+
+  const selectionSharesFrame = useMemo(() => {
+    if (selectedIds.length < 2) return false;
+    const locations = selectedIds.map((id) => findParent(document.children, id));
+    const parentId = locations[0]?.parentId;
+    return parentId !== null && parentId !== undefined && locations.every((location) => location?.parentId === parentId);
+  }, [document.children, selectedIds]);
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -568,6 +616,13 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       } else if (modifier && key === "d") {
         event.preventDefault();
         duplicateSelected();
+      } else if (modifier && key === "a") {
+        event.preventDefault();
+        const location = findParent(document.children, selectedId);
+        if (location) replaceSelection((location.parent?.children ?? document.children).map((node) => node.id));
+      } else if (!modifier && !event.altKey && event.key === "Escape" && selectedIds.length > 1) {
+        event.preventDefault();
+        replaceSelection([selectedId]);
       } else if (!modifier && !event.altKey && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();
         removeSelected();
@@ -619,7 +674,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const body = await response.json() as { document?: EngineDocument; error?: string };
       if (!response.ok || !body.document) throw new Error(body.error || "Generation failed");
       commitDocument(body.document);
-      setSelectedId(body.document.children[0]?.id ?? "");
+      replaceSelection([body.document.children[0]?.id ?? ""]);
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Generation failed");
     } finally {
@@ -635,11 +690,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           <h1 className="mt-1 text-lg font-semibold tracking-[-0.035em]">A document, not a picture</h1>
         </div>
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
-          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Structure</span>
+          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">{selectedIds.length > 1 ? `${selectedIds.length} nodes selected` : "Structure"}</span>
           <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold ${hydrated ? "bg-[#B7FF4A]" : "bg-[#E4E7E1]"}`}>{hydrated ? "LIVE DOM" : "CONNECTING"}</span>
         </div>
         <div ref={treeRef} className="min-h-0 flex-1 overflow-auto px-2 pb-4">
-          <Tree nodes={document.children} selectedId={selectedId} draggedId={treeDraggedId} dropTarget={treeDropTarget} onSelect={setSelectedId} onDragStart={setTreeDraggedId} onDragEnd={endTreeDrag} onDropTarget={setTreeDropTarget} onMove={moveTreeNode} onKeyboardMove={moveTreeNodeByKeyboard} />
+          <Tree nodes={document.children} selectedId={selectedId} selectedIds={selectedIdSet} draggedId={treeDraggedId} dropTarget={treeDropTarget} onSelect={selectNode} onDragStart={setTreeDraggedId} onDragEnd={endTreeDrag} onDropTarget={setTreeDropTarget} onMove={moveTreeNode} onKeyboardMove={moveTreeNodeByKeyboard} />
         </div>
         <button type="button" onClick={copyDocument} className="m-3 flex items-center justify-center gap-2 rounded-lg border border-[#C8CEC4] bg-white px-3 py-2.5 text-xs font-semibold hover:border-[#3157F6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3157F6]">
           {copied ? <Check size={14} /> : <Copy size={14} />}
@@ -683,7 +738,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           className="relative mx-auto overflow-hidden shadow-[0_24px_70px_rgba(35,42,34,0.16)]"
           style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}
         >
-          {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedId={selectedId} onSelect={setSelectedId} />)}
+          {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIdSet} onSelect={selectNode} />)}
           {selectedBounds ? (
             <div
               className="pointer-events-none absolute z-50 border border-[#3157F6]"
@@ -699,7 +754,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       </section>
 
       <aside className="hidden w-[284px] shrink-0 overflow-auto border-l border-[#CED3CA] bg-[#F7F8F4] p-4 xl:block">
-        <div className="mb-5 flex items-center gap-2"><Code2 size={15} /><h2 className="text-sm font-semibold">Computed node</h2></div>
+        <div className="mb-5 flex items-center gap-2"><Code2 size={15} /><h2 className="text-sm font-semibold">{selectedIds.length > 1 ? `${selectedIds.length} selected nodes` : "Computed node"}</h2></div>
         {selected ? (
           <div className="space-y-5">
             <div className="rounded-lg border border-[#D7DBD2] bg-white p-3 font-mono text-[10px] leading-5 text-[#566057]">
@@ -714,6 +769,23 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <button type="button" onClick={duplicateSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Duplicate node"><CopyPlus size={14} /></button>
               <button type="button" onClick={removeSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 text-[#B93815] hover:border-[#B93815]" title="Delete node"><Trash2 size={14} /></button>
             </div>
+
+            {selectedIds.length > 1 ? (
+              <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
+                <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Align and distribute</legend>
+                <div className="grid grid-cols-4 gap-1.5">
+                  {(["start", "center", "end", "stretch"] as const).map((alignment) => (
+                    <button key={alignment} type="button" disabled={!selectionSharesFrame} onClick={() => alignSelection(alignment)} className="rounded-md border border-[#D7DBD2] px-1.5 py-2 text-[10px] capitalize hover:border-[#3157F6] disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Align selected nodes ${alignment}`}>{alignment}</button>
+                  ))}
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5">
+                  {(["packed", "between", "evenly"] as const).map((distribution) => (
+                    <button key={distribution} type="button" disabled={!selectionSharesFrame} onClick={() => distributeSelection(distribution)} className="rounded-md border border-[#D7DBD2] px-1.5 py-2 text-[10px] capitalize hover:border-[#3157F6] disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Distribute selected nodes ${distribution}`}>{distribution}</button>
+                  ))}
+                </div>
+                {!selectionSharesFrame ? <p className="mt-2 text-[10px] leading-4 text-[#9A531C]">Choose nodes inside the same frame to align or distribute them.</p> : null}
+              </fieldset>
+            ) : null}
 
             <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
               <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Responsive size</legend>
