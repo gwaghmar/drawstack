@@ -26,6 +26,7 @@ import {
   stackAreaData,
 } from "./chart-layout.ts";
 import type { DeterministicChartType } from "./chart-types.ts";
+import { CHART_FAMILY_TYPES, exportRendererForChart, type ChartRendererKey } from "./chart-registry.ts";
 import type {
   EngineChartNode,
   EngineDocument,
@@ -157,12 +158,12 @@ function arcPath(cx: number, cy: number, radius: number, start: number, end: num
   return `M${number(first.x)},${number(first.y)} A${radius},${radius} 0 ${end - start > Math.PI ? 1 : 0} 1 ${number(last.x)},${number(last.y)}`;
 }
 
-function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: string): string | null {
+function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: string, renderer: ChartRendererKey): string | null {
   const foreground = escapeMarkup(color(tokens, "ink"));
   const muted = escapeMarkup(color(tokens, "quiet"));
   const surface = color(tokens, "panel");
   const grid = escapeMarkup(color(tokens, "rule"));
-  if (node.chartType === "combo") {
+  if (renderer === "combo") {
     const data = finiteComboData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const labels = orderedUnique(data.map((datum) => datum.label));
@@ -191,7 +192,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     const rightTicks = rightData.length ? rightDomain.ticks.map((tick) => `<text x="${CHART.right + 8}" y="${number(scaleLinear(tick, rightDomain, CHART.bottom, CHART.top) + 4)}" text-anchor="start" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(tick, node.valuePrefix, node.valueSuffix))}</text>`).join("") : "";
     return `${open}${chartGrid(leftDomain, node, tokens)}${rightTicks}${categoryLabels(labels, tokens)}${marks}</svg>`;
   }
-  if (node.chartType === "stacked-area") {
+  if (renderer === "stacked-area") {
     const data = finiteCartesianData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const stack = stackAreaData(data);
@@ -205,7 +206,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     const labels = stack.labels.map((label, index) => `<text x="${number(CHART.left + index * band)}" y="${CHART.bottom + 20}" text-anchor="${index === 0 ? "start" : index === stack.labels.length - 1 ? "end" : "middle"}" font-size="10" fill="${muted}">${escapeMarkup(label.length > 9 ? `${label.slice(0, 8)}…` : label)}</text>`).join("");
     return `${open}${chartGrid(stack.domain, node, tokens)}${labels}${marks}</svg>`;
   }
-  if (node.chartType === "gantt") {
+  if (renderer === "gantt") {
     const data = finiteGanttData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const starts = data.map((datum) => Date.parse(datum.start));
@@ -228,7 +229,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     }).join("");
     return `${open}${ticks}${marks}</svg>`;
   }
-  if (node.chartType === "histogram") {
+  if (renderer === "histogram") {
     const histogram = binHistogram(finiteHistogramData(node.data));
     if (!histogram.bins.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const countDomain = numericDomain(histogram.bins.map((bin) => bin.count), { includeZero: true });
@@ -242,7 +243,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     const finalLabel = `<text x="${CHART.right}" y="${CHART.bottom + 20}" text-anchor="end" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(histogram.bins.at(-1)!.end, node.valuePrefix, node.valueSuffix))}</text>`;
     return `${open}${chartGrid(countDomain, { ...node, valuePrefix: undefined, valueSuffix: undefined }, tokens)}${marks}${finalLabel}</svg>`;
   }
-  if (node.chartType === "box-plot") {
+  if (renderer === "box-plot") {
     const data = finiteBoxPlotData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const domain = numericDomain(data.flatMap((datum) => [datum.min, datum.max]));
@@ -257,7 +258,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     }).join("");
     return `${open}${ticks}${marks}</svg>`;
   }
-  if (node.chartType === "bubble") {
+  if (renderer === "bubble") {
     const data = finiteBubbleData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const xDomain = numericDomain(data.map((datum) => datum.x));
@@ -271,7 +272,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     const xTicks = xDomain.ticks.map((tick) => `<text x="${number(scaleLinear(tick, xDomain, CHART.left, CHART.right))}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(tick))}</text>`).join("");
     return `${open}${chartGrid(yDomain, node, tokens)}${xTicks}${marks}</svg>`;
   }
-  if (node.chartType === "sankey") {
+  if (renderer === "sankey") {
     const layout = layoutSankey(finiteSankeyData(node.data), CHART.right - CHART.left, CHART.bottom - CHART.top);
     if (!layout) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No valid acyclic flow data</text></svg>`;
     const maxLayer = Math.max(...layout.nodes.map((layoutNode) => layoutNode.layer));
@@ -282,7 +283,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     }).join("");
     return `${open}<g transform="translate(${CHART.left} ${CHART.top})">${links}${nodes}</g></svg>`;
   }
-  if (node.chartType === "heatmap") {
+  if (renderer === "heatmap") {
     const data = finiteHeatmapData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const rows = orderedUnique(data.map((datum) => datum.row));
@@ -300,7 +301,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     })).join("");
     return `${open}${labels}${cells}</svg>`;
   }
-  if (node.chartType === "candlestick") {
+  if (renderer === "candlestick") {
     const data = finiteCandlestickData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const domain = numericDomain(data.flatMap((datum) => [datum.low, datum.high]));
@@ -319,7 +320,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     return `${open}${chartGrid(domain, node, tokens)}${candles}</svg>`;
   }
   const data = finiteCartesianData(node.data);
-  if (node.chartType === "waterfall") {
+  if (renderer === "waterfall") {
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
     const waterfall = layoutWaterfall(data);
     const band = (CHART.right - CHART.left) / waterfall.steps.length;
@@ -334,9 +335,9 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     }).join("");
     return `${open}${chartGrid(waterfall.domain, node, tokens)}${marks}</svg>`;
   }
-  if (!["radar", "treemap", "funnel", "gauge"].includes(node.chartType)) return null;
+  if (renderer !== "radar" && renderer !== "treemap" && renderer !== "funnel" && renderer !== "gauge") return null;
   if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
-  if (node.chartType === "treemap") {
+  if (renderer === "treemap") {
     const rectangles = layoutTreemap(data.filter((datum) => datum.value > 0), CHART.right - CHART.left, CHART.bottom - CHART.top);
     const max = Math.max(...rectangles.map((rectangle) => rectangle.value), 1);
     const marks = rectangles.map((rectangle, index) => {
@@ -345,7 +346,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     }).join("");
     return `${open}${marks}</svg>`;
   }
-  if (node.chartType === "funnel") {
+  if (renderer === "funnel") {
     const stages = data.filter((datum) => datum.value >= 0);
     const max = Math.max(...stages.map((datum) => datum.value), 0);
     if (max <= 0) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
@@ -361,7 +362,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     }).join("");
     return `${open}${marks}</svg>`;
   }
-  if (node.chartType === "gauge") {
+  if (renderer === "gauge") {
     const datum = data[0];
     const max = Math.max(100, datum.value, 1);
     const ratio = Math.min(Math.max(datum.value / max, 0), 1);
@@ -396,9 +397,10 @@ function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
   const cartesian = finiteCartesianData(node.data);
   const scatter = finiteScatterData(node.data);
   const open = `<svg class="engine-chart" viewBox="0 0 ${CHART.width} ${CHART.height}" role="img" aria-label="${escapeMarkup(`${node.title}, ${node.chartType} chart`)}"><title>${escapeMarkup(node.title)}</title>`;
-  const advanced = advancedChartSvg(node, tokens, open);
+  const renderer = exportRendererForChart(node.chartType);
+  const advanced = advancedChartSvg(node, tokens, open, renderer);
   if (advanced) return advanced;
-  if (node.chartType === "donut") {
+  if (renderer === "donut") {
     const data = cartesian.filter((datum) => datum.value > 0);
     const total = data.reduce((sum, datum) => sum + datum.value, 0);
     if (!data.length || total <= 0) return `${open}<text x="320" y="165" text-anchor="middle" fill="${escapeMarkup(color(tokens, "quiet"))}">No chart data</text></svg>`;
@@ -414,7 +416,7 @@ function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
     const legend = data.map((datum, index) => `<rect x="420" y="${74 + index * 28}" width="10" height="10" rx="2" fill="${SERIES_COLORS[index % SERIES_COLORS.length]}"/><text x="438" y="${83 + index * 28}" font-size="11" fill="${escapeMarkup(color(tokens, "quiet"))}">${escapeMarkup(datum.label)}</text><text x="600" y="${83 + index * 28}" text-anchor="end" font-size="11" font-weight="650" fill="${escapeMarkup(foreground)}">${escapeMarkup(formatChartValue(datum.value, node.valuePrefix, node.valueSuffix))}</text>`).join("");
     return `${open}<g transform="rotate(-90 250 150)">${arcs}</g><text x="250" y="147" text-anchor="middle" font-size="12" fill="${escapeMarkup(color(tokens, "quiet"))}">Total</text><text x="250" y="171" text-anchor="middle" font-size="20" font-weight="700" fill="${escapeMarkup(foreground)}">${escapeMarkup(formatChartValue(total, node.valuePrefix, node.valueSuffix))}</text>${legend}</svg>`;
   }
-  if (node.chartType === "scatter") {
+  if (renderer === "scatter") {
     if (!scatter.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${escapeMarkup(color(tokens, "quiet"))}">No chart data</text></svg>`;
     const xDomain = numericDomain(scatter.map((datum) => datum.x));
     const yDomain = numericDomain(scatter.map((datum) => datum.y));
@@ -424,7 +426,7 @@ function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
     return `${open}${chartGrid(yDomain, node, tokens)}${xTicks}${points}</svg>`;
   }
   if (!cartesian.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${escapeMarkup(color(tokens, "quiet"))}">No chart data</text></svg>`;
-  if (node.chartType === "stacked-bar") {
+  if (renderer === "stacked-bar") {
     const stack = stackCartesianData(cartesian);
     const band = (CHART.right - CHART.left) / stack.labels.length;
     const barWidth = band * 0.66;
@@ -689,5 +691,5 @@ export function createEngineV2ReactTsxExport(document: EngineDocument): EngineV2
 }
 
 export function supportedEngineV2ExportChartTypes(): readonly DeterministicChartType[] {
-  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble", "combo", "stacked-area", "gantt"];
+  return CHART_FAMILY_TYPES;
 }

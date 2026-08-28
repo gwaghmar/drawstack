@@ -20,6 +20,7 @@ import {
   type EngineTokens,
 } from "@/lib/engine-v2/document";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
+import { CHART_FAMILY_TYPES } from "@/lib/engine-v2/chart-registry";
 import { createDefaultNode, type InsertableNodeType } from "@/lib/engine-v2/node-factory";
 import { alignNodes, copyNodes, distributeNodes, duplicateNodes, findParent, insertNode, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, pasteNodes, removeNodes, uniqueNodeId } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
@@ -929,7 +930,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <label className="block">
                 <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart family</span>
                 <select value={selected.chartType} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, chartType: event.target.value as EngineChartNode["chartType"] } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
-                  {["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble", "combo", "stacked-area", "gantt"].map((type) => <option key={type} value={type}>{type}</option>)}
+                  {CHART_FAMILY_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </label>
             ) : null}

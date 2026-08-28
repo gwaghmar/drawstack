@@ -11,8 +11,8 @@ import type {
   EngineTokens,
   FrameLayout,
 } from "./document";
-import { hasSankeyCycle } from "./chart-layout.ts";
-import { isBoxPlotDatum, isBubbleDatum, isCartesianDatum, isComboDatum, isGanttDatum, isHistogramDatum, isSankeyDatum } from "./chart-types.ts";
+import { CHART_FAMILY_REGISTRY, CHART_FAMILY_TYPES, chartFamilyDefinition, type RegisteredChartType } from "./chart-registry.ts";
+import { validateChartFamilyData } from "./chart-validation.ts";
 import type { GraphDocument, GraphEdge, GraphField, GraphNode } from "./graph";
 
 const MAX_PROMPT_LENGTH = 4_000;
@@ -56,7 +56,7 @@ const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sou
 const GRAPH_FIELD_KEYS = new Set(["name", "type", "key"]);
 
 export type EngineV2Composition = "chart" | "graph" | "dashboard" | "document";
-export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | "sankey" | "waterfall" | "histogram" | "box-plot" | "bubble" | "combo" | "stacked-area" | "gantt" | null;
+export type EngineV2ChartIntent = RegisteredChartType | null;
 
 export type EngineV2PromptIntent = {
   normalizedPrompt: string;
@@ -580,7 +580,7 @@ function validateNode(
   }
   if (type === "chart") {
     const title = readString(value.title, context, `${path}.title`, 1, 160);
-    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble", "combo", "stacked-area", "gantt"], context, `${path}.chartType`);
+    const chartType = readEnum(value.chartType, CHART_FAMILY_TYPES, context, `${path}.chartType`);
     if (!Array.isArray(value.data) || value.data.length < 1 || value.data.length > MAX_CHART_POINTS) {
       addIssue(context, `${path}.data`, `Expected 1-${MAX_CHART_POINTS} data points`);
       return null;
@@ -590,58 +590,9 @@ function validateNode(
     const valueSuffix = value.valueSuffix === undefined ? undefined : readString(value.valueSuffix, context, `${path}.valueSuffix`, 0, 16) ?? undefined;
     if (title === null || chartType === null || data.some((datum) => datum === null)) return null;
     const chartData = data as EngineChartDatum[];
-    if (chartType === "sankey") {
-      if (!chartData.every(isSankeyDatum)) {
-        addIssue(context, `${path}.data`, "Sankey data must use source, target, and positive value");
-        return null;
-      }
-      if (hasSankeyCycle(chartData)) {
-        addIssue(context, `${path}.data`, "Sankey data must be acyclic");
-        return null;
-      }
-    }
-    if (chartType === "waterfall" && !chartData.every(isCartesianDatum)) {
-      addIssue(context, `${path}.data`, "Waterfall data must use label and value");
-      return null;
-    }
-    if (chartType === "histogram" && !chartData.every(isHistogramDatum)) {
-      addIssue(context, `${path}.data`, "Histogram data must use raw numeric values");
-      return null;
-    }
-    if (chartType === "box-plot" && !chartData.every(isBoxPlotDatum)) {
-      addIssue(context, `${path}.data`, "Box plot data must use label, min, q1, median, q3, and max");
-      return null;
-    }
-    if (chartType === "bubble" && !chartData.every(isBubbleDatum)) {
-      addIssue(context, `${path}.data`, "Bubble data must use x, y, and positive size");
-      return null;
-    }
-    if (chartType === "combo") {
-      if (!chartData.every(isComboDatum)) {
-        addIssue(context, `${path}.data`, "Combo data must use label, value, and display");
-        return null;
-      }
-      const metadata = new Map<string, string>();
-      for (const datum of chartData) {
-        const seriesName = datum.series?.trim() || "Value";
-        const signature = `${datum.display}:${datum.axis ?? "left"}`;
-        const previous = metadata.get(seriesName);
-        if (previous && previous !== signature) addIssue(context, `${path}.data`, "Each combo series must keep one display and axis");
-        metadata.set(seriesName, signature);
-      }
-      if (!chartData.some((datum) => datum.display === "bar") || !chartData.some((datum) => datum.display === "line")) addIssue(context, `${path}.data`, "Combo charts require both bar and line series");
-      if (context.issues.some((issue) => issue.path === `${path}.data`)) return null;
-    }
-    if (chartType === "stacked-area") {
-      if (!chartData.every(isCartesianDatum) || new Set(chartData.map((datum) => datum.series?.trim() || "Value")).size < 2 || new Set(chartData.map((datum) => datum.label)).size < 2) {
-        addIssue(context, `${path}.data`, "Stacked area data must contain at least two labels and two series");
-        return null;
-      }
-    }
-    if (chartType === "gantt" && !chartData.every(isGanttDatum)) {
-      addIssue(context, `${path}.data`, "Gantt data must use label, ISO start, and ISO end");
-      return null;
-    }
+    const chartIssues = validateChartFamilyData(chartType, chartData);
+    for (const message of chartIssues) addIssue(context, `${path}.data`, message);
+    if (chartIssues.length) return null;
     return { ...base, type, title, chartType, data: chartData, valuePrefix, valueSuffix } satisfies EngineChartNode;
   }
   if (type === "graph") {
@@ -706,27 +657,7 @@ export function classifyEngineV2Prompt(prompt: string): EngineV2PromptIntent {
   if (!normalizedPrompt) throw new Error("Prompt cannot be empty");
   if (normalizedPrompt.length > MAX_PROMPT_LENGTH) throw new Error(`Prompt cannot exceed ${MAX_PROMPT_LENGTH} characters`);
   const words = ` ${normalizedPrompt.toLowerCase()} `;
-  let chartType: EngineV2ChartIntent = null;
-  if (/\bsankey\s+(?:chart|diagram|graph)\b/.test(words)) chartType = "sankey";
-  else if (/\bwaterfall\s+(?:chart|graph)\b/.test(words)) chartType = "waterfall";
-  else if (/\bhistogram\b/.test(words)) chartType = "histogram";
-  else if (/\bbox(?:\s+and\s+whisker|\s*plot)\b/.test(words)) chartType = "box-plot";
-  else if (/\bbubble\s+(?:chart|plot)\b/.test(words)) chartType = "bubble";
-  else if (/\b(?:combo|combination|dual[ -]axis)\s+(?:chart|graph)\b/.test(words)) chartType = "combo";
-  else if (/\bstacked\s+area\s+(?:chart|graph)\b/.test(words)) chartType = "stacked-area";
-  else if (/\b(?:gantt|timeline)\s+(?:chart|diagram)?\b/.test(words)) chartType = "gantt";
-  else if (/\b(?:donut|doughnut|pie)\s+(?:chart|graph)\b/.test(words)) chartType = "donut";
-  else if (/\bcandlestick\s+chart\b/.test(words)) chartType = "candlestick";
-  else if (/\bheatmap\b|\bheat\s+map\b/.test(words)) chartType = "heatmap";
-  else if (/\btreemap\b|\btree\s+map\b/.test(words)) chartType = "treemap";
-  else if (/\bradar\s+chart\b|\bspider\s+chart\b/.test(words)) chartType = "radar";
-  else if (/\bfunnel\s+chart\b/.test(words)) chartType = "funnel";
-  else if (/\bgauge\s+chart\b/.test(words)) chartType = "gauge";
-  else if (/\bscatter\s+(?:chart|plot|graph)\b/.test(words)) chartType = "scatter";
-  else if (/\bstacked\s+(?:bar|column)\s+chart\b/.test(words)) chartType = "stacked-bar";
-  else if (/\barea\s+chart\b/.test(words)) chartType = "area";
-  else if (/\b(?:line|trend|time\s*series)\s+(?:chart|graph)\b|\bover\s+time\b/.test(words)) chartType = "line";
-  else if (/\b(?:bar|column)\s+(?:chart|graph)\b/.test(words)) chartType = "bar";
+  const chartType = CHART_FAMILY_TYPES.find((type) => CHART_FAMILY_REGISTRY[type].promptPatterns.some((pattern) => pattern.test(words))) ?? null;
   let composition: EngineV2Composition = "document";
   if (/\b(?:dashboard|scorecard|kpi\s+board)\b/.test(words)) composition = "dashboard";
   else if (/\b(?:flowchart|erd|entity relationship|org chart|organization chart|system architecture|dependency graph|process flow)\b/.test(words)) composition = "graph";
@@ -739,16 +670,16 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Create one EngineDocument JSON object for the user's request.",
     "Return JSON only. Do not include Markdown, explanations, or JavaScript.",
     'The root must use version 2 and engine "dom-css".',
-    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, candlestick, sankey, waterfall, histogram, box-plot, bubble, combo, stacked-area, and gantt.",
+    `Use only frame, text, metric, chart, and graph nodes. Chart types are ${CHART_FAMILY_TYPES.join(", ")}.`,
     "Use flex or grid frames for layout. Every node id must be unique.",
     "Document fields: version, engine, name, artboard {width,minHeight,background}, tokens {colors,spacing,radii}, children.",
     "Every node needs id, name, and type. Text needs content and variant. Metric needs label, value, detail, and tone.",
     "Chart needs title, chartType, and data [{label,value}]. Frame needs layout {mode,gap,padding} and children.",
-    "Scatter data uses [{x,y,label?,series?}]. Other chart data can add series for multiple series.",
-    "Heatmap data uses [{row,column,value}]. Candlestick data uses [{label,open,high,low,close}].",
-    "Sankey data uses acyclic positive flows [{source,target,value}]. Waterfall data uses ordered changes [{label,value}].",
-    "Histogram data uses raw samples [{value}]. Box plot data uses [{label,min,q1,median,q3,max}]. Bubble data uses [{x,y,size,label?,series?}].",
-    "Combo data uses [{label,value,series,display:'bar'|'line',axis?:'left'|'right'}]. Stacked-area uses multiple [{label,value,series}]. Gantt uses [{label,start,end,series?}] with ISO dates.",
+    "Other chart data can add series for multiple series.",
+    ...CHART_FAMILY_TYPES.flatMap((type) => {
+      const hint = chartFamilyDefinition(type).generationHint;
+      return hint ? [hint] : [];
+    }),
     "Graph needs title and graph {name,direction,nodes,edges}. Graph nodes use id,label,kind. Kinds: process, decision, entity, database, person, service, system. Graph edges use id,source,target and optional kind or label.",
     "Flex layout also needs direction. Grid layout also needs columns.",
     "Do not invent facts presented as user data. Clearly label illustrative data.",

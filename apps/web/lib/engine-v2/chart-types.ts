@@ -1,24 +1,6 @@
-export type DeterministicChartType =
-  | "bar"
-  | "line"
-  | "area"
-  | "donut"
-  | "scatter"
-  | "stacked-bar"
-  | "radar"
-  | "heatmap"
-  | "treemap"
-  | "funnel"
-  | "gauge"
-  | "candlestick"
-  | "sankey"
-  | "waterfall"
-  | "histogram"
-  | "box-plot"
-  | "bubble"
-  | "combo"
-  | "stacked-area"
-  | "gantt";
+import type { RegisteredChartType } from "./chart-registry";
+
+export type DeterministicChartType = RegisteredChartType;
 
 export type CartesianChartDatum = {
   label: string;

@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, type ComponentType } from "react";
 import {
   areaPath,
   finiteCartesianData,
@@ -16,6 +16,7 @@ import {
   type DeterministicChartPalette,
   type DeterministicChartSpec,
 } from "@/lib/engine-v2/chart-types";
+import { previewRendererForChart, type ChartRendererKey } from "@/lib/engine-v2/chart-registry";
 import { CandlestickChart, FunnelChart, GaugeChart, HeatmapChart, RadarChart, TreemapChart } from "./advanced-charts";
 import { SankeyChart, WaterfallChart } from "./flow-charts";
 import { BoxPlotChart, BubbleChart, HistogramChart } from "./statistical-charts";
@@ -251,29 +252,40 @@ function ScatterChart({ spec, palette }: { spec: DeterministicChartSpec; palette
   );
 }
 
+type ChartRendererProps = {
+  spec: DeterministicChartSpec;
+  palette: DeterministicChartPalette;
+};
+
+const CHART_PREVIEW_RENDERERS = {
+  cartesian: CartesianChart,
+  "stacked-bar": StackedBarChart,
+  donut: DonutChart,
+  scatter: ScatterChart,
+  radar: RadarChart,
+  heatmap: HeatmapChart,
+  treemap: TreemapChart,
+  funnel: FunnelChart,
+  gauge: GaugeChart,
+  candlestick: CandlestickChart,
+  sankey: SankeyChart,
+  waterfall: WaterfallChart,
+  histogram: HistogramChart,
+  "box-plot": BoxPlotChart,
+  bubble: BubbleChart,
+  combo: ComboChart,
+  "stacked-area": StackedAreaChart,
+  gantt: GanttChart,
+} satisfies Record<ChartRendererKey, ComponentType<ChartRendererProps>>;
+
 export function DeterministicChart({ spec, className = "" }: ChartProps) {
   const titleId = useId();
   const palette = paletteFor(spec);
+  const Renderer = CHART_PREVIEW_RENDERERS[previewRendererForChart(spec.type)];
   return (
     <figure className={className} aria-labelledby={titleId}>
       <figcaption id={titleId} className="sr-only">{spec.title}</figcaption>
-      {spec.type === "donut" ? <DonutChart spec={spec} palette={palette} />
-        : spec.type === "scatter" ? <ScatterChart spec={spec} palette={palette} />
-          : spec.type === "radar" ? <RadarChart spec={spec} palette={palette} />
-            : spec.type === "heatmap" ? <HeatmapChart spec={spec} palette={palette} />
-              : spec.type === "treemap" ? <TreemapChart spec={spec} palette={palette} />
-                : spec.type === "funnel" ? <FunnelChart spec={spec} palette={palette} />
-                  : spec.type === "gauge" ? <GaugeChart spec={spec} palette={palette} />
-                    : spec.type === "candlestick" ? <CandlestickChart spec={spec} palette={palette} />
-                      : spec.type === "sankey" ? <SankeyChart spec={spec} palette={palette} />
-                        : spec.type === "waterfall" ? <WaterfallChart spec={spec} palette={palette} />
-                          : spec.type === "histogram" ? <HistogramChart spec={spec} palette={palette} />
-                            : spec.type === "box-plot" ? <BoxPlotChart spec={spec} palette={palette} />
-                              : spec.type === "bubble" ? <BubbleChart spec={spec} palette={palette} />
-                                : spec.type === "combo" ? <ComboChart spec={spec} palette={palette} />
-                                  : spec.type === "stacked-area" ? <StackedAreaChart spec={spec} palette={palette} />
-                                    : spec.type === "gantt" ? <GanttChart spec={spec} palette={palette} />
-                                      : <CartesianChart spec={spec} palette={palette} />}
+      <Renderer spec={spec} palette={palette} />
     </figure>
   );
 }
