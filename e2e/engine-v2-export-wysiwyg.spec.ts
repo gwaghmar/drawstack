@@ -2,11 +2,12 @@ import { expect, test } from "@playwright/test";
 import type { DeterministicChartDatum, DeterministicChartType } from "../apps/web/lib/engine-v2/chart-types.ts";
 import type { EngineDocument } from "../apps/web/lib/engine-v2/document.ts";
 import {
+  serializeEngineV2PrintHtml,
   serializeEngineV2ReactTsx,
   serializeEngineV2Svg,
   supportedEngineV2ExportChartTypes,
 } from "../apps/web/lib/engine-v2/export.ts";
-import { chartSvgFromGeneratedTsx, readChartGeometry, type SvgGeometry } from "./helpers/engine-v2-wysiwyg.ts";
+import { chartSvgFromGeneratedTsx, readChartGeometry, readNodeLayouts, readPngDimensions, readSvgGeometryForNode, renderGeneratedTsx, type SvgGeometry } from "./helpers/engine-v2-wysiwyg.ts";
 
 function dataFor(type: DeterministicChartType): DeterministicChartDatum[] {
   if (type === "scatter") return [{ label: "Alpha", x: 1, y: 3 }, { label: "Beta", x: 4, y: 8 }];
@@ -53,6 +54,69 @@ function representativeDocument(): EngineDocument {
         data: dataFor(chartType),
         style: { minHeight: 360 },
       })),
+    }],
+  };
+}
+
+function mixedDocument(): EngineDocument {
+  return {
+    version: 2,
+    engine: "dom-css",
+    name: "Mixed export contract",
+    artboard: { width: 900, minHeight: 900, background: "$paper" },
+    tokens: {
+      colors: { ink: "#15171A", paper: "#F7F8F4", panel: "#FFFFFF", rule: "#D7DBD2", quiet: "#667067", cobalt: "#3157F6", orange: "#FF5D2E" },
+      spacing: {},
+      radii: {},
+    },
+    children: [{
+      id: "root",
+      name: "Report",
+      type: "frame",
+      layout: { mode: "flex", direction: "column", gap: 20, padding: 28 },
+      style: { minHeight: 900, background: "$paper", color: "$ink" },
+      children: [
+        {
+          id: "header",
+          name: "Header",
+          type: "frame",
+          layout: { mode: "flex", direction: "row", gap: 20, padding: 0, align: "center", justify: "space-between" },
+          children: [
+            { id: "report-title", name: "Title", type: "text", content: "Measured growth", variant: "display" },
+            { id: "status", name: "Status", type: "metric", label: "Confidence", value: "92%", detail: "Validated", tone: "positive", style: { width: 210 } },
+          ],
+        },
+        {
+          id: "metrics",
+          name: "Metrics",
+          type: "frame",
+          layout: { mode: "grid", columns: 2, gap: 14, padding: 0 },
+          children: [
+            { id: "revenue", name: "Revenue", type: "metric", label: "Revenue", value: "$18K", detail: "+12%", tone: "positive" },
+            { id: "retention", name: "Retention", type: "metric", label: "Retention", value: "94%", detail: "+3 points", tone: "neutral" },
+          ],
+        },
+        {
+          id: "growth-graph",
+          name: "Growth graph",
+          type: "graph",
+          title: "Growth system",
+          graph: {
+            name: "Growth system",
+            direction: "LR",
+            nodes: [
+              { id: "visit", label: "Visit", kind: "process" },
+              { id: "activate", label: "Activate", kind: "decision" },
+              { id: "retain", label: "Retain", kind: "database" },
+            ],
+            edges: [
+              { id: "visit-activate", source: "visit", target: "activate", label: "qualify" },
+              { id: "activate-retain", source: "activate", target: "retain", label: "yes" },
+            ],
+          },
+          style: { minHeight: 330 },
+        },
+      ],
     }],
   };
 }
@@ -115,5 +179,66 @@ test("Engine v2 preview, SVG, and TSX exports preserve chart content and geometr
     expect(svgChart.bounds).toEqual(previewChart.bounds);
     expect(svgChart.primitiveCount).toBe(previewChart.primitiveCount);
     expect(svgChart.labels).toBe(previewChart.labels);
+  }
+});
+
+test("Engine v2 mixed documents preserve flow, graphs, PNG size, and print DOM", async ({ page, context }) => {
+  const document = mixedDocument();
+  await page.addInitScript((value) => localStorage.setItem("drawstack.engine-v2.document.draft", JSON.stringify(value)), document);
+  await page.goto("/app/engine-v2");
+  await expect(page.getByText("LIVE DOM", { exact: true })).toBeVisible();
+
+  const svgPage = await context.newPage();
+  await svgPage.setContent(serializeEngineV2Svg(document));
+  const tsxPage = await context.newPage();
+  await tsxPage.setContent(renderGeneratedTsx(serializeEngineV2ReactTsx(document)));
+  const printPage = await context.newPage();
+  await printPage.setContent(serializeEngineV2PrintHtml(document));
+
+  for (const surface of [page, svgPage, tsxPage, printPage]) {
+    const layouts = await readNodeLayouts(surface, ["header", "report-title", "status", "metrics", "revenue", "retention"]);
+    const byId = new Map(layouts.map((layout) => [layout.id, layout]));
+    expect(byId.get("report-title")?.text).toBe("Measured growth");
+    expect(byId.get("status")?.text).toContain("Confidence92%Validated");
+    expect(byId.get("metrics")?.display).toBe("grid");
+    expect(byId.get("revenue")?.y).toBe(byId.get("retention")?.y);
+    expect(byId.get("revenue")?.width).toBeCloseTo(byId.get("retention")!.width, 0);
+  }
+
+  const previewGraph = await readSvgGeometryForNode(page, "growth-graph");
+  const svgGraph = await readSvgGeometryForNode(svgPage, "growth-graph");
+  const tsxGraph = await readSvgGeometryForNode(tsxPage, "growth-graph");
+  expect(svgGraph.viewBox).toEqual(previewGraph.viewBox);
+  expect(svgGraph.labels).toContain("Visit");
+  expect(svgGraph.labels).toContain("Activate");
+  expect(svgGraph.labels).toContain("Retain");
+  expect(tsxGraph).toEqual(svgGraph);
+
+  const artboardBounds = await page.locator('[data-node-id="root"]').boundingBox();
+  expect(artboardBounds).not.toBeNull();
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export PNG" }).click();
+  const download = await downloadPromise;
+  const pngPath = await download.path();
+  expect(pngPath).not.toBeNull();
+  const png = await readPngDimensions(pngPath!);
+  expect(png.width).toBe(Math.round(artboardBounds!.width * 2));
+  expect(png.height).toBe(Math.round(artboardBounds!.height * 2));
+
+  const printContract = await printPage.evaluate(() => ({
+    bodyWidth: document.body.getBoundingClientRect().width,
+    pageRule: [...document.styleSheets].flatMap((sheet) => [...sheet.cssRules]).map((rule) => rule.cssText).find((text) => text.startsWith("@page")) ?? "",
+    colorAdjust: getComputedStyle(document.body).getPropertyValue("print-color-adjust"),
+  }));
+  expect(printContract.bodyWidth).toBe(900);
+  expect(printContract.pageRule).toContain("900px 900px");
+  expect(printContract.colorAdjust).toBe("exact");
+
+  for (const surface of [page, svgPage, tsxPage, printPage]) {
+    await surface.setViewportSize({ width: 390, height: 844 });
+    const mobile = new Map((await readNodeLayouts(surface, ["header", "report-title", "status", "metrics", "revenue", "retention"])).map((layout) => [layout.id, layout]));
+    expect(mobile.get("header")?.flexDirection).toBe("column");
+    expect(mobile.get("status")!.y).toBeGreaterThanOrEqual(mobile.get("report-title")!.y + mobile.get("report-title")!.height);
+    expect(mobile.get("retention")!.y).toBeGreaterThanOrEqual(mobile.get("revenue")!.y + mobile.get("revenue")!.height);
   }
 });
