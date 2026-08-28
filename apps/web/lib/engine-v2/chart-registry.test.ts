@@ -21,10 +21,11 @@ import {
 
 function dataFor(type: RegisteredChartType): DeterministicChartDatum[] {
   const contract = CHART_FAMILY_REGISTRY[type].dataContract;
+  if (contract === "hierarchy") return [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }];
   if (contract === "scatter") return [{ label: "A", x: 1, y: 2 }, { label: "B", x: 3, y: 5 }];
   if (contract === "heatmap") return [{ row: "North", column: "Q1", value: 3 }, { row: "South", column: "Q1", value: 5 }];
   if (contract === "candlestick") return [{ label: "Mon", open: 10, high: 14, low: 8, close: 12 }];
-  if (contract === "sankey") return [{ source: "Visits", target: "Signup", value: 10 }, { source: "Signup", target: "Paid", value: 4 }];
+  if (contract === "sankey") return type === "chord" ? [{ source: "A", target: "B", value: 10 }, { source: "B", target: "A", value: 4 }] : [{ source: "Visits", target: "Signup", value: 10 }, { source: "Signup", target: "Paid", value: 4 }];
   if (contract === "histogram") return [{ value: 1 }, { value: 2 }, { value: 4 }];
   if (contract === "box-plot") return [{ label: "North", min: 1, q1: 2, median: 3, q3: 4, max: 6 }];
   if (contract === "bubble") return [{ label: "A", x: 1, y: 2, size: 10 }, { label: "B", x: 3, y: 5, size: 20 }];

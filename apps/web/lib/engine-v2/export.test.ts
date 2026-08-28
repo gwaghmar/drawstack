@@ -103,7 +103,11 @@ describe("serializeEngineV2Svg", () => {
       assert.ok(chart && chart.type === "chart");
       if (!chart || chart.type !== "chart") return;
       chart.chartType = chartType;
-      chart.data = chartType === "scatter"
+      chart.data = ["sunburst", "icicle", "circle-pack"].includes(chartType)
+        ? [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }]
+        : chartType === "chord"
+          ? [{ source: "A", target: "B", value: 10 }, { source: "B", target: "A", value: 4 }]
+          : chartType === "scatter"
         ? [{ label: "A", x: 1, y: 2 }, { label: "B", x: 2, y: 4 }]
         : chartType === "bubble"
           ? [{ label: "A", x: 1, y: 2, size: 10 }, { label: "B", x: 2, y: 4, size: 25 }]

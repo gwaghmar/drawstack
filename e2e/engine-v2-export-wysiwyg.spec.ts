@@ -10,6 +10,8 @@ import {
 import { chartSvgFromGeneratedTsx, readChartGeometry, readNodeLayouts, readPngDimensions, readSvgGeometryForNode, renderGeneratedTsx, type SvgGeometry } from "./helpers/engine-v2-wysiwyg.ts";
 
 function dataFor(type: DeterministicChartType): DeterministicChartDatum[] {
+  if (["sunburst", "icicle", "circle-pack"].includes(type)) return [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }];
+  if (type === "chord") return [{ source: "A", target: "B", value: 10 }, { source: "B", target: "A", value: 4 }];
   if (type === "scatter") return [{ label: "Alpha", x: 1, y: 3 }, { label: "Beta", x: 4, y: 8 }];
   if (type === "bubble") return [{ label: "Alpha", x: 1, y: 3, size: 12 }, { label: "Beta", x: 4, y: 8, size: 24 }];
   if (type === "heatmap") return [{ row: "North", column: "Q1", value: 3 }, { row: "South", column: "Q1", value: 7 }];

@@ -65,6 +65,11 @@ export type GanttChartDatum = {
   series?: string;
 };
 
+export type HierarchyChartDatum = {
+  path: string;
+  value: number;
+};
+
 export type DeterministicChartDatum =
   | CartesianChartDatum
   | ScatterChartDatum
@@ -75,7 +80,8 @@ export type DeterministicChartDatum =
   | BoxPlotChartDatum
   | BubbleChartDatum
   | ComboChartDatum
-  | GanttChartDatum;
+  | GanttChartDatum
+  | HierarchyChartDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;
@@ -148,4 +154,8 @@ export function isComboDatum(datum: DeterministicChartDatum): datum is ComboChar
 
 export function isGanttDatum(datum: DeterministicChartDatum): datum is GanttChartDatum {
   return "label" in datum && "start" in datum && "end" in datum;
+}
+
+export function isHierarchyDatum(datum: DeterministicChartDatum): datum is HierarchyChartDatum {
+  return "path" in datum && "value" in datum && datum.value > 0;
 }

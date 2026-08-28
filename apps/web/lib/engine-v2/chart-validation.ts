@@ -9,6 +9,7 @@ import {
   isGanttDatum,
   isHeatmapDatum,
   isHistogramDatum,
+  isHierarchyDatum,
   isSankeyDatum,
   isScatterDatum,
   type DeterministicChartDatum,
@@ -25,6 +26,7 @@ const CONTRACT_LABELS = {
   bubble: "x, y, and positive size",
   combo: "label, value, and display",
   gantt: "label, ISO start, and ISO end",
+  hierarchy: "path and positive value",
 } as const;
 
 const CONTRACT_VALIDATORS = {
@@ -38,6 +40,7 @@ const CONTRACT_VALIDATORS = {
   bubble: (datum: DeterministicChartDatum) => isBubbleDatum(datum),
   combo: (datum: DeterministicChartDatum) => isComboDatum(datum),
   gantt: (datum: DeterministicChartDatum) => isGanttDatum(datum),
+  hierarchy: (datum: DeterministicChartDatum) => isHierarchyDatum(datum),
 } as const;
 
 function familyLabel(type: RegisteredChartType): string {

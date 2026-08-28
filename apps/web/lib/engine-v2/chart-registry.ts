@@ -8,7 +8,8 @@ export type ChartDataContract =
   | "box-plot"
   | "bubble"
   | "combo"
-  | "gantt";
+  | "gantt"
+  | "hierarchy";
 
 export const CHART_RENDERER_KEYS = [
   "cartesian",
@@ -29,6 +30,10 @@ export const CHART_RENDERER_KEYS = [
   "combo",
   "stacked-area",
   "gantt",
+  "sunburst",
+  "icicle",
+  "circle-pack",
+  "chord",
 ] as const;
 
 export type ChartRendererKey = typeof CHART_RENDERER_KEYS[number];
@@ -51,6 +56,10 @@ export type ChartFamilyDefinition = {
 };
 
 export const CHART_FAMILY_REGISTRY = {
+  sunburst: { dataContract: "hierarchy", previewRenderer: "sunburst", exportRenderer: "sunburst", promptPatterns: [/\bsunburst\s+(?:chart|diagram)?\b/], generationHint: "Sunburst data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Sunburst data must use path and positive value" },
+  icicle: { dataContract: "hierarchy", previewRenderer: "icicle", exportRenderer: "icicle", promptPatterns: [/\bicicle\s+(?:chart|diagram)?\b/], generationHint: "Icicle data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Icicle data must use path and positive value" },
+  "circle-pack": { dataContract: "hierarchy", previewRenderer: "circle-pack", exportRenderer: "circle-pack", promptPatterns: [/\bcircle[ -]pack(?:ing)?\s+(?:chart|diagram)?\b/], generationHint: "Circle-pack data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Circle-pack data must use path and positive value" },
+  chord: { dataContract: "sankey", previewRenderer: "chord", exportRenderer: "chord", promptPatterns: [/\bchord\s+(?:chart|diagram)?\b/], generationHint: "Chord data uses directed positive relationships [{source,target,value}].", enforceContract: true, contractError: "Chord data must use source, target, and positive value" },
   sankey: { dataContract: "sankey", previewRenderer: "sankey", exportRenderer: "sankey", promptPatterns: [/\bsankey\s+(?:chart|diagram|graph)\b/], generationHint: "Sankey data uses acyclic positive flows [{source,target,value}].", enforceContract: true, contractError: "Sankey data must use source, target, and positive value", constraints: { acyclic: true } },
   waterfall: { dataContract: "cartesian", previewRenderer: "waterfall", exportRenderer: "waterfall", promptPatterns: [/\bwaterfall\s+(?:chart|graph)\b/], generationHint: "Waterfall data uses ordered changes [{label,value}].", enforceContract: true, contractError: "Waterfall data must use label and value" },
   histogram: { dataContract: "histogram", previewRenderer: "histogram", exportRenderer: "histogram", promptPatterns: [/\bhistogram\b/], generationHint: "Histogram data uses raw samples [{value}].", enforceContract: true, contractError: "Histogram data must use raw numeric values" },

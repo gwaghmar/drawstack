@@ -38,6 +38,7 @@ import type {
 } from "./document.ts";
 import { layoutGraph } from "./graph/layout.ts";
 import type { LayoutGraphNode } from "./graph/types.ts";
+import { annularSectorPath, chordGeometry, layoutHierarchy } from "./hierarchy-layout.ts";
 
 export type EngineV2ExportPayload = {
   filename: string;
@@ -163,6 +164,30 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
   const muted = escapeMarkup(color(tokens, "quiet"));
   const surface = color(tokens, "panel");
   const grid = escapeMarkup(color(tokens, "rule"));
+  if (renderer === "sunburst" || renderer === "icicle" || renderer === "circle-pack") {
+    const layout = layoutHierarchy(node.data);
+    if (!layout.segments.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    if (renderer === "sunburst") {
+      const ring = 116 / Math.max(layout.maxDepth, 1);
+      const marks = layout.segments.map((segment, index) => `<path d="${annularSectorPath(320, 160, Math.max(2, (segment.depth - 1) * ring), segment.depth * ring, segment.start, segment.end)}" fill="${SERIES_COLORS[(segment.depth + index) % SERIES_COLORS.length]}" fill-opacity="${number(0.72 + segment.depth * 0.05)}" stroke="${surface}" stroke-width="2"><title>${escapeMarkup(`${segment.id}: ${formatChartValue(segment.value, node.valuePrefix, node.valueSuffix)}`)}</title></path>`).join("");
+      return `${open}${marks}</svg>`;
+    }
+    if (renderer === "icicle") {
+      const row = 276 / Math.max(layout.maxDepth, 1);
+      const marks = layout.segments.map((segment, index) => { const x = 24 + segment.start * 592; const width = (segment.end - segment.start) * 592; const y = 24 + (segment.depth - 1) * row; const label = width > 52 && row > 22 ? `<text x="${number(x + 8)}" y="${number(y + 18)}" font-size="10" font-weight="650" fill="${surface}">${escapeMarkup(segment.label)}</text>` : ""; return `<rect x="${number(x + 1)}" y="${number(y + 1)}" width="${number(Math.max(width - 2, 0))}" height="${number(Math.max(row - 2, 0))}" rx="3" fill="${SERIES_COLORS[(segment.depth + index) % SERIES_COLORS.length]}" fill-opacity=".78"><title>${escapeMarkup(`${segment.id}: ${formatChartValue(segment.value, node.valuePrefix, node.valueSuffix)}`)}</title></rect>${label}`; }).join("");
+      return `${open}${marks}</svg>`;
+    }
+    const leaves = layout.segments.filter((segment) => !layout.segments.some((candidate) => candidate.id.startsWith(`${segment.id}/`)));
+    const marks = leaves.map((segment, index) => { const cellWidth = (segment.end - segment.start) * 560; const radius = Math.max(5, Math.min(cellWidth * 0.46, 112)); const cx = 40 + (segment.start + segment.end) * 280; const label = radius > 22 ? `<text x="${number(cx)}" y="169" text-anchor="middle" font-size="10" font-weight="650" fill="${surface}">${escapeMarkup(segment.label.slice(0, Math.max(3, Math.floor(radius / 4))))}</text>` : ""; return `<circle cx="${number(cx)}" cy="165" r="${number(radius)}" fill="${SERIES_COLORS[index % SERIES_COLORS.length]}" fill-opacity=".72" stroke="${surface}" stroke-width="2"><title>${escapeMarkup(`${segment.id}: ${formatChartValue(segment.value, node.valuePrefix, node.valueSuffix)}`)}</title></circle>${label}`; }).join("");
+    return `${open}${marks}</svg>`;
+  }
+  if (renderer === "chord") {
+    const layout = chordGeometry(node.data, 320, 160, 112);
+    if (!layout.links.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const links = layout.links.map((link, index) => `<path d="M${number(link.sourcePoint.x)},${number(link.sourcePoint.y)} Q320,160 ${number(link.targetPoint.x)},${number(link.targetPoint.y)}" fill="none" stroke="${SERIES_COLORS[index % SERIES_COLORS.length]}" stroke-width="${number(Math.max(2, Math.min(18, Math.sqrt(link.value) * 2)))}" stroke-opacity=".35"><title>${escapeMarkup(`${link.source} to ${link.target}: ${formatChartValue(link.value, node.valuePrefix, node.valueSuffix)}`)}</title></path>`).join("");
+    const nodes = layout.nodes.map((layoutNode, index) => { const middle = (layoutNode.start + layoutNode.end) / 2; const label = polarPoint(320, 160, 137, middle); return `<path d="${annularSectorPath(320, 160, 116, 130, (layoutNode.start + Math.PI / 2) / (Math.PI * 2), (layoutNode.end + Math.PI / 2) / (Math.PI * 2))}" fill="${SERIES_COLORS[index % SERIES_COLORS.length]}"/><text x="${number(label.x)}" y="${number(label.y + 4)}" text-anchor="middle" font-size="10" fill="${foreground}">${escapeMarkup(layoutNode.name)}</text>`; }).join("");
+    return `${open}${links}${nodes}</svg>`;
+  }
   if (renderer === "combo") {
     const data = finiteComboData(node.data);
     if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
