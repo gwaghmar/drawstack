@@ -633,8 +633,8 @@ function validateNode(
       if (context.issues.some((issue) => issue.path === `${path}.data`)) return null;
     }
     if (chartType === "stacked-area") {
-      if (!chartData.every(isCartesianDatum) || new Set(chartData.map((datum) => datum.series?.trim() || "Value")).size < 2) {
-        addIssue(context, `${path}.data`, "Stacked area data must contain at least two label/value series");
+      if (!chartData.every(isCartesianDatum) || new Set(chartData.map((datum) => datum.series?.trim() || "Value")).size < 2 || new Set(chartData.map((datum) => datum.label)).size < 2) {
+        addIssue(context, `${path}.data`, "Stacked area data must contain at least two labels and two series");
         return null;
       }
     }

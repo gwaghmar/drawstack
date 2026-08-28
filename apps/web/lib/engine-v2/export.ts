@@ -202,7 +202,8 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
       const mark = SERIES_COLORS[index % SERIES_COLORS.length];
       return `<path d="${bandAreaPath(upper, lower)}" fill="${mark}" fill-opacity=".72" stroke="${mark}" stroke-width="1.5"/>`;
     }).join("");
-    return `${open}${chartGrid(stack.domain, node, tokens)}${categoryLabels(stack.labels, tokens)}${marks}</svg>`;
+    const labels = stack.labels.map((label, index) => `<text x="${number(CHART.left + index * band)}" y="${CHART.bottom + 20}" text-anchor="${index === 0 ? "start" : index === stack.labels.length - 1 ? "end" : "middle"}" font-size="10" fill="${muted}">${escapeMarkup(label.length > 9 ? `${label.slice(0, 8)}…` : label)}</text>`).join("");
+    return `${open}${chartGrid(stack.domain, node, tokens)}${labels}${marks}</svg>`;
   }
   if (node.chartType === "gantt") {
     const data = finiteGanttData(node.data);
@@ -216,7 +217,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     const rowHeight = (CHART.bottom - CHART.top) / data.length;
     const barHeight = Math.min(26, rowHeight * .58);
     const series = orderedUnique(data.map((datum) => datum.series?.trim() || "Task"));
-    const ticks = domain.ticks.map((tick) => { const x = scaleLinear(tick, domain, CHART.left, CHART.right); const label = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(tick)); return `<line x1="${number(x)}" y1="${CHART.top}" x2="${number(x)}" y2="${CHART.bottom}" stroke="${grid}"/><text x="${number(x)}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(label)}</text>`; }).join("");
+    const ticks = domain.ticks.map((tick) => { const x = scaleLinear(tick, domain, CHART.left, CHART.right); const label = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(tick)); const anchor = tick === minDate ? "start" : tick === maxDate ? "end" : "middle"; return `<line x1="${number(x)}" y1="${CHART.top}" x2="${number(x)}" y2="${CHART.bottom}" stroke="${grid}"/><text x="${number(x)}" y="${CHART.bottom + 20}" text-anchor="${anchor}" font-size="10" fill="${muted}">${escapeMarkup(label)}</text>`; }).join("");
     const marks = data.map((datum, index) => {
       const y = CHART.top + rowHeight * (index + .5);
       const startX = scaleLinear(Date.parse(datum.start), domain, CHART.left, CHART.right);
@@ -234,9 +235,12 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
     const band = (CHART.right - CHART.left) / histogram.bins.length;
     const marks = histogram.bins.map((bin, index) => {
       const y = scaleLinear(bin.count, countDomain, CHART.bottom, CHART.top);
-      return `<rect x="${number(CHART.left + index * band + 0.5)}" y="${number(y)}" width="${number(Math.max(band - 1, 1))}" height="${number(Math.max(CHART.bottom - y, bin.count ? 1 : 0))}" fill="${SERIES_COLORS[0]}" fill-opacity=".86"><title>${escapeMarkup(`${formatChartValue(bin.start)} to ${formatChartValue(bin.end)}: ${bin.count}`)}</title></rect>`;
+      const labelEvery = Math.max(Math.ceil(histogram.bins.length / 6), 1);
+      const label = index % labelEvery === 0 ? `<text x="${number(CHART.left + index * band)}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(bin.start, node.valuePrefix, node.valueSuffix))}</text>` : "";
+      return `<rect x="${number(CHART.left + index * band + 0.5)}" y="${number(y)}" width="${number(Math.max(band - 1, 1))}" height="${number(Math.max(CHART.bottom - y, bin.count ? 1 : 0))}" fill="${SERIES_COLORS[0]}" fill-opacity=".86"><title>${escapeMarkup(`${formatChartValue(bin.start)} to ${formatChartValue(bin.end)}: ${bin.count}`)}</title></rect>${label}`;
     }).join("");
-    return `${open}${chartGrid(countDomain, { ...node, valuePrefix: undefined, valueSuffix: undefined }, tokens)}${marks}</svg>`;
+    const finalLabel = `<text x="${CHART.right}" y="${CHART.bottom + 20}" text-anchor="end" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(histogram.bins.at(-1)!.end, node.valuePrefix, node.valueSuffix))}</text>`;
+    return `${open}${chartGrid(countDomain, { ...node, valuePrefix: undefined, valueSuffix: undefined }, tokens)}${marks}${finalLabel}</svg>`;
   }
   if (node.chartType === "box-plot") {
     const data = finiteBoxPlotData(node.data);
@@ -264,7 +268,8 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
       const seriesName = datum.series?.trim() || "Value";
       return `<circle cx="${number(scaleLinear(datum.x, xDomain, CHART.left, CHART.right))}" cy="${number(scaleLinear(datum.y, yDomain, CHART.bottom, CHART.top))}" r="${number(scaleLinear(Math.sqrt(datum.size), sizeDomain, 5, 28))}" fill="${SERIES_COLORS[series.indexOf(seriesName) % SERIES_COLORS.length]}" fill-opacity=".58" stroke="${surface}" stroke-width="1.5"><title>${escapeMarkup(`${datum.label ? `${datum.label}: ` : ""}${datum.x}, ${datum.y}, size ${datum.size}`)}</title></circle>`;
     }).join("");
-    return `${open}${chartGrid(yDomain, node, tokens)}${marks}</svg>`;
+    const xTicks = xDomain.ticks.map((tick) => `<text x="${number(scaleLinear(tick, xDomain, CHART.left, CHART.right))}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(tick))}</text>`).join("");
+    return `${open}${chartGrid(yDomain, node, tokens)}${xTicks}${marks}</svg>`;
   }
   if (node.chartType === "sankey") {
     const layout = layoutSankey(finiteSankeyData(node.data), CHART.right - CHART.left, CHART.bottom - CHART.top);

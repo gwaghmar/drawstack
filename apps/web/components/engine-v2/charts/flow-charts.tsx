@@ -14,7 +14,7 @@ type FlowChartProps = {
 };
 
 const VIEWBOX = { width: 640, height: 330 };
-const PLOT = { left: 62, top: 28, right: 606, bottom: 270 };
+const PLOT = { left: 62, top: 24, right: 616, bottom: 270 };
 
 function EmptyFlowChart({ spec, palette, message }: FlowChartProps & { message?: string }) {
   return <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-dashed px-6 text-center text-sm" style={{ borderColor: palette.grid, color: palette.muted }} role="img" aria-label={`${spec.title}. No chart data.`}>{message ?? spec.emptyMessage ?? "Add data to render this chart."}</div>;

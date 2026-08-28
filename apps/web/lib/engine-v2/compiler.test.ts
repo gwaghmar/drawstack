@@ -213,7 +213,12 @@ describe("validateEngineV2Document", () => {
     assert.equal(validateEngineV2Document(document).ok, false);
 
     chart.chartType = "stacked-area";
-    chart.data = [{ label: "Jan", value: 10, series: "Core" }, { label: "Jan", value: 2, series: "Expansion" }];
+    chart.data = [
+      { label: "Jan", value: 10, series: "Core" },
+      { label: "Jan", value: 2, series: "Expansion" },
+      { label: "Feb", value: 12, series: "Core" },
+      { label: "Feb", value: 3, series: "Expansion" },
+    ];
     assert.equal(validateEngineV2Document(document).ok, true);
 
     chart.chartType = "gantt";

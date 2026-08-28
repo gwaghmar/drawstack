@@ -19,7 +19,7 @@ type AdvancedChartProps = {
 
 const WIDTH = 640;
 const HEIGHT = 330;
-const PLOT = { left: 64, top: 24, right: 616, bottom: 276 };
+const PLOT = { left: 62, top: 24, right: 616, bottom: 270 };
 
 function EmptyChart({ spec, palette }: AdvancedChartProps) {
   return (

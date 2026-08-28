@@ -14,7 +14,7 @@ import type { DeterministicChartPalette, DeterministicChartSpec } from "@/lib/en
 
 type SeriesChartProps = { spec: DeterministicChartSpec; palette: DeterministicChartPalette };
 const VIEWBOX = { width: 640, height: 330 };
-const PLOT = { left: 62, top: 24, right: 606, bottom: 270 };
+const PLOT = { left: 62, top: 24, right: 616, bottom: 270 };
 
 function EmptySeriesChart({ spec, palette }: SeriesChartProps) {
   return <div className="flex min-h-[240px] items-center justify-center rounded-lg border border-dashed px-6 text-center text-sm" style={{ borderColor: palette.grid, color: palette.muted }} role="img" aria-label={`${spec.title}. No chart data.`}>{spec.emptyMessage ?? "Add valid data to render this chart."}</div>;
