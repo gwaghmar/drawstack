@@ -24,11 +24,12 @@ function dataFor(type: RegisteredChartType): DeterministicChartDatum[] {
   if (contract === "symbol-map") return [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }];
   if (contract === "route-map") return [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503, value: 12 }];
   if (contract === "hierarchy") return [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }];
+  if (contract === "error-bar") return [{ label: "A", value: 10, errorLow: 8, errorHigh: 13 }];
   if (contract === "scatter") return [{ label: "A", x: 1, y: 2 }, { label: "B", x: 3, y: 5 }];
   if (contract === "heatmap") return [{ row: "North", column: "Q1", value: 3 }, { row: "South", column: "Q1", value: 5 }];
   if (contract === "candlestick") return [{ label: "Mon", open: 10, high: 14, low: 8, close: 12 }];
   if (contract === "sankey") return type === "chord" ? [{ source: "A", target: "B", value: 10 }, { source: "B", target: "A", value: 4 }] : [{ source: "Visits", target: "Signup", value: 10 }, { source: "Signup", target: "Paid", value: 4 }];
-  if (contract === "histogram") return [{ value: 1 }, { value: 2 }, { value: 4 }];
+  if (contract === "histogram") return [{ value: 1, series: "A" }, { value: 2, series: "A" }, { value: 4, series: "A" }, { value: 3, series: "B" }, { value: 5, series: "B" }];
   if (contract === "box-plot") return [{ label: "North", min: 1, q1: 2, median: 3, q3: 4, max: 6 }];
   if (contract === "bubble") return [{ label: "A", x: 1, y: 2, size: 10 }, { label: "B", x: 3, y: 5, size: 20 }];
   if (contract === "combo") return [{ label: "Q1", value: 10, series: "Revenue", display: "bar" }, { label: "Q1", value: 20, series: "Margin", display: "line", axis: "right" }];

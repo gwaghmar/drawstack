@@ -40,6 +40,7 @@ import type {
 import { layoutGraph } from "./graph/layout.ts";
 import type { LayoutGraphNode } from "./graph/types.ts";
 import { annularSectorPath, chordGeometry, layoutHierarchy } from "./hierarchy-layout.ts";
+import { densitySeries, finiteErrorBarData, streamLayers } from "./distribution-layout.ts";
 
 export type EngineV2ExportPayload = {
   filename: string;
@@ -165,6 +166,35 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
   const muted = escapeMarkup(color(tokens, "quiet"));
   const surface = color(tokens, "panel");
   const grid = escapeMarkup(color(tokens, "rule"));
+  if (renderer === "streamgraph") {
+    const layout = streamLayers(node.data);
+    if (layout.labels.length < 2 || layout.series.length < 2) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const step = (CHART.right - CHART.left) / Math.max(layout.labels.length - 1, 1);
+    const layers = layout.layers.map((layer, index) => { const upper = layer.points.map((point, pointIndex) => ({ x: CHART.left + pointIndex * step, y: scaleLinear(point.end, layout.domain, CHART.bottom, CHART.top) })); const lower = layer.points.map((point, pointIndex) => ({ x: CHART.left + pointIndex * step, y: scaleLinear(point.start, layout.domain, CHART.bottom, CHART.top) })); return `<path d="${bandAreaPath(upper, lower)}" fill="${SERIES_COLORS[index % SERIES_COLORS.length]}" fill-opacity=".78" stroke="${surface}" stroke-width="1"><title>${escapeMarkup(layer.name)}</title></path>`; }).join("");
+    const labels = layout.labels.map((label, index) => `<text x="${number(CHART.left + index * step)}" y="${CHART.bottom + 20}" text-anchor="${index === 0 ? "start" : index === layout.labels.length - 1 ? "end" : "middle"}" font-size="10" fill="${muted}">${escapeMarkup(label)}</text>`).join("");
+    return `${open}${layers}${labels}</svg>`;
+  }
+  if (renderer === "error-bar") {
+    const data = finiteErrorBarData(node.data);
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const labels = orderedUnique(data.map((datum) => datum.label));
+    const domain = numericDomain(data.flatMap((datum) => [datum.errorLow, datum.errorHigh]));
+    const band = (CHART.right - CHART.left) / labels.length;
+    const marks = data.map((datum, index) => { const x = CHART.left + band * (labels.indexOf(datum.label) + .5); const low = scaleLinear(datum.errorLow, domain, CHART.bottom, CHART.top); const high = scaleLinear(datum.errorHigh, domain, CHART.bottom, CHART.top); const value = scaleLinear(datum.value, domain, CHART.bottom, CHART.top); const mark = SERIES_COLORS[index % SERIES_COLORS.length]; return `<line x1="${number(x)}" y1="${number(high)}" x2="${number(x)}" y2="${number(low)}" stroke="${mark}" stroke-width="2"/><line x1="${number(x - 8)}" y1="${number(high)}" x2="${number(x + 8)}" y2="${number(high)}" stroke="${mark}" stroke-width="2"/><line x1="${number(x - 8)}" y1="${number(low)}" x2="${number(x + 8)}" y2="${number(low)}" stroke="${mark}" stroke-width="2"/><circle cx="${number(x)}" cy="${number(value)}" r="5" fill="${surface}" stroke="${mark}" stroke-width="3"><title>${escapeMarkup(`${datum.label}: ${formatChartValue(datum.value, node.valuePrefix, node.valueSuffix)} [${formatChartValue(datum.errorLow)}, ${formatChartValue(datum.errorHigh)}]`)}</title></circle>`; }).join("");
+    return `${open}${categoryLabels(labels, tokens)}${marks}</svg>`;
+  }
+  if (renderer === "density" || renderer === "violin") {
+    const density = densitySeries(node.data);
+    if (!density.series.length || density.maxDensity <= 0) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    if (renderer === "density") {
+      const densityDomain = { min: 0, max: density.maxDensity, ticks: [] };
+      const marks = density.series.map((series, index) => { const points = series.points.map((point) => ({ x: scaleLinear(point.value, density.valueDomain, CHART.left, CHART.right), y: scaleLinear(point.density, densityDomain, CHART.bottom, CHART.top) })); const mark = SERIES_COLORS[index % SERIES_COLORS.length]; return `<path d="${linePath(points)} L${CHART.right},${CHART.bottom} L${CHART.left},${CHART.bottom} Z" fill="${mark}" fill-opacity=".14"/><path d="${linePath(points)}" fill="none" stroke="${mark}" stroke-width="3"><title>${escapeMarkup(series.name)}</title></path>`; }).join("");
+      return `${open}${marks}</svg>`;
+    }
+    const band = (CHART.right - CHART.left) / density.series.length;
+    const marks = density.series.map((series, index) => { const cx = CHART.left + band * (index + .5); const half = band * .38; const right = series.points.map((point) => ({ x: cx + point.density / density.maxDensity * half, y: scaleLinear(point.value, density.valueDomain, CHART.bottom, CHART.top) })); const left = [...series.points].reverse().map((point) => ({ x: cx - point.density / density.maxDensity * half, y: scaleLinear(point.value, density.valueDomain, CHART.bottom, CHART.top) })); const path = `${linePath(right)} ${left.map((point) => `L${number(point.x)},${number(point.y)}`).join(" ")} Z`; const mark = SERIES_COLORS[index % SERIES_COLORS.length]; return `<path d="${path}" fill="${mark}" fill-opacity=".36" stroke="${mark}" stroke-width="2"><title>${escapeMarkup(series.name)}</title></path><text x="${number(cx)}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(series.name)}</text>`; }).join("");
+    return `${open}${marks}</svg>`;
+  }
   if (renderer === "sunburst" || renderer === "icicle" || renderer === "circle-pack") {
     const layout = layoutHierarchy(node.data);
     if (!layout.segments.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;

@@ -10,6 +10,8 @@ import {
 import { chartSvgFromGeneratedTsx, readChartGeometry, readNodeLayouts, readPngDimensions, readSvgGeometryForNode, renderGeneratedTsx, type SvgGeometry } from "./helpers/engine-v2-wysiwyg.ts";
 
 function dataFor(type: DeterministicChartType): DeterministicChartDatum[] {
+  if (["density", "violin"].includes(type)) return [{ value: 1, series: "A" }, { value: 2, series: "A" }, { value: 4, series: "A" }, { value: 3, series: "B" }, { value: 5, series: "B" }];
+  if (type === "error-bar") return [{ label: "A", value: 10, errorLow: 8, errorHigh: 13 }];
   if (type === "symbol-map") return [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }, { label: "Tokyo", latitude: 35.6762, longitude: 139.6503, value: 14 }];
   if (type === "route-map") return [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503, value: 12 }];
   if (["sunburst", "icicle", "circle-pack"].includes(type)) return [{ path: "Company/Product/API", value: 8 }, { path: "Company/Product/Web", value: 5 }, { path: "Company/Services/Support", value: 3 }];

@@ -37,6 +37,12 @@ export type SankeyChartDatum = {
 
 export type HistogramChartDatum = {
   value: number;
+  series?: string;
+};
+
+export type ErrorBarChartDatum = CartesianChartDatum & {
+  errorLow: number;
+  errorHigh: number;
 };
 
 export type BoxPlotChartDatum = {
@@ -101,7 +107,8 @@ export type DeterministicChartDatum =
   | GanttChartDatum
   | HierarchyChartDatum
   | SymbolMapDatum
-  | RouteMapDatum;
+  | RouteMapDatum
+  | ErrorBarChartDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;
@@ -178,4 +185,8 @@ export function isGanttDatum(datum: DeterministicChartDatum): datum is GanttChar
 
 export function isHierarchyDatum(datum: DeterministicChartDatum): datum is HierarchyChartDatum {
   return "path" in datum && "value" in datum && datum.value > 0;
+}
+
+export function isErrorBarDatum(datum: DeterministicChartDatum): datum is ErrorBarChartDatum {
+  return "label" in datum && "value" in datum && "errorLow" in datum && "errorHigh" in datum && typeof datum.errorLow === "number" && typeof datum.errorHigh === "number" && datum.errorLow <= datum.value && datum.value <= datum.errorHigh;
 }

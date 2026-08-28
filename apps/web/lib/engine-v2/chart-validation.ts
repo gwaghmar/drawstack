@@ -11,6 +11,7 @@ import {
   isHeatmapDatum,
   isHistogramDatum,
   isHierarchyDatum,
+  isErrorBarDatum,
   isSankeyDatum,
   isScatterDatum,
   type DeterministicChartDatum,
@@ -30,6 +31,7 @@ const CONTRACT_LABELS = {
   hierarchy: "path and positive value",
   "symbol-map": "label, valid latitude, and valid longitude",
   "route-map": "label and valid source and target coordinates",
+  "error-bar": "label, value, errorLow, and errorHigh",
 } as const;
 
 const CONTRACT_VALIDATORS = {
@@ -46,6 +48,7 @@ const CONTRACT_VALIDATORS = {
   hierarchy: (datum: DeterministicChartDatum) => isHierarchyDatum(datum),
   "symbol-map": (datum: DeterministicChartDatum) => isSymbolMapDatum(datum),
   "route-map": (datum: DeterministicChartDatum) => isRouteMapDatum(datum),
+  "error-bar": (datum: DeterministicChartDatum) => isErrorBarDatum(datum),
 } as const;
 
 function familyLabel(type: RegisteredChartType): string {
@@ -73,5 +76,6 @@ export function validateChartFamilyData(type: RegisteredChartType, data: Determi
   }
   if (definition.constraints?.minLabels && data.every(isCartesianDatum) && new Set(data.map((datum) => datum.label)).size < definition.constraints.minLabels) issues.push(definition.constraintError ?? `${type} data needs at least ${definition.constraints.minLabels} labels`);
   if (definition.constraints?.minSeries && data.every(isCartesianDatum) && new Set(data.map((datum) => datum.series?.trim() || "Value")).size < definition.constraints.minSeries) issues.push(definition.constraintError ?? `${type} data needs at least ${definition.constraints.minSeries} series`);
+  if (definition.constraints?.nonnegative && data.every(isCartesianDatum) && data.some((datum) => datum.value < 0)) issues.push(definition.constraintError ?? `${type} data must use nonnegative values`);
   return [...new Set(issues)];
 }

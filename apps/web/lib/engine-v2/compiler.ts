@@ -49,7 +49,7 @@ const STYLE_KEYS = new Set([
   "alignSelf",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
-const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max", "display", "axis", "start", "end", "path", "latitude", "longitude", "sourceLatitude", "sourceLongitude", "targetLatitude", "targetLongitude"]);
+const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max", "display", "axis", "start", "end", "path", "latitude", "longitude", "sourceLatitude", "sourceLongitude", "targetLatitude", "targetLongitude", "errorLow", "errorHigh"]);
 const GRAPH_DOCUMENT_KEYS = new Set(["name", "direction", "nodes", "edges"]);
 const GRAPH_NODE_KEYS = new Set(["id", "label", "kind", "subtitle", "fields", "group", "width", "height", "tone"]);
 const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sourceLabel", "targetLabel"]);
@@ -409,6 +409,15 @@ function validateDatum(
     const number = readNumber(value.value, context, `${path}.value`, 0.000001, 1_000_000_000_000);
     return hierarchyPath !== null && number !== null ? { path: hierarchyPath, value: number } : null;
   }
+  if (value.errorLow !== undefined || value.errorHigh !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
+    const errorLow = readNumber(value.errorLow, context, `${path}.errorLow`, -1_000_000_000_000, 1_000_000_000_000);
+    const errorHigh = readNumber(value.errorHigh, context, `${path}.errorHigh`, -1_000_000_000_000, 1_000_000_000_000);
+    const ordered = number !== null && errorLow !== null && errorHigh !== null && errorLow <= number && number <= errorHigh;
+    if (!ordered) addIssue(context, path, "Error bar bounds must satisfy errorLow <= value <= errorHigh");
+    return label !== null && ordered ? { label, value: number!, errorLow: errorLow!, errorHigh: errorHigh!, series } : null;
+  }
   if (value.source !== undefined || value.target !== undefined) {
     const source = readString(value.source, context, `${path}.source`, 1, 80);
     const target = readString(value.target, context, `${path}.target`, 1, 80);
@@ -462,7 +471,7 @@ function validateDatum(
   }
   if (value.label === undefined && value.value !== undefined) {
     const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
-    return number !== null ? { value: number } : null;
+    return number !== null ? { value: number, series } : null;
   }
   if (value.display !== undefined || value.axis !== undefined) {
     const label = readString(value.label, context, `${path}.label`, 1, 80);

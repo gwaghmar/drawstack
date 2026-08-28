@@ -11,7 +11,8 @@ export type ChartDataContract =
   | "gantt"
   | "hierarchy"
   | "symbol-map"
-  | "route-map";
+  | "route-map"
+  | "error-bar";
 
 export const CHART_RENDERER_KEYS = [
   "cartesian",
@@ -37,6 +38,10 @@ export const CHART_RENDERER_KEYS = [
   "circle-pack",
   "chord",
   "geographic",
+  "streamgraph",
+  "error-bar",
+  "density",
+  "violin",
 ] as const;
 
 export type ChartRendererKey = typeof CHART_RENDERER_KEYS[number];
@@ -55,10 +60,15 @@ export type ChartFamilyDefinition = {
     mixedDisplays?: true;
     minLabels?: number;
     minSeries?: number;
+    nonnegative?: true;
   };
 };
 
 export const CHART_FAMILY_REGISTRY = {
+  streamgraph: { dataContract: "cartesian", previewRenderer: "streamgraph", exportRenderer: "streamgraph", promptPatterns: [/\bstream\s*graph\b/], generationHint: "Streamgraph data uses nonnegative series values [{label,value,series}] across at least two labels and series.", enforceContract: true, contractError: "Streamgraph data must use label, nonnegative value, and series", constraintError: "Streamgraph data must contain at least two labels and two series with nonnegative values", constraints: { minLabels: 2, minSeries: 2, nonnegative: true } },
+  "error-bar": { dataContract: "error-bar", previewRenderer: "error-bar", exportRenderer: "error-bar", promptPatterns: [/\berror[ -]bar\s+(?:chart|plot)?\b/], generationHint: "Error-bar data uses explicit bounds [{label,value,errorLow,errorHigh,series?}] where errorLow <= value <= errorHigh.", enforceContract: true, contractError: "Error bar data must use label, value, errorLow, and errorHigh with ordered bounds" },
+  density: { dataContract: "histogram", previewRenderer: "density", exportRenderer: "density", promptPatterns: [/\bdensity\s+(?:chart|plot|curve)\b|\bkernel\s+density\b/], generationHint: "Density data uses raw samples [{value,series?}].", enforceContract: true, contractError: "Density data must use raw numeric values" },
+  violin: { dataContract: "histogram", previewRenderer: "violin", exportRenderer: "violin", promptPatterns: [/\bviolin\s+(?:chart|plot)\b/], generationHint: "Violin data uses raw samples [{value,series?}].", enforceContract: true, contractError: "Violin data must use raw numeric values" },
   "symbol-map": { dataContract: "symbol-map", previewRenderer: "geographic", exportRenderer: "geographic", promptPatterns: [/\b(?:symbol|point|location)\s+map\b/], generationHint: "Symbol-map data uses real coordinates [{label,latitude,longitude,value?,series?}]. It renders a coordinate grid without geographic boundaries.", enforceContract: true, contractError: "Symbol map data must use label, latitude from -90 to 90, and longitude from -180 to 180" },
   "route-map": { dataContract: "route-map", previewRenderer: "geographic", exportRenderer: "geographic", promptPatterns: [/\b(?:route|flight|shipping|network)\s+map\b/], generationHint: "Route-map data uses real coordinates [{label,sourceLatitude,sourceLongitude,targetLatitude,targetLongitude,value?,series?}]. It renders a coordinate grid without geographic boundaries.", enforceContract: true, contractError: "Route map data must use label and valid source and target coordinates" },
   sunburst: { dataContract: "hierarchy", previewRenderer: "sunburst", exportRenderer: "sunburst", promptPatterns: [/\bsunburst\s+(?:chart|diagram)?\b/], generationHint: "Sunburst data uses positive leaf paths [{path:'Root/Branch/Leaf',value}].", enforceContract: true, contractError: "Sunburst data must use path and positive value" },

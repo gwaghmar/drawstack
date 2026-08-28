@@ -103,7 +103,11 @@ describe("serializeEngineV2Svg", () => {
       assert.ok(chart && chart.type === "chart");
       if (!chart || chart.type !== "chart") return;
       chart.chartType = chartType;
-      chart.data = chartType === "symbol-map"
+      chart.data = ["density", "violin"].includes(chartType)
+        ? [{ value: 1, series: "A" }, { value: 2, series: "A" }, { value: 4, series: "A" }, { value: 3, series: "B" }, { value: 5, series: "B" }]
+        : chartType === "error-bar"
+          ? [{ label: "A", value: 10, errorLow: 8, errorHigh: 13 }]
+        : chartType === "symbol-map"
         ? [{ label: "Chicago", latitude: 41.8781, longitude: -87.6298, value: 8 }]
         : chartType === "route-map"
           ? [{ label: "Chicago to Tokyo", sourceLatitude: 41.8781, sourceLongitude: -87.6298, targetLatitude: 35.6762, targetLongitude: 139.6503, value: 12 }]
