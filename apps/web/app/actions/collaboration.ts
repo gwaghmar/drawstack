@@ -8,9 +8,45 @@ import {
   collaboratorPresence,
   projects,
   users,
-  workspaces,
 } from "@/lib/db/schema";
+import {
+  canEditProject,
+  canManageProject,
+  canReadProject,
+  resolveProjectAccess,
+  type ProjectAccess,
+} from "@/lib/project-access";
+import { ensureUserAndWorkspace } from "@/lib/user-sync";
 import { eq, and } from "drizzle-orm";
+
+async function getProjectAccess(projectId: string): Promise<{
+  access: ProjectAccess;
+  userId: string;
+} | null> {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) return null;
+
+  const { user, workspace } = await ensureUserAndWorkspace(email);
+  const project = await db.query.projects.findFirst({
+    where: eq(projects.id, projectId),
+  });
+  if (!project) return null;
+
+  const collaborator = project.workspaceId === workspace.id
+    ? null
+    : await db.query.projectCollaborators.findFirst({
+      where: and(
+        eq(projectCollaborators.projectId, projectId),
+        eq(projectCollaborators.userId, user.id),
+      ),
+    });
+
+  return {
+    access: resolveProjectAccess(project.workspaceId, workspace.id, collaborator?.role),
+    userId: user.id,
+  };
+}
 
 export async function addCollaborator(
   projectId: string,
@@ -18,26 +54,15 @@ export async function addCollaborator(
   role: "viewer" | "editor" | "admin" = "editor"
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await auth();
-    if (!session?.user?.email) return { success: false, error: "Unauthorized" };
-
-    const project = await db.query.projects.findFirst({
-      where: eq(projects.id, projectId),
-    });
-    if (!project) return { success: false, error: "Project not found" };
+    const context = await getProjectAccess(projectId);
+    if (!context || !canManageProject(context.access)) {
+      return { success: false, error: "Only workspace owner can add collaborators" };
+    }
 
     const user = await db.query.users.findFirst({
       where: eq(users.email, email),
     });
     if (!user) return { success: false, error: "User not found" };
-
-    const workspace = await db.query.workspaces.findFirst({
-      where: eq(workspaces.id, project.workspaceId),
-    });
-    const isOwner = workspace?.ownerId === session.user.id;
-
-    if (!isOwner)
-      return { success: false, error: "Only workspace owner can add collaborators" };
 
     await db.insert(projectCollaborators).values({
       projectId,
@@ -57,13 +82,10 @@ export async function removeCollaborator(
   userId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await auth();
-    if (!session?.user?.email) return { success: false, error: "Unauthorized" };
-
-    const project = await db.query.projects.findFirst({
-      where: eq(projects.id, projectId),
-    });
-    if (!project) return { success: false, error: "Project not found" };
+    const context = await getProjectAccess(projectId);
+    if (!context || !canManageProject(context.access)) {
+      return { success: false, error: "Only workspace owner can remove collaborators" };
+    }
 
     await db
       .delete(projectCollaborators)
@@ -86,17 +108,14 @@ export async function recordEdit(
   lamportTimestamp: number
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) return { success: false, error: "Unauthorized" };
-
-    const project = await db.query.projects.findFirst({
-      where: eq(projects.id, projectId),
-    });
-    if (!project) return { success: false, error: "Project not found" };
+    const context = await getProjectAccess(projectId);
+    if (!context || !canEditProject(context.access)) {
+      return { success: false, error: "Editor access required" };
+    }
 
     await db.insert(projectEdits).values({
       projectId,
-      userId: session.user.id,
+      userId: context.userId,
       operation,
       operationData,
       clientId,
@@ -119,8 +138,10 @@ export async function updatePresence(
   selectionEnd?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const session = await auth();
-    if (!session?.user?.id) return { success: false, error: "Unauthorized" };
+    const context = await getProjectAccess(projectId);
+    if (!context || !canReadProject(context.access)) {
+      return { success: false, error: "Project access required" };
+    }
 
     const colors = [
       "#FF6B6B",
@@ -130,11 +151,15 @@ export async function updatePresence(
       "#98D8C8",
       "#F7DC6F",
     ];
-    const colorIndex = Math.abs(session.user.id.charCodeAt(0)) % colors.length;
+    const colorIndex = Math.abs(context.userId.charCodeAt(0)) % colors.length;
     const color = colors[colorIndex];
 
     const existing = await db.query.collaboratorPresence.findFirst({
-      where: and(eq(collaboratorPresence.projectId, projectId), eq(collaboratorPresence.sessionId, sessionId)),
+      where: and(
+        eq(collaboratorPresence.projectId, projectId),
+        eq(collaboratorPresence.userId, context.userId),
+        eq(collaboratorPresence.sessionId, sessionId),
+      ),
     });
 
     if (existing) {
@@ -147,11 +172,14 @@ export async function updatePresence(
           selectionEnd,
           lastHeartbeat: new Date(),
         })
-        .where(eq(collaboratorPresence.id, existing.id));
+        .where(and(
+          eq(collaboratorPresence.id, existing.id),
+          eq(collaboratorPresence.userId, context.userId),
+        ));
     } else {
       await db.insert(collaboratorPresence).values({
         projectId,
-        userId: session.user.id,
+        userId: context.userId,
         sessionId,
         cursorX,
         cursorY,
@@ -170,6 +198,8 @@ export async function updatePresence(
 
 export async function getCollaborators(projectId: string) {
   try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canReadProject(context.access)) return [];
     const collaborators = await db.query.projectCollaborators.findMany({
       where: eq(projectCollaborators.projectId, projectId),
       with: { userId: true },
@@ -183,6 +213,8 @@ export async function getCollaborators(projectId: string) {
 
 export async function getActivePresence(projectId: string) {
   try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canReadProject(context.access)) return [];
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const presence = await db.query.collaboratorPresence.findMany({
       where: and(
@@ -199,6 +231,8 @@ export async function getActivePresence(projectId: string) {
 
 export async function getProjectEdits(projectId: string, since?: Date) {
   try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canReadProject(context.access)) return [];
     const edits = await db.query.projectEdits.findMany({
       where: eq(projectEdits.projectId, projectId),
     });
