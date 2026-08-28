@@ -19,6 +19,7 @@ import {
 import { CandlestickChart, FunnelChart, GaugeChart, HeatmapChart, RadarChart, TreemapChart } from "./advanced-charts";
 import { SankeyChart, WaterfallChart } from "./flow-charts";
 import { BoxPlotChart, BubbleChart, HistogramChart } from "./statistical-charts";
+import { ComboChart, GanttChart, StackedAreaChart } from "./series-charts";
 
 const VIEWBOX = { width: 640, height: 330 };
 const PLOT = { left: 62, top: 24, right: 616, bottom: 270 };
@@ -269,7 +270,10 @@ export function DeterministicChart({ spec, className = "" }: ChartProps) {
                           : spec.type === "histogram" ? <HistogramChart spec={spec} palette={palette} />
                             : spec.type === "box-plot" ? <BoxPlotChart spec={spec} palette={palette} />
                               : spec.type === "bubble" ? <BubbleChart spec={spec} palette={palette} />
-                                : <CartesianChart spec={spec} palette={palette} />}
+                                : spec.type === "combo" ? <ComboChart spec={spec} palette={palette} />
+                                  : spec.type === "stacked-area" ? <StackedAreaChart spec={spec} palette={palette} />
+                                    : spec.type === "gantt" ? <GanttChart spec={spec} palette={palette} />
+                                      : <CartesianChart spec={spec} palette={palette} />}
     </figure>
   );
 }

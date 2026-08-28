@@ -5,15 +5,19 @@ import {
   isHistogramDatum,
   isBoxPlotDatum,
   isBubbleDatum,
+  isComboDatum,
+  isGanttDatum,
   isSankeyDatum,
   isScatterDatum,
   type CandlestickChartDatum,
   type BoxPlotChartDatum,
   type BubbleChartDatum,
+  type ComboChartDatum,
   type CartesianChartDatum,
   type DeterministicChartDatum,
   type HeatmapChartDatum,
   type HistogramChartDatum,
+  type GanttChartDatum,
   type SankeyChartDatum,
   type ScatterChartDatum,
 } from "./chart-types.ts";
@@ -72,6 +76,11 @@ export type HistogramBin = {
   start: number;
   end: number;
   count: number;
+};
+
+export type StackedAreaLayer = {
+  series: string;
+  points: Array<{ label: string; start: number; end: number }>;
 };
 
 export function finiteCartesianData(data: DeterministicChartDatum[]): CartesianChartDatum[] {
@@ -135,6 +144,21 @@ export function finiteBubbleData(data: DeterministicChartDatum[]): BubbleChartDa
   return data.filter((datum): datum is BubbleChartDatum =>
     isBubbleDatum(datum) && Number.isFinite(datum.x) && Number.isFinite(datum.y) && Number.isFinite(datum.size) && datum.size > 0,
   );
+}
+
+export function finiteComboData(data: DeterministicChartDatum[]): ComboChartDatum[] {
+  return data.filter((datum): datum is ComboChartDatum =>
+    isComboDatum(datum) && datum.label.trim().length > 0 && Number.isFinite(datum.value),
+  );
+}
+
+export function finiteGanttData(data: DeterministicChartDatum[]): GanttChartDatum[] {
+  return data.filter((datum): datum is GanttChartDatum => {
+    if (!isGanttDatum(datum) || !datum.label.trim()) return false;
+    const start = Date.parse(datum.start);
+    const end = Date.parse(datum.end);
+    return Number.isFinite(start) && Number.isFinite(end) && end >= start;
+  });
 }
 
 function niceStep(span: number, targetTicks: number): number {
@@ -441,4 +465,38 @@ export function binHistogram(data: HistogramChartDatum[], requestedBins?: number
     bins[Math.max(index, 0)].count += 1;
   }
   return { bins, domain };
+}
+
+export function stackAreaData(data: CartesianChartDatum[]): { labels: string[]; layers: StackedAreaLayer[]; domain: NumericDomain } {
+  const labels = orderedUnique(data.map((datum) => datum.label));
+  const series = orderedUnique(data.map((datum) => datum.series?.trim() || "Value"));
+  const values = new Map<string, number>();
+  for (const datum of data) {
+    const seriesName = datum.series?.trim() || "Value";
+    const key = `${datum.label}\u0000${seriesName}`;
+    values.set(key, (values.get(key) ?? 0) + datum.value);
+  }
+  const positive = new Map(labels.map((label) => [label, 0]));
+  const negative = new Map(labels.map((label) => [label, 0]));
+  const domainValues = [0];
+  const layers = series.map((seriesName) => ({
+    series: seriesName,
+    points: labels.map((label) => {
+      const value = values.get(`${label}\u0000${seriesName}`) ?? 0;
+      const start = value >= 0 ? positive.get(label) ?? 0 : negative.get(label) ?? 0;
+      const end = start + value;
+      if (value >= 0) positive.set(label, end);
+      else negative.set(label, end);
+      domainValues.push(start, end);
+      return { label, start, end };
+    }),
+  }));
+  return { labels, layers, domain: numericDomain(domainValues, { includeZero: true }) };
+}
+
+export function bandAreaPath(upper: Array<{ x: number; y: number }>, lower: Array<{ x: number; y: number }>): string {
+  if (!upper.length || upper.length !== lower.length) return "";
+  const top = upper.map((point, index) => `${index ? "L" : "M"}${point.x},${point.y}`).join(" ");
+  const bottom = [...lower].reverse().map((point) => `L${point.x},${point.y}`).join(" ");
+  return `${top} ${bottom} Z`;
 }

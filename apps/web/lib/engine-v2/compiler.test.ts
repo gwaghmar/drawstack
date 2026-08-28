@@ -67,6 +67,9 @@ describe("classifyEngineV2Prompt", () => {
     assert.equal(classifyEngineV2Prompt("Create a histogram").chartType, "histogram");
     assert.equal(classifyEngineV2Prompt("Create a box plot").chartType, "box-plot");
     assert.equal(classifyEngineV2Prompt("Create a bubble chart").chartType, "bubble");
+    assert.equal(classifyEngineV2Prompt("Create a dual-axis chart").chartType, "combo");
+    assert.equal(classifyEngineV2Prompt("Create a stacked area chart").chartType, "stacked-area");
+    assert.equal(classifyEngineV2Prompt("Create a Gantt chart").chartType, "gantt");
   });
 
   it("does not invent a chart type when one is not specified", () => {
@@ -193,6 +196,30 @@ describe("validateEngineV2Document", () => {
     chart.data = [{ x: 1, y: 2, size: 5, label: "A" }];
     assert.equal(validateEngineV2Document(document).ok, true);
     chart.data = [{ x: 1, y: 2, size: 0 }];
+    assert.equal(validateEngineV2Document(document).ok, false);
+  });
+
+  it("validates combo, stacked area, and Gantt contracts", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const chart = (root.children as Array<Record<string, unknown>>)[1];
+    chart.chartType = "combo";
+    chart.data = [
+      { label: "Jan", value: 10, series: "Revenue", display: "bar" },
+      { label: "Jan", value: 20, series: "Margin", display: "line", axis: "right" },
+    ];
+    assert.equal(validateEngineV2Document(document).ok, true);
+    chart.data = [{ label: "Jan", value: 10, series: "Revenue", display: "bar" }];
+    assert.equal(validateEngineV2Document(document).ok, false);
+
+    chart.chartType = "stacked-area";
+    chart.data = [{ label: "Jan", value: 10, series: "Core" }, { label: "Jan", value: 2, series: "Expansion" }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+
+    chart.chartType = "gantt";
+    chart.data = [{ label: "Build", start: "2026-01-01", end: "2026-01-20" }];
+    assert.equal(validateEngineV2Document(document).ok, true);
+    chart.data = [{ label: "Build", start: "Jan 1", end: "Jan 20" }];
     assert.equal(validateEngineV2Document(document).ok, false);
   });
 });

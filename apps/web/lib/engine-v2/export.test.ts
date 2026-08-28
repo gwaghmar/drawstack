@@ -111,6 +111,10 @@ describe("serializeEngineV2Svg", () => {
           ? [{ value: 1 }, { value: 2 }, { value: 3 }, { value: 8 }]
         : chartType === "box-plot"
           ? [{ label: "A", min: 1, q1: 2, median: 3, q3: 4, max: 6 }]
+        : chartType === "combo"
+          ? [{ label: "Jan", value: 10, series: "Revenue", display: "bar" }, { label: "Jan", value: 22, series: "Margin", display: "line", axis: "right" }]
+        : chartType === "gantt"
+          ? [{ label: "Design", start: "2026-01-01", end: "2026-01-12" }, { label: "Build", start: "2026-01-08", end: "2026-01-28" }]
         : chartType === "sankey"
           ? [{ source: "Visits", target: "Signup", value: 10 }, { source: "Signup", target: "Paid", value: 4 }]
         : chartType === "heatmap"
@@ -122,6 +126,9 @@ describe("serializeEngineV2Svg", () => {
       assert.match(svg, new RegExp(`deterministic ${chartType}`));
       assert.doesNotMatch(svg, /No chart data/);
       if (chartType === "sankey") assert.match(svg, /Visits to Signup/);
+      const tsx = serializeEngineV2ReactTsx(document);
+      assert.match(tsx, new RegExp(`deterministic ${chartType}`));
+      assert.doesNotMatch(tsx, /No chart data/);
     }
   });
 });

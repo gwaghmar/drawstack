@@ -15,7 +15,10 @@ export type DeterministicChartType =
   | "waterfall"
   | "histogram"
   | "box-plot"
-  | "bubble";
+  | "bubble"
+  | "combo"
+  | "stacked-area"
+  | "gantt";
 
 export type CartesianChartDatum = {
   label: string;
@@ -68,6 +71,18 @@ export type BubbleChartDatum = ScatterChartDatum & {
   size: number;
 };
 
+export type ComboChartDatum = CartesianChartDatum & {
+  display: "bar" | "line";
+  axis?: "left" | "right";
+};
+
+export type GanttChartDatum = {
+  label: string;
+  start: string;
+  end: string;
+  series?: string;
+};
+
 export type DeterministicChartDatum =
   | CartesianChartDatum
   | ScatterChartDatum
@@ -76,7 +91,9 @@ export type DeterministicChartDatum =
   | SankeyChartDatum
   | HistogramChartDatum
   | BoxPlotChartDatum
-  | BubbleChartDatum;
+  | BubbleChartDatum
+  | ComboChartDatum
+  | GanttChartDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;
@@ -141,4 +158,12 @@ export function isBoxPlotDatum(datum: DeterministicChartDatum): datum is BoxPlot
 
 export function isBubbleDatum(datum: DeterministicChartDatum): datum is BubbleChartDatum {
   return "x" in datum && "y" in datum && "size" in datum;
+}
+
+export function isComboDatum(datum: DeterministicChartDatum): datum is ComboChartDatum {
+  return "label" in datum && "value" in datum && "display" in datum;
+}
+
+export function isGanttDatum(datum: DeterministicChartDatum): datum is GanttChartDatum {
+  return "label" in datum && "start" in datum && "end" in datum;
 }

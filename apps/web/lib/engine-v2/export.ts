@@ -1,11 +1,14 @@
 import {
   areaPath,
+  bandAreaPath,
   finiteCandlestickData,
   finiteBoxPlotData,
   finiteBubbleData,
+  finiteComboData,
   finiteCartesianData,
   finiteHeatmapData,
   finiteHistogramData,
+  finiteGanttData,
   finiteSankeyData,
   finiteScatterData,
   formatChartValue,
@@ -20,6 +23,7 @@ import {
   polarPoint,
   scaleLinear,
   stackCartesianData,
+  stackAreaData,
 } from "./chart-layout.ts";
 import type { DeterministicChartType } from "./chart-types.ts";
 import type {
@@ -158,6 +162,71 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
   const muted = escapeMarkup(color(tokens, "quiet"));
   const surface = color(tokens, "panel");
   const grid = escapeMarkup(color(tokens, "rule"));
+  if (node.chartType === "combo") {
+    const data = finiteComboData(node.data);
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const labels = orderedUnique(data.map((datum) => datum.label));
+    const series = orderedUnique(data.map((datum) => datum.series?.trim() || "Value"));
+    const meta = new Map(series.map((seriesName) => { const datum = data.find((candidate) => (candidate.series?.trim() || "Value") === seriesName)!; return [seriesName, { display: datum.display, axis: datum.axis ?? "left" }]; }));
+    const leftData = data.filter((datum) => (datum.axis ?? "left") === "left");
+    const rightData = data.filter((datum) => datum.axis === "right");
+    const leftDomain = numericDomain(leftData.map((datum) => datum.value), { includeZero: leftData.some((datum) => datum.display === "bar") });
+    const rightDomain = numericDomain(rightData.map((datum) => datum.value), { includeZero: rightData.some((datum) => datum.display === "bar") });
+    const band = (CHART.right - CHART.left) / labels.length;
+    const barSeries = series.filter((seriesName) => meta.get(seriesName)?.display === "bar");
+    const marks = series.map((seriesName, seriesIndex) => {
+      const seriesMeta = meta.get(seriesName)!;
+      const domain = seriesMeta.axis === "right" ? rightDomain : leftDomain;
+      const mark = SERIES_COLORS[seriesIndex % SERIES_COLORS.length];
+      if (seriesMeta.display === "bar") {
+        const groupWidth = band * .68;
+        const barWidth = groupWidth / Math.max(barSeries.length, 1);
+        const barIndex = barSeries.indexOf(seriesName);
+        const zeroY = scaleLinear(0, domain, CHART.bottom, CHART.top);
+        return labels.map((label, index) => { const datum = data.find((candidate) => candidate.label === label && (candidate.series?.trim() || "Value") === seriesName); if (!datum) return ""; const valueY = scaleLinear(datum.value, domain, CHART.bottom, CHART.top); const x = CHART.left + index * band + (band - groupWidth) / 2 + barIndex * barWidth; return `<rect x="${number(x)}" y="${number(Math.min(zeroY, valueY))}" width="${number(Math.max(barWidth - 2, 1))}" height="${number(Math.max(Math.abs(zeroY - valueY), 1))}" rx="2" fill="${mark}"/>`; }).join("");
+      }
+      const points = labels.flatMap((label, index) => { const datum = data.find((candidate) => candidate.label === label && (candidate.series?.trim() || "Value") === seriesName); return datum ? [{ x: CHART.left + band * (index + .5), y: scaleLinear(datum.value, domain, CHART.bottom, CHART.top) }] : []; });
+      return `<path d="${linePath(points)}" fill="none" stroke="${mark}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>${points.map((point) => `<circle cx="${number(point.x)}" cy="${number(point.y)}" r="3.5" fill="${surface}" stroke="${mark}" stroke-width="2"/>`).join("")}`;
+    }).join("");
+    const rightTicks = rightData.length ? rightDomain.ticks.map((tick) => `<text x="${CHART.right + 8}" y="${number(scaleLinear(tick, rightDomain, CHART.bottom, CHART.top) + 4)}" text-anchor="start" font-size="10" fill="${muted}">${escapeMarkup(formatChartValue(tick, node.valuePrefix, node.valueSuffix))}</text>`).join("") : "";
+    return `${open}${chartGrid(leftDomain, node, tokens)}${rightTicks}${categoryLabels(labels, tokens)}${marks}</svg>`;
+  }
+  if (node.chartType === "stacked-area") {
+    const data = finiteCartesianData(node.data);
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const stack = stackAreaData(data);
+    const band = (CHART.right - CHART.left) / Math.max(stack.labels.length - 1, 1);
+    const marks = stack.layers.map((layer, index) => {
+      const upper = layer.points.map((point, pointIndex) => ({ x: CHART.left + pointIndex * band, y: scaleLinear(point.end, stack.domain, CHART.bottom, CHART.top) }));
+      const lower = layer.points.map((point, pointIndex) => ({ x: CHART.left + pointIndex * band, y: scaleLinear(point.start, stack.domain, CHART.bottom, CHART.top) }));
+      const mark = SERIES_COLORS[index % SERIES_COLORS.length];
+      return `<path d="${bandAreaPath(upper, lower)}" fill="${mark}" fill-opacity=".72" stroke="${mark}" stroke-width="1.5"/>`;
+    }).join("");
+    return `${open}${chartGrid(stack.domain, node, tokens)}${categoryLabels(stack.labels, tokens)}${marks}</svg>`;
+  }
+  if (node.chartType === "gantt") {
+    const data = finiteGanttData(node.data);
+    if (!data.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
+    const starts = data.map((datum) => Date.parse(datum.start));
+    const ends = data.map((datum) => Date.parse(datum.end));
+    const minDate = Math.min(...starts);
+    let maxDate = Math.max(...ends);
+    if (minDate === maxDate) maxDate += 86_400_000;
+    const domain = { min: minDate, max: maxDate, ticks: Array.from({ length: 5 }, (_, index) => minDate + (maxDate - minDate) * index / 4) };
+    const rowHeight = (CHART.bottom - CHART.top) / data.length;
+    const barHeight = Math.min(26, rowHeight * .58);
+    const series = orderedUnique(data.map((datum) => datum.series?.trim() || "Task"));
+    const ticks = domain.ticks.map((tick) => { const x = scaleLinear(tick, domain, CHART.left, CHART.right); const label = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "UTC" }).format(new Date(tick)); return `<line x1="${number(x)}" y1="${CHART.top}" x2="${number(x)}" y2="${CHART.bottom}" stroke="${grid}"/><text x="${number(x)}" y="${CHART.bottom + 20}" text-anchor="middle" font-size="10" fill="${muted}">${escapeMarkup(label)}</text>`; }).join("");
+    const marks = data.map((datum, index) => {
+      const y = CHART.top + rowHeight * (index + .5);
+      const startX = scaleLinear(Date.parse(datum.start), domain, CHART.left, CHART.right);
+      const endX = scaleLinear(Date.parse(datum.end), domain, CHART.left, CHART.right);
+      const mark = SERIES_COLORS[series.indexOf(datum.series?.trim() || "Task") % SERIES_COLORS.length];
+      const shape = startX === endX ? `<rect x="${number(startX - 5)}" y="${number(y - 5)}" width="10" height="10" transform="rotate(45 ${number(startX)} ${number(y)})" fill="${mark}"/>` : `<rect x="${number(startX)}" y="${number(y - barHeight / 2)}" width="${number(Math.max(endX - startX, 2))}" height="${number(barHeight)}" rx="4" fill="${mark}"/>`;
+      return `<text x="${CHART.left - 9}" y="${number(y + 4)}" text-anchor="end" font-size="10" fill="${muted}">${escapeMarkup(datum.label)}</text>${shape}`;
+    }).join("");
+    return `${open}${ticks}${marks}</svg>`;
+  }
   if (node.chartType === "histogram") {
     const histogram = binHistogram(finiteHistogramData(node.data));
     if (!histogram.bins.length) return `${open}<text x="320" y="165" text-anchor="middle" fill="${muted}">No chart data</text></svg>`;
@@ -375,7 +444,10 @@ function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
       const barWidth = Math.max(2, groupWidth / series.length);
       const x = CHART.left + labels.indexOf(datum.label) * band + (band - groupWidth) / 2 + series.indexOf(seriesName) * barWidth;
       const valueY = scaleLinear(datum.value, domain, CHART.bottom, CHART.top);
-      return `<rect x="${number(x)}" y="${number(Math.min(valueY, zeroY))}" width="${number(Math.max(barWidth - 2, 1))}" height="${number(Math.max(Math.abs(zeroY - valueY), 1))}" rx="3" fill="${SERIES_COLORS[series.indexOf(seriesName) % SERIES_COLORS.length]}"/>`;
+      const barHeight = Math.max(Math.abs(zeroY - valueY), 1);
+      const y = Math.min(valueY, zeroY);
+      const valueLabelY = datum.value >= 0 ? y - 6 : y + barHeight + 13;
+      return `<rect x="${number(x)}" y="${number(y)}" width="${number(Math.max(barWidth - 2, 1))}" height="${number(barHeight)}" rx="3" fill="${SERIES_COLORS[series.indexOf(seriesName) % SERIES_COLORS.length]}"/><text x="${number(x + barWidth / 2)}" y="${number(valueLabelY)}" text-anchor="middle" font-size="10" fill="${escapeMarkup(foreground)}">${escapeMarkup(formatChartValue(datum.value, node.valuePrefix, node.valueSuffix))}</text>`;
     }).join("");
   } else {
     marks = series.map((seriesName, seriesIndex) => {
@@ -612,5 +684,5 @@ export function createEngineV2ReactTsxExport(document: EngineDocument): EngineV2
 }
 
 export function supportedEngineV2ExportChartTypes(): readonly DeterministicChartType[] {
-  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble"];
+  return ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble", "combo", "stacked-area", "gantt"];
 }

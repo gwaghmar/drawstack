@@ -12,7 +12,7 @@ import type {
   FrameLayout,
 } from "./document";
 import { hasSankeyCycle } from "./chart-layout.ts";
-import { isBoxPlotDatum, isBubbleDatum, isCartesianDatum, isHistogramDatum, isSankeyDatum } from "./chart-types.ts";
+import { isBoxPlotDatum, isBubbleDatum, isCartesianDatum, isComboDatum, isGanttDatum, isHistogramDatum, isSankeyDatum } from "./chart-types.ts";
 import type { GraphDocument, GraphEdge, GraphField, GraphNode } from "./graph";
 
 const MAX_PROMPT_LENGTH = 4_000;
@@ -49,14 +49,14 @@ const STYLE_KEYS = new Set([
   "alignSelf",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
-const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max"]);
+const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max", "display", "axis", "start", "end"]);
 const GRAPH_DOCUMENT_KEYS = new Set(["name", "direction", "nodes", "edges"]);
 const GRAPH_NODE_KEYS = new Set(["id", "label", "kind", "subtitle", "fields", "group", "width", "height", "tone"]);
 const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sourceLabel", "targetLabel"]);
 const GRAPH_FIELD_KEYS = new Set(["name", "type", "key"]);
 
 export type EngineV2Composition = "chart" | "graph" | "dashboard" | "document";
-export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | "sankey" | "waterfall" | "histogram" | "box-plot" | "bubble" | null;
+export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | "sankey" | "waterfall" | "histogram" | "box-plot" | "bubble" | "combo" | "stacked-area" | "gantt" | null;
 
 export type EngineV2PromptIntent = {
   normalizedPrompt: string;
@@ -404,6 +404,15 @@ function validateDatum(
     if (!ordered) addIssue(context, path, "Box plot values must satisfy min <= q1 <= median <= q3 <= max");
     return label !== null && ordered ? { label, min: min!, q1: q1!, median: median!, q3: q3!, max: max!, series } : null;
   }
+  if (value.start !== undefined || value.end !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const start = readString(value.start, context, `${path}.start`, 10, 40);
+    const end = readString(value.end, context, `${path}.end`, 10, 40);
+    const isoDate = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})?)?$/;
+    const validDates = start !== null && end !== null && isoDate.test(start) && isoDate.test(end) && Number.isFinite(Date.parse(start)) && Number.isFinite(Date.parse(end)) && Date.parse(end) >= Date.parse(start);
+    if (!validDates) addIssue(context, path, "Gantt dates must be ISO dates with end on or after start");
+    return label !== null && validDates ? { label, start: start!, end: end!, series } : null;
+  }
   if (value.row !== undefined || value.column !== undefined) {
     const row = readString(value.row, context, `${path}.row`, 1, 80);
     const column = readString(value.column, context, `${path}.column`, 1, 80);
@@ -431,6 +440,13 @@ function validateDatum(
   if (value.label === undefined && value.value !== undefined) {
     const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
     return number !== null ? { value: number } : null;
+  }
+  if (value.display !== undefined || value.axis !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
+    const display = readEnum(value.display, ["bar", "line"], context, `${path}.display`);
+    const axis = value.axis === undefined ? undefined : readEnum(value.axis, ["left", "right"], context, `${path}.axis`) ?? undefined;
+    return label !== null && number !== null && display !== null ? { label, value: number, series, display, axis } : null;
   }
   const label = readString(value.label, context, `${path}.label`, 1, 80);
   const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
@@ -564,7 +580,7 @@ function validateNode(
   }
   if (type === "chart") {
     const title = readString(value.title, context, `${path}.title`, 1, 160);
-    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble"], context, `${path}.chartType`);
+    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick", "sankey", "waterfall", "histogram", "box-plot", "bubble", "combo", "stacked-area", "gantt"], context, `${path}.chartType`);
     if (!Array.isArray(value.data) || value.data.length < 1 || value.data.length > MAX_CHART_POINTS) {
       addIssue(context, `${path}.data`, `Expected 1-${MAX_CHART_POINTS} data points`);
       return null;
@@ -598,6 +614,32 @@ function validateNode(
     }
     if (chartType === "bubble" && !chartData.every(isBubbleDatum)) {
       addIssue(context, `${path}.data`, "Bubble data must use x, y, and positive size");
+      return null;
+    }
+    if (chartType === "combo") {
+      if (!chartData.every(isComboDatum)) {
+        addIssue(context, `${path}.data`, "Combo data must use label, value, and display");
+        return null;
+      }
+      const metadata = new Map<string, string>();
+      for (const datum of chartData) {
+        const seriesName = datum.series?.trim() || "Value";
+        const signature = `${datum.display}:${datum.axis ?? "left"}`;
+        const previous = metadata.get(seriesName);
+        if (previous && previous !== signature) addIssue(context, `${path}.data`, "Each combo series must keep one display and axis");
+        metadata.set(seriesName, signature);
+      }
+      if (!chartData.some((datum) => datum.display === "bar") || !chartData.some((datum) => datum.display === "line")) addIssue(context, `${path}.data`, "Combo charts require both bar and line series");
+      if (context.issues.some((issue) => issue.path === `${path}.data`)) return null;
+    }
+    if (chartType === "stacked-area") {
+      if (!chartData.every(isCartesianDatum) || new Set(chartData.map((datum) => datum.series?.trim() || "Value")).size < 2) {
+        addIssue(context, `${path}.data`, "Stacked area data must contain at least two label/value series");
+        return null;
+      }
+    }
+    if (chartType === "gantt" && !chartData.every(isGanttDatum)) {
+      addIssue(context, `${path}.data`, "Gantt data must use label, ISO start, and ISO end");
       return null;
     }
     return { ...base, type, title, chartType, data: chartData, valuePrefix, valueSuffix } satisfies EngineChartNode;
@@ -670,6 +712,9 @@ export function classifyEngineV2Prompt(prompt: string): EngineV2PromptIntent {
   else if (/\bhistogram\b/.test(words)) chartType = "histogram";
   else if (/\bbox(?:\s+and\s+whisker|\s*plot)\b/.test(words)) chartType = "box-plot";
   else if (/\bbubble\s+(?:chart|plot)\b/.test(words)) chartType = "bubble";
+  else if (/\b(?:combo|combination|dual[ -]axis)\s+(?:chart|graph)\b/.test(words)) chartType = "combo";
+  else if (/\bstacked\s+area\s+(?:chart|graph)\b/.test(words)) chartType = "stacked-area";
+  else if (/\b(?:gantt|timeline)\s+(?:chart|diagram)?\b/.test(words)) chartType = "gantt";
   else if (/\b(?:donut|doughnut|pie)\s+(?:chart|graph)\b/.test(words)) chartType = "donut";
   else if (/\bcandlestick\s+chart\b/.test(words)) chartType = "candlestick";
   else if (/\bheatmap\b|\bheat\s+map\b/.test(words)) chartType = "heatmap";
@@ -694,7 +739,7 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Create one EngineDocument JSON object for the user's request.",
     "Return JSON only. Do not include Markdown, explanations, or JavaScript.",
     'The root must use version 2 and engine "dom-css".',
-    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, candlestick, sankey, waterfall, histogram, box-plot, and bubble.",
+    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, candlestick, sankey, waterfall, histogram, box-plot, bubble, combo, stacked-area, and gantt.",
     "Use flex or grid frames for layout. Every node id must be unique.",
     "Document fields: version, engine, name, artboard {width,minHeight,background}, tokens {colors,spacing,radii}, children.",
     "Every node needs id, name, and type. Text needs content and variant. Metric needs label, value, detail, and tone.",
@@ -703,6 +748,7 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Heatmap data uses [{row,column,value}]. Candlestick data uses [{label,open,high,low,close}].",
     "Sankey data uses acyclic positive flows [{source,target,value}]. Waterfall data uses ordered changes [{label,value}].",
     "Histogram data uses raw samples [{value}]. Box plot data uses [{label,min,q1,median,q3,max}]. Bubble data uses [{x,y,size,label?,series?}].",
+    "Combo data uses [{label,value,series,display:'bar'|'line',axis?:'left'|'right'}]. Stacked-area uses multiple [{label,value,series}]. Gantt uses [{label,start,end,series?}] with ISO dates.",
     "Graph needs title and graph {name,direction,nodes,edges}. Graph nodes use id,label,kind. Kinds: process, decision, entity, database, person, service, system. Graph edges use id,source,target and optional kind or label.",
     "Flex layout also needs direction. Grid layout also needs columns.",
     "Do not invent facts presented as user data. Clearly label illustrative data.",

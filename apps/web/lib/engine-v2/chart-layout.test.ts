@@ -2,12 +2,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   areaPath,
+  bandAreaPath,
   finiteCandlestickData,
   finiteBoxPlotData,
   finiteBubbleData,
+  finiteComboData,
   finiteCartesianData,
   finiteHeatmapData,
   finiteHistogramData,
+  finiteGanttData,
   finiteSankeyData,
   finiteScatterData,
   formatChartValue,
@@ -20,6 +23,7 @@ import {
   numericDomain,
   polarPoint,
   scaleLinear,
+  stackAreaData,
   stackCartesianData,
 } from "./chart-layout.ts";
 
@@ -173,5 +177,31 @@ describe("engine-v2 chart layout", () => {
       { x: 1, y: 2, size: 10, label: "Valid" },
       { x: 2, y: 3, size: 0, label: "Invalid" },
     ]).map((datum) => datum.label), ["Valid"]);
+  });
+
+  it("keeps combo mark metadata and validates Gantt ranges", () => {
+    assert.equal(finiteComboData([
+      { label: "Jan", value: 10, series: "Revenue", display: "bar", axis: "left" },
+      { label: "Jan", value: 20, series: "Margin", display: "line", axis: "right" },
+    ]).length, 2);
+    assert.deepEqual(finiteGanttData([
+      { label: "Design", start: "2026-01-01", end: "2026-01-12" },
+      { label: "Backwards", start: "2026-02-01", end: "2026-01-01" },
+    ]).map((datum) => datum.label), ["Design"]);
+  });
+
+  it("creates positive and negative stacked-area bands", () => {
+    const stack = stackAreaData([
+      { label: "Jan", series: "Core", value: 10 },
+      { label: "Jan", series: "Expansion", value: 5 },
+      { label: "Jan", series: "Churn", value: -3 },
+      { label: "Feb", series: "Core", value: 12 },
+      { label: "Feb", series: "Expansion", value: 4 },
+      { label: "Feb", series: "Churn", value: -2 },
+    ]);
+    assert.deepEqual(stack.layers[1].points.map(({ start, end }) => [start, end]), [[10, 15], [12, 16]]);
+    assert.deepEqual(stack.layers[2].points.map(({ start, end }) => [start, end]), [[0, -3], [0, -2]]);
+    assert.ok(stack.domain.min <= -3 && stack.domain.max >= 16);
+    assert.equal(bandAreaPath([{ x: 0, y: 1 }, { x: 2, y: 3 }], [{ x: 0, y: 4 }, { x: 2, y: 5 }]), "M0,1 L2,3 L2,5 L0,4 Z");
   });
 });
