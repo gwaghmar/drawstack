@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowDown, ArrowUp, Check, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
 import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
@@ -36,7 +36,7 @@ function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; 
       data-layout={layout.mode}
       data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}
-      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens) }}
+      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%" }}
       className={`relative box-border ${selectedId === node.id ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
@@ -54,7 +54,7 @@ function Node({ node, tokens, selectedId, onSelect }: { node: EngineNode; tokens
     "data-node-id": node.id,
     "data-node-type": node.type,
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id); },
-    style: nodeStyle(node.style, tokens),
+    style: { ...nodeStyle(node.style, tokens), maxWidth: "100%" },
     className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
 
@@ -129,6 +129,23 @@ type TreeDropPosition = "before" | "inside" | "after";
 type TreeDropTarget = {
   nodeId: string;
   position: TreeDropPosition;
+};
+
+type SelectedBounds = {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+};
+
+type ResizeSession = {
+  axes: "width" | "height" | "both";
+  startX: number;
+  startY: number;
+  startWidth: number;
+  startHeight: number;
+  original: EngineDocument;
+  changed: boolean;
 };
 
 type TreeProps = {
@@ -236,10 +253,13 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
   const [treeDraggedId, setTreeDraggedId] = useState<string | null>(null);
   const [treeDropTarget, setTreeDropTarget] = useState<TreeDropTarget | null>(null);
+  const [selectedBounds, setSelectedBounds] = useState<SelectedBounds | null>(null);
   const [revisions, setRevisions] = useState<Array<{ id: string; label: string | null; createdAt: Date }>>([]);
   const artboardRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
+  const resizeSessionRef = useRef<ResizeSession | null>(null);
+  const resizeCleanupRef = useRef<(() => void) | null>(null);
   const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
   const storageKey = `drawstack.engine-v2.document.${projectId ?? "draft"}`;
 
@@ -275,6 +295,38 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       return next;
     });
   };
+
+  const measureSelectedNode = () => {
+    const artboard = artboardRef.current;
+    if (!artboard) return setSelectedBounds(null);
+    const element = [...artboard.querySelectorAll<HTMLElement>("[data-node-id]")]
+      .find((candidate) => candidate.dataset.nodeId === selectedId);
+    if (!element) return setSelectedBounds(null);
+    const artboardBounds = artboard.getBoundingClientRect();
+    const bounds = element.getBoundingClientRect();
+    setSelectedBounds({
+      left: bounds.left - artboardBounds.left,
+      top: bounds.top - artboardBounds.top,
+      width: bounds.width,
+      height: bounds.height,
+    });
+  };
+
+  useLayoutEffect(measureSelectedNode, [document, selectedId]);
+
+  useEffect(() => {
+    const artboard = artboardRef.current;
+    if (!artboard) return;
+    const observer = new ResizeObserver(measureSelectedNode);
+    observer.observe(artboard);
+    window.addEventListener("resize", measureSelectedNode);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measureSelectedNode);
+    };
+  }, [selectedId]);
+
+  useEffect(() => () => resizeCleanupRef.current?.(), []);
 
   const updateSelected = (update: (node: EngineNode) => EngineNode) => {
     commitDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
@@ -432,6 +484,74 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     focusTreeNode(id);
   };
 
+  const resizeSelectedNode = (source: EngineDocument, width: number | null, minHeight: number | null) => ({
+    ...source,
+    children: mapNode(source.children, selectedId, (node) => {
+      const style = { ...node.style };
+      if (width !== null) {
+        style.width = Math.max(80, Math.min(source.artboard.width, Math.round(width)));
+        delete style.flex;
+      }
+      if (minHeight !== null) style.minHeight = Math.max(40, Math.round(minHeight));
+      return { ...node, style };
+    }),
+  });
+
+  const beginResize = (event: React.PointerEvent<HTMLButtonElement>, axes: ResizeSession["axes"]) => {
+    if (!selectedBounds) return;
+    event.preventDefault();
+    event.stopPropagation();
+    resizeCleanupRef.current?.();
+    resizeSessionRef.current = {
+      axes,
+      startX: event.clientX,
+      startY: event.clientY,
+      startWidth: selectedBounds.width,
+      startHeight: selectedBounds.height,
+      original: document,
+      changed: false,
+    };
+
+    const move = (moveEvent: PointerEvent) => {
+      const session = resizeSessionRef.current;
+      if (!session) return;
+      const width = session.axes === "width" || session.axes === "both" ? session.startWidth + moveEvent.clientX - session.startX : null;
+      const minHeight = session.axes === "height" || session.axes === "both" ? session.startHeight + moveEvent.clientY - session.startY : null;
+      if ((width === null || Math.round(width) === Math.round(session.startWidth)) && (minHeight === null || Math.round(minHeight) === Math.round(session.startHeight))) return;
+      session.changed = true;
+      setDocument(resizeSelectedNode(session.original, width, minHeight));
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", end);
+      window.removeEventListener("pointercancel", end);
+      resizeCleanupRef.current = null;
+    };
+    const end = () => {
+      const session = resizeSessionRef.current;
+      resizeSessionRef.current = null;
+      cleanup();
+      if (!session?.changed) return;
+      setPast((items) => [...items.slice(-49), session.original]);
+      setFuture([]);
+      setSaveState("idle");
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", end);
+    window.addEventListener("pointercancel", end);
+    resizeCleanupRef.current = cleanup;
+  };
+
+  const updateSelectedDimension = (property: "width" | "minHeight", rawValue: string) => {
+    updateSelected((node) => {
+      const style = { ...node.style };
+      if (!rawValue) delete style[property];
+      else style[property] = Math.min(property === "width" ? document.artboard.width : Number.POSITIVE_INFINITY, Math.max(property === "width" ? 80 : 40, Math.round(Number(rawValue))));
+      if (property === "width" && rawValue) delete style.flex;
+      return { ...node, style };
+    });
+  };
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -560,10 +680,21 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
         </div>
         <div
           ref={artboardRef}
-          className="mx-auto overflow-hidden shadow-[0_24px_70px_rgba(35,42,34,0.16)]"
+          className="relative mx-auto overflow-hidden shadow-[0_24px_70px_rgba(35,42,34,0.16)]"
           style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}
         >
           {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedId={selectedId} onSelect={setSelectedId} />)}
+          {selectedBounds ? (
+            <div
+              className="pointer-events-none absolute z-50 border border-[#3157F6]"
+              style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }}
+              data-selection-box={selectedId}
+            >
+              <button type="button" aria-label="Resize selected node width" onPointerDown={(event) => beginResize(event, "width")} className="pointer-events-auto absolute -right-2 top-1/2 h-10 w-4 -translate-y-1/2 cursor-ew-resize rounded-full border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6]" />
+              <button type="button" aria-label="Resize selected node minimum height" onPointerDown={(event) => beginResize(event, "height")} className="pointer-events-auto absolute -bottom-2 left-1/2 h-4 w-10 -translate-x-1/2 cursor-ns-resize rounded-full border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6]" />
+              <button type="button" aria-label="Resize selected node width and minimum height" onPointerDown={(event) => beginResize(event, "both")} className="pointer-events-auto absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6]" />
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -583,6 +714,21 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <button type="button" onClick={duplicateSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Duplicate node"><CopyPlus size={14} /></button>
               <button type="button" onClick={removeSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 text-[#B93815] hover:border-[#B93815]" title="Delete node"><Trash2 size={14} /></button>
             </div>
+
+            <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
+              <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Responsive size</legend>
+              <div className="grid grid-cols-2 gap-3">
+                <label>
+                  <span className="mb-2 block text-xs text-[#667067]">Width</span>
+                  <input aria-label="Node width" type="number" min="80" max={document.artboard.width} placeholder="Auto" value={typeof selected.style?.width === "number" ? selected.style.width : ""} onChange={(event) => updateSelectedDimension("width", event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                </label>
+                <label>
+                  <span className="mb-2 block text-xs text-[#667067]">Min height</span>
+                  <input aria-label="Node minimum height" type="number" min="40" placeholder="Auto" value={selected.style?.minHeight ?? ""} onChange={(event) => updateSelectedDimension("minHeight", event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                </label>
+              </div>
+              <p className="mt-2 text-[10px] leading-4 text-[#667067]">Auto keeps the node fluid. A width stays inside layout flow.</p>
+            </fieldset>
 
             {selected.type === "text" ? (
               <label className="block">
