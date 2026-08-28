@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { ENGINE_V2_SAMPLE, mapNode } from "./document.ts";
-import { findEngineTransactionConflict, type EngineEditCursor, type EngineTransactionRecord } from "./collaboration.ts";
+import { engineTransactionRecordId, findEngineTransactionConflict, type EngineEditCursor, type EngineTransactionRecord } from "./collaboration.ts";
 import { applyEngineDocumentTransaction, createEngineDocumentTransaction } from "./transactions.ts";
 
 const baseCursor: EngineEditCursor = { createdAt: "2026-08-28T12:00:00.000Z", id: "base" };
@@ -9,6 +9,11 @@ const baseCursor: EngineEditCursor = { createdAt: "2026-08-28T12:00:00.000Z", id
 function record(clientId: string, cursor: EngineEditCursor, transaction: ReturnType<typeof createEngineDocumentTransaction>): EngineTransactionRecord {
   return { clientId, cursor, baseCursor, transaction, userId: clientId };
 }
+
+test("transaction record IDs are stable within a project and isolated across projects", () => {
+  assert.equal(engineTransactionRecordId("project-a", "tx-1"), engineTransactionRecordId("project-a", "tx-1"));
+  assert.notEqual(engineTransactionRecordId("project-a", "tx-1"), engineTransactionRecordId("project-b", "tx-1"));
+});
 
 test("two clients merge edits to different properties of the same node", () => {
   const contentDocument = { ...ENGINE_V2_SAMPLE, children: mapNode(ENGINE_V2_SAMPLE.children, "title", (node) => node.type === "text" ? { ...node, content: "Client A" } : node) };

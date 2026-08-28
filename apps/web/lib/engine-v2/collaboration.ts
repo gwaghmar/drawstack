@@ -29,10 +29,16 @@ const OPERATION_TYPES = new Set([
   "set-child-order",
 ]);
 const TRANSACTION_ORIGINS = new Set(["local", "ai", "import", "restore", "undo", "redo"]);
+const NODE_TYPES = new Set(["text", "metric", "chart", "graph", "frame"]);
+const FORBIDDEN_PATCH_KEYS = new Set(["id", "type", "children", "__proto__", "prototype", "constructor"]);
 
 export function compareEngineEditCursors(left: EngineEditCursor, right: EngineEditCursor) {
   const dateOrder = left.createdAt.localeCompare(right.createdAt);
   return dateOrder || left.id.localeCompare(right.id);
+}
+
+export function engineTransactionRecordId(projectId: string, transactionId: string) {
+  return `${projectId}:${transactionId}`;
 }
 
 function isCursor(value: unknown): value is EngineEditCursor {
@@ -56,19 +62,21 @@ function isOperation(value: unknown): value is EngineDocumentOperation {
       return Boolean(operation.tokens && typeof operation.tokens === "object");
     case "put-node": {
       const node = operation.node as Record<string, unknown> | undefined;
-      return Boolean(node && typeof node.id === "string" && typeof node.name === "string" && typeof node.type === "string" && !("children" in node));
+      return Boolean(node && typeof node.id === "string" && typeof node.name === "string" && typeof node.type === "string" && NODE_TYPES.has(node.type) && !("children" in node));
     }
     case "patch-node":
       return typeof operation.nodeId === "string"
         && Boolean(operation.changes && typeof operation.changes === "object" && !Array.isArray(operation.changes))
+        && Object.keys(operation.changes as object).every((key) => !FORBIDDEN_PATCH_KEYS.has(key))
         && Array.isArray(operation.unset)
-        && operation.unset.every((key) => typeof key === "string");
+        && operation.unset.every((key) => typeof key === "string" && !FORBIDDEN_PATCH_KEYS.has(key));
     case "remove-node":
       return typeof operation.nodeId === "string";
     case "set-child-order":
       return (operation.parentId === null || typeof operation.parentId === "string")
         && Array.isArray(operation.childIds)
-        && operation.childIds.every((id) => typeof id === "string");
+        && operation.childIds.every((id) => typeof id === "string")
+        && new Set(operation.childIds).size === operation.childIds.length;
     default:
       return false;
   }

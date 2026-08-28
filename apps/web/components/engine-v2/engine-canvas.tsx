@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, ArrowDown, ArrowUp, Check, ClipboardPaste, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Plus, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ClipboardPaste, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Plus, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, Users, Wifi, WifiOff, X } from "lucide-react";
 import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { DeterministicChart } from "@/components/engine-v2/charts";
@@ -25,6 +25,7 @@ import { createDefaultNode, type InsertableNodeType } from "@/lib/engine-v2/node
 import { alignNodes, copyNodes, distributeNodes, duplicateNodes, findParent, insertNode, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, pasteNodes, removeNodes, uniqueNodeId } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 import { applyEngineDocumentTransaction, createEngineDocumentTransaction, type EngineTransactionOrigin } from "@/lib/engine-v2/transactions";
+import { useEngineV2Collaboration } from "@/lib/hooks/use-engine-v2-collaboration";
 
 const EMPTY_SELECTION = new Set<string>();
 
@@ -242,7 +243,7 @@ export function EngineDocumentView({ document, className = "" }: { document: Eng
   );
 }
 
-export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjectId = null, initialUpdatedAt = null }: { initialDocument?: EngineDocument; initialProjectId?: string | null; initialUpdatedAt?: string | null }) {
+export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjectId = null, initialUpdatedAt = null, initialPrompt = "Create a concise product launch dashboard with revenue, conversion, and channel performance" }: { initialDocument?: EngineDocument; initialProjectId?: string | null; initialUpdatedAt?: string | null; initialPrompt?: string }) {
   const router = useRouter();
   const [document, setDocument] = useState<EngineDocument>(initialDocument);
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
@@ -253,11 +254,12 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [selectedIds, setSelectedIds] = useState<string[]>(["title"]);
   const [copied, setCopied] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [prompt, setPrompt] = useState("Create a concise product launch dashboard with revenue, conversion, and channel performance");
+  const [prompt, setPrompt] = useState(initialPrompt);
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
   const [hasPersistenceConflict, setHasPersistenceConflict] = useState(false);
+  const [collaborationError, setCollaborationError] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
   const [treeDraggedId, setTreeDraggedId] = useState<string | null>(null);
@@ -272,21 +274,38 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const resizeSessionRef = useRef<ResizeSession | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const clipboardNodesRef = useRef<EngineNode[]>([]);
+  const documentRef = useRef(document);
+  const selectedIdRef = useRef(selectedId);
   const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const storageKey = `drawstack.engine-v2.document.${projectId ?? "draft"}`;
 
   useEffect(() => {
+    documentRef.current = document;
+    selectedIdRef.current = selectedId;
+  }, [document, selectedId]);
+
+  useEffect(() => {
+    let cancelled = false;
     const saved = projectId ? null : window.localStorage.getItem(storageKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as EngineDocument;
-        if (parsed.version === 2 && parsed.engine === "dom-css") setDocument(parsed);
+        if (parsed.version === 2 && parsed.engine === "dom-css") {
+          queueMicrotask(() => {
+            if (cancelled) return;
+            documentRef.current = parsed;
+            setDocument(parsed);
+          });
+        }
       } catch {
         window.localStorage.removeItem(storageKey);
       }
     }
-    setHydrated(true);
+    queueMicrotask(() => {
+      if (!cancelled) setHydrated(true);
+    });
+    return () => { cancelled = true; };
   }, [projectId, storageKey]);
 
   useEffect(() => {
@@ -298,17 +317,48 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     listEngineV2Revisions(projectId).then(setRevisions).catch(() => setRevisions([]));
   }, [historyOpen, projectId, saveState]);
 
-  const commitDocument = (update: EngineDocument | ((current: EngineDocument) => EngineDocument), origin: EngineTransactionOrigin = "local") => {
-    setDocument((current) => {
-      const requested = typeof update === "function" ? update(current) : update;
-      const transaction = createEngineDocumentTransaction(current, requested, origin);
-      if (!transaction.operations.length) return current;
-      const next = applyEngineDocumentTransaction(current, transaction);
-      setPast((items) => [...items.slice(-49), current]);
+  const collaboration = useEngineV2Collaboration({
+    projectId,
+    selectionId: selectedId,
+    onRecords: (records, pending) => {
+      const current = documentRef.current;
+      let next = current;
+      for (const record of records) {
+        const candidate = applyEngineDocumentTransaction(next, record.transaction);
+        const validated = validateEngineV2Document(candidate);
+        if (!validated.ok) {
+          setCollaborationError(`A remote edit was skipped: ${validated.issues[0]?.message ?? "invalid document"}`);
+          continue;
+        }
+        next = validated.document;
+      }
+      for (const transaction of pending) next = applyEngineDocumentTransaction(next, transaction);
+      if (JSON.stringify(next) === JSON.stringify(current)) return;
+      documentRef.current = next;
+      setDocument(next);
+      setPast([]);
       setFuture([]);
       setSaveState("idle");
-      return next;
-    });
+      if (!findNode(next.children, selectedIdRef.current)) {
+        const nextSelectedId = next.children[0]?.id ?? "";
+        setSelectedId(nextSelectedId);
+        setSelectedIds(nextSelectedId ? [nextSelectedId] : []);
+      }
+    },
+  });
+
+  const commitDocument = (update: EngineDocument | ((current: EngineDocument) => EngineDocument), origin: EngineTransactionOrigin = "local") => {
+    const current = documentRef.current;
+    const requested = typeof update === "function" ? update(current) : update;
+    const transaction = createEngineDocumentTransaction(current, requested, origin);
+    if (!transaction.operations.length) return;
+    const next = applyEngineDocumentTransaction(current, transaction);
+    documentRef.current = next;
+    setDocument(next);
+    setPast((items) => [...items.slice(-49), current]);
+    setFuture([]);
+    setSaveState("idle");
+    collaboration.publish(transaction);
   };
 
   const measureSelectedNode = () => {
@@ -383,7 +433,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     if (!previous) return;
     setPast((items) => items.slice(0, -1));
     setFuture((items) => [document, ...items.slice(0, 49)]);
-    setDocument((current) => applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, previous, "undo")));
+    const transaction = createEngineDocumentTransaction(documentRef.current, previous, "undo");
+    const next = applyEngineDocumentTransaction(documentRef.current, transaction);
+    documentRef.current = next;
+    setDocument(next);
+    collaboration.publish(transaction);
     setSaveState("idle");
   };
 
@@ -392,7 +446,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     if (!next) return;
     setFuture((items) => items.slice(1));
     setPast((items) => [...items.slice(-49), document]);
-    setDocument((current) => applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, next, "redo")));
+    const transaction = createEngineDocumentTransaction(documentRef.current, next, "redo");
+    const applied = applyEngineDocumentTransaction(documentRef.current, transaction);
+    documentRef.current = applied;
+    setDocument(applied);
+    collaboration.publish(transaction);
     setSaveState("idle");
   };
 
@@ -400,9 +458,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     if (hasPersistenceConflict) return;
     setSaveState("saving");
     try {
+      const currentDocument = documentRef.current;
       if (projectId) {
         if (!savedUpdatedAt) throw new Error("Missing project version");
-        const result = await saveEngineV2Project(projectId, document.name, JSON.stringify(document), savedUpdatedAt, "Engine v2 save");
+        const result = await saveEngineV2Project(projectId, currentDocument.name, JSON.stringify(currentDocument), savedUpdatedAt, "Engine v2 save");
         if (!result.ok) {
           setHasPersistenceConflict(true);
           setSaveState("conflict");
@@ -410,7 +469,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
         }
         setSavedUpdatedAt(result.updatedAt);
       } else {
-        const created = await createEngineV2Project(document.name, JSON.stringify(document));
+        const created = await createEngineV2Project(currentDocument.name, JSON.stringify(currentDocument));
         setProjectId(created.id);
         setSavedUpdatedAt(created.updatedAt);
         router.replace(`/app/engine-v2?id=${created.id}`);
@@ -425,10 +484,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const shareDocument = async () => {
     setShareState("sharing");
     try {
+      const currentDocument = documentRef.current;
       let id = projectId;
       if (id) {
         if (!savedUpdatedAt) throw new Error("Missing project version");
-        const result = await saveEngineV2Project(id, document.name, JSON.stringify(document), savedUpdatedAt, "Shared version");
+        const result = await saveEngineV2Project(id, currentDocument.name, JSON.stringify(currentDocument), savedUpdatedAt, "Shared version");
         if (!result.ok) {
           setHasPersistenceConflict(true);
           setSaveState("conflict");
@@ -438,7 +498,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
         setSavedUpdatedAt(result.updatedAt);
       }
       else {
-        const created = await createEngineV2Project(document.name, JSON.stringify(document));
+        const created = await createEngineV2Project(currentDocument.name, JSON.stringify(currentDocument));
         id = created.id;
         setProjectId(created.id);
         setSavedUpdatedAt(created.updatedAt);
@@ -589,10 +649,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const minHeight = session.axes === "height" || session.axes === "both" ? session.startHeight + moveEvent.clientY - session.startY : null;
       if ((width === null || Math.round(width) === Math.round(session.startWidth)) && (minHeight === null || Math.round(minHeight) === Math.round(session.startHeight))) return;
       session.changed = true;
-      setDocument((current) => {
-        const requested = resizeSelectedNode(session.original, width, minHeight);
-        return applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, requested, "local"));
-      });
+      const current = documentRef.current;
+      const requested = resizeSelectedNode(session.original, width, minHeight);
+      const next = applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, requested, "local"));
+      documentRef.current = next;
+      setDocument(next);
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", move);
@@ -605,6 +666,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       resizeSessionRef.current = null;
       cleanup();
       if (!session?.changed) return;
+      collaboration.publish(createEngineDocumentTransaction(session.original, documentRef.current, "local"));
       setPast((items) => [...items.slice(-49), session.original]);
       setFuture([]);
       setSaveState("idle");
@@ -818,9 +880,31 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             <button type="button" onClick={() => window.location.reload()} className="shrink-0 rounded-md border border-[#D39A38] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFF1CE]">Load latest version</button>
           </div>
         ) : null}
+        {collaboration.conflicts.length ? (
+          <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#D98A76] bg-[#FFF0EC] px-4 py-3 text-xs text-[#7A2E1D]">
+            <span className="flex items-center gap-2"><AlertTriangle size={15} />Concurrent edits touched the same field: {collaboration.conflicts.at(-1)?.keys.join(", ")}. Server order is shown. Review before saving.</span>
+            <button type="button" onClick={collaboration.dismissConflicts} className="shrink-0 rounded-md border border-[#D98A76] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFE4DC]">Dismiss</button>
+          </div>
+        ) : null}
+        {collaborationError ? (
+          <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#D98A76] bg-[#FFF0EC] px-4 py-3 text-xs text-[#7A2E1D]">
+            <span className="flex items-center gap-2"><AlertTriangle size={15} />{collaborationError}</span>
+            <button type="button" onClick={() => setCollaborationError(null)} className="shrink-0 rounded-md border border-[#D98A76] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFE4DC]">Dismiss</button>
+          </div>
+        ) : null}
         <div className="mx-auto mb-3 flex max-w-[1080px] items-center justify-between text-[#596159]">
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]"><MousePointer2 size={13} /> Select any element to edit its real node</div>
           <div className="flex items-center gap-1">
+            {projectId ? (
+              <button type="button" onClick={() => collaboration.status === "offline" ? void collaboration.retry() : undefined} className="mr-1 flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[9px] uppercase tracking-[0.08em] hover:bg-[#DDE1D9]" title={collaboration.status === "offline" ? "Reconnect collaboration" : "Authenticated project collaboration"}>
+                {collaboration.status === "offline" ? <WifiOff size={13} className="text-[#B93815]" /> : <Wifi size={13} className={collaboration.status === "synced" ? "text-[#27834F]" : "text-[#B87912]"} />}
+                {collaboration.status === "synced" ? "Live" : collaboration.status === "offline" ? "Offline" : "Syncing"}
+                <Users size={12} />{collaboration.presence.length + 1}
+                <span className="flex -space-x-1">
+                  {collaboration.presence.slice(0, 3).map((entry) => <span key={entry.sessionId} className="h-2.5 w-2.5 rounded-full border border-white" style={{ background: entry.color }} title={`Editing ${entry.selectionId ?? "document"}`} />)}
+                </span>
+              </button>
+            ) : null}
             <button type="button" onClick={undo} disabled={!past.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Undo"><Undo2 size={14} /></button>
             <button type="button" onClick={redo} disabled={!future.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Redo"><Redo2 size={14} /></button>
             <button type="button" onClick={resetDocument} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Reset sample"><RotateCcw size={14} /></button>

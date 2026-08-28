@@ -2,11 +2,12 @@
 
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
-import { projects, revisions } from "@/lib/db/schema";
+import { projectCollaborators, projects, revisions } from "@/lib/db/schema";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
 import { hasEngineV2VersionConflict, nextEngineV2UpdatedAt, type EngineV2RestoreResult, type EngineV2SaveResult } from "@/lib/engine-v2/persistence";
 import { revisionIdsBeyondLimit } from "@/lib/engine-v2/revision-retention";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
+import { canEditProject, resolveProjectAccess } from "@/lib/project-access";
 import { and, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
@@ -27,6 +28,27 @@ async function engineContext() {
   const email = session?.user?.email;
   if (!email) throw new Error("Unauthorized");
   return ensureUserAndWorkspace(email);
+}
+
+async function editableEngineProject(id: string) {
+  const { workspace, user } = await engineContext();
+  const [project] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
+  if (!project || project.diagramType !== "engine-v2") throw new Error("Project not found");
+  const [collaborator] = project.workspaceId === workspace.id ? [] : await db.select({ role: projectCollaborators.role })
+    .from(projectCollaborators)
+    .where(and(eq(projectCollaborators.projectId, id), eq(projectCollaborators.userId, user.id)))
+    .limit(1);
+  const access = resolveProjectAccess(project.workspaceId, workspace.id, collaborator?.role);
+  if (!canEditProject(access)) throw new Error("Project not found");
+  return { project, user };
+}
+
+export async function getEditableEngineV2Project(id: string) {
+  try {
+    return (await editableEngineProject(id)).project;
+  } catch {
+    return null;
+  }
 }
 
 async function pruneEngineV2Revisions(projectId: string) {
@@ -73,10 +95,8 @@ export async function saveEngineV2Project(
   expectedUpdatedAt: string,
   label = "Manual edit",
 ): Promise<EngineV2SaveResult> {
-  const { workspace, user } = await engineContext();
+  const { project, user } = await editableEngineProject(id);
   const normalized = validSource(source);
-  const [project] = await db.select().from(projects).where(eq(projects.id, id)).limit(1);
-  if (!project || project.workspaceId !== workspace.id || project.diagramType !== "engine-v2") throw new Error("Project not found");
   const expected = new Date(expectedUpdatedAt);
   if (Number.isNaN(expected.getTime())) throw new Error("Invalid project version");
   if (hasEngineV2VersionConflict(expectedUpdatedAt, project.updatedAt)) {
@@ -98,9 +118,11 @@ export async function saveEngineV2Project(
 }
 
 export async function listEngineV2Revisions(projectId: string) {
-  const { workspace } = await engineContext();
-  const [project] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
-  if (!project || project.workspaceId !== workspace.id || project.diagramType !== "engine-v2") return [];
+  try {
+    await editableEngineProject(projectId);
+  } catch {
+    return [];
+  }
   return db.select({ id: revisions.id, label: revisions.label, createdAt: revisions.createdAt })
     .from(revisions).where(eq(revisions.projectId, projectId)).orderBy(desc(revisions.createdAt)).limit(50);
 }
@@ -110,9 +132,7 @@ export async function restoreEngineV2Revision(
   revisionId: string,
   expectedUpdatedAt: string,
 ): Promise<EngineV2RestoreResult> {
-  const { workspace, user } = await engineContext();
-  const [project] = await db.select().from(projects).where(eq(projects.id, projectId)).limit(1);
-  if (!project || project.workspaceId !== workspace.id || project.diagramType !== "engine-v2") throw new Error("Project not found");
+  const { project, user } = await editableEngineProject(projectId);
   const [revision] = await db.select().from(revisions).where(and(eq(revisions.id, revisionId), eq(revisions.projectId, projectId))).limit(1);
   if (!revision) throw new Error("Revision not found");
   const source = validSource(revision.source);

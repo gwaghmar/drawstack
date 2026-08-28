@@ -17,7 +17,7 @@ import {
   type ProjectAccess,
 } from "@/lib/project-access";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
-import { parseEngineTransactionEnvelope, type EngineEditCursor, type EngineTransactionEnvelope, type EngineTransactionRecord } from "@/lib/engine-v2/collaboration";
+import { engineTransactionRecordId, parseEngineTransactionEnvelope, type EngineEditCursor, type EngineTransactionEnvelope, type EngineTransactionRecord } from "@/lib/engine-v2/collaboration";
 import { asc, eq, and, gt, or } from "drizzle-orm";
 
 async function getProjectAccess(projectId: string): Promise<{
@@ -252,7 +252,7 @@ export async function submitEngineV2Transaction(
     const context = await getProjectAccess(projectId);
     if (!context || !canEditProject(context.access)) return { success: false, error: "Editor access required" };
     if (!parseEngineTransactionEnvelope(JSON.stringify(envelope))) return { success: false, error: "Invalid Engine v2 transaction" };
-    const recordId = `${projectId}:${envelope.transaction.id}`;
+    const recordId = engineTransactionRecordId(projectId, envelope.transaction.id);
 
     const existing = await db.select({ id: projectEdits.id }).from(projectEdits)
       .where(eq(projectEdits.id, recordId))
