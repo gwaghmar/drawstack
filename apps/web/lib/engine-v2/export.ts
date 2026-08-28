@@ -381,7 +381,102 @@ function documentBody(document: EngineDocument): string {
   return `<main class="engine-artboard" data-engine="dom-css" data-version="2" style="${escapeMarkup(documentVariables(document))};background:${escapeMarkup(resolveColor(document.artboard.background, document.tokens) ?? color(document.tokens, "paper"))};min-height:${document.artboard.minHeight}px">${document.children.map((node) => nodeHtml(node, document.tokens)).join("")}</main>`;
 }
 
-export function engineV2ExportFilename(name: string, extension: "json" | "svg" | "html"): string {
+function reactStyle(style: EngineStyle | undefined, tokens: EngineTokens): Record<string, string | number> {
+  if (!style) return {};
+  const output: Record<string, string | number> = {};
+  const background = resolveColor(style.background, tokens);
+  const foreground = resolveColor(style.color, tokens);
+  const borderColor = resolveColor(style.borderColor, tokens);
+  if (background) output.background = cssValue(background);
+  if (foreground) output.color = cssValue(foreground);
+  if (borderColor) output.borderColor = cssValue(borderColor);
+  if (Number.isFinite(style.borderWidth)) {
+    output.borderWidth = style.borderWidth!;
+    output.borderStyle = "solid";
+  }
+  if (Number.isFinite(style.borderRadius)) output.borderRadius = style.borderRadius!;
+  if (Number.isFinite(style.minHeight)) output.minHeight = style.minHeight!;
+  if (typeof style.width === "number" && Number.isFinite(style.width)) output.width = style.width;
+  if (typeof style.width === "string" && /^(?:100|[1-9]?\d)%$/.test(style.width)) output.width = style.width;
+  if (Number.isFinite(style.flex)) output.flex = style.flex!;
+  if (style.alignSelf) output.alignSelf = cssValue(style.alignSelf);
+  return output;
+}
+
+function frameReactStyle(node: EngineFrameNode, tokens: EngineTokens): Record<string, string | number> {
+  const style: Record<string, string | number> = node.layout.mode === "grid"
+    ? { display: "grid", gridTemplateColumns: `repeat(${node.layout.columns ?? 1}, minmax(0, 1fr))` }
+    : { display: "flex", flexDirection: node.layout.direction ?? "row" };
+  style.gap = node.layout.gap;
+  style.padding = node.layout.padding;
+  if (node.layout.align) style.alignItems = cssValue(node.layout.align);
+  if (node.layout.justify) style.justifyContent = cssValue(node.layout.justify);
+  return { ...style, ...reactStyle(node.style, tokens) };
+}
+
+function svgMarkupToJsx(markup: string): string {
+  const attributes: Record<string, string> = {
+    class: "className",
+    "fill-opacity": "fillOpacity",
+    "font-size": "fontSize",
+    "font-weight": "fontWeight",
+    "marker-end": "markerEnd",
+    "stroke-dasharray": "strokeDasharray",
+    "stroke-dashoffset": "strokeDashoffset",
+    "stroke-linecap": "strokeLinecap",
+    "stroke-linejoin": "strokeLinejoin",
+    "stroke-width": "strokeWidth",
+    "text-anchor": "textAnchor",
+  };
+  return Object.entries(attributes).reduce(
+    (output, [htmlName, jsxName]) => output.replace(new RegExp(`\\b${htmlName}=`, "g"), `${jsxName}=`),
+    markup,
+  );
+}
+
+function indent(value: string, depth: number): string {
+  const padding = "  ".repeat(depth);
+  return value.split("\n").map((line) => `${padding}${line}`).join("\n");
+}
+
+function reactNode(node: EngineNode, tokens: EngineTokens, depth: number): string {
+  const padding = "  ".repeat(depth);
+  const id = JSON.stringify(node.id);
+  if (node.type === "frame") {
+    const children = node.children.map((child) => reactNode(child, tokens, depth + 1)).join("\n");
+    return `${padding}<div className="engine-frame" data-node-id={${id}} data-layout="${node.layout.mode}" data-direction="${node.layout.direction ?? ""}" style={${JSON.stringify(frameReactStyle(node, tokens))}}>\n${children}\n${padding}</div>`;
+  }
+  const style = JSON.stringify(reactStyle(node.style, tokens));
+  if (node.type === "text") {
+    return `${padding}<div className="engine-text-${node.variant}" data-node-id={${id}} style={${style}}>{${JSON.stringify(node.content)}}</div>`;
+  }
+  if (node.type === "metric") {
+    const accent = node.tone === "positive" ? color(tokens, "cobalt") : node.tone === "warning" ? color(tokens, "orange") : color(tokens, "ink");
+    return `${padding}<section className="engine-card" data-node-id={${id}} style={${style}}>\n${padding}  <div className="engine-metric-label">{${JSON.stringify(node.label)}}</div>\n${padding}  <div className="engine-metric-value" style={${JSON.stringify({ color: accent })}}>{${JSON.stringify(node.value)}}</div>\n${padding}  <div className="engine-metric-detail">{${JSON.stringify(node.detail)}}</div>\n${padding}</section>`;
+  }
+  const badge = node.type === "graph" ? "deterministic graph" : `deterministic ${node.chartType}`;
+  const graphic = svgMarkupToJsx(node.type === "graph" ? graphSvg(node, tokens) : chartSvg(node, tokens));
+  return `${padding}<section className="engine-card" data-node-id={${id}} style={${style}}>\n${padding}  <div className="engine-card-header">\n${padding}    <h2 className="engine-card-title">{${JSON.stringify(node.title)}}</h2>\n${padding}    <span className="engine-badge">${badge}</span>\n${padding}  </div>\n${indent(graphic, depth + 1)}\n${padding}</section>`;
+}
+
+function componentName(name: string): string {
+  const words = name.match(/[a-zA-Z0-9]+/g) ?? [];
+  const joined = words.map((word) => `${word[0].toUpperCase()}${word.slice(1)}`).join("");
+  const safe = joined && /^[a-zA-Z]/.test(joined) ? joined : `Drawstack${joined}`;
+  return `${safe || "Drawstack"}Graphic`;
+}
+
+function reactCss(document: EngineDocument): string {
+  const componentCss = EXPORT_CSS
+    .replace("*{box-sizing:border-box}\nhtml,body{margin:0;padding:0}\nbody{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink);background:var(--paper);-webkit-print-color-adjust:exact;print-color-adjust:exact}\n", "")
+    .replace(
+      ".engine-artboard{width:100%;min-height:100%;overflow:hidden}",
+      `.engine-artboard,.engine-artboard *{box-sizing:border-box}\n.engine-artboard{${documentVariables(document)};width:100%;min-height:100%;overflow:hidden;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,\"Segoe UI\",sans-serif;color:var(--ink);-webkit-print-color-adjust:exact;print-color-adjust:exact}`,
+    );
+  return componentCss.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$\{/g, "\\${");
+}
+
+export function engineV2ExportFilename(name: string, extension: "json" | "svg" | "html" | "tsx"): string {
   const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "drawstack";
   return `${slug}.${extension}`;
 }
@@ -419,6 +514,28 @@ export function createEngineV2PrintHtmlExport(document: EngineDocument): EngineV
     filename: engineV2ExportFilename(document.name, "html"),
     mimeType: "text/html;charset=utf-8",
     contents: serializeEngineV2PrintHtml(document),
+  };
+}
+
+export function serializeEngineV2ReactTsx(document: EngineDocument): string {
+  const name = componentName(document.name);
+  const rootStyle = {
+    width: "100%",
+    maxWidth: document.artboard.width,
+    minHeight: document.artboard.minHeight,
+    margin: "0 auto",
+    overflow: "hidden",
+    background: resolveColor(document.artboard.background, document.tokens) ?? color(document.tokens, "paper"),
+  };
+  const children = document.children.map((node) => reactNode(node, document.tokens, 2)).join("\n");
+  return `export default function ${name}() {\n  return (\n    <main className="engine-artboard" data-engine="dom-css" data-version={2} style={${JSON.stringify(rootStyle)}}>\n      <style>{\`${reactCss(document)}\`}</style>\n${children}\n    </main>\n  );\n}\n`;
+}
+
+export function createEngineV2ReactTsxExport(document: EngineDocument): EngineV2ExportPayload {
+  return {
+    filename: engineV2ExportFilename(document.name, "tsx"),
+    mimeType: "text/typescript;charset=utf-8",
+    contents: serializeEngineV2ReactTsx(document),
   };
 }
 

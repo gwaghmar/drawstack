@@ -20,8 +20,8 @@ import {
   type EngineTokens,
 } from "@/lib/engine-v2/document";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
-import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 import { duplicateNode, findParent, moveNodeDown, moveNodeToParent, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
+import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 
 function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
   const layout = node.layout;
@@ -499,6 +499,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             <button type="button" onClick={() => downloadPayload(createEngineV2SvgExport(document))} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">SVG</button>
             <button type="button" onClick={printPdf} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">PDF</button>
             <button type="button" onClick={() => downloadPayload(createEngineV2JsonExport(document))} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">JSON</button>
+            <button type="button" onClick={() => downloadPayload(createEngineV2ReactTsxExport(document))} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]" title="Export a self-contained React component">TSX</button>
             <span className="ml-2 font-mono text-[10px]">1080 × auto</span>
           </div>
         </div>

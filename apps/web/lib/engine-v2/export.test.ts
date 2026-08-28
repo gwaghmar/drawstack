@@ -4,9 +4,11 @@ import type { EngineDocument } from "./document.ts";
 import {
   createEngineV2JsonExport,
   createEngineV2PrintHtmlExport,
+  createEngineV2ReactTsxExport,
   createEngineV2SvgExport,
   engineV2ExportFilename,
   serializeEngineV2PrintHtml,
+  serializeEngineV2ReactTsx,
   serializeEngineV2Svg,
   supportedEngineV2ExportChartTypes,
 } from "./export.ts";
@@ -127,5 +129,30 @@ describe("serializeEngineV2PrintHtml", () => {
     const payload = createEngineV2PrintHtmlExport(exportDocument());
     assert.equal(payload.mimeType, "text/html;charset=utf-8");
     assert.equal(payload.filename, "quarterly-revenue-flow.html");
+  });
+});
+
+describe("serializeEngineV2ReactTsx", () => {
+  it("creates a self-contained React component with editable JSX nodes", () => {
+    const tsx = serializeEngineV2ReactTsx(exportDocument());
+    assert.match(tsx, /^export default function QuarterlyRevenueFlowGraphic\(\)/);
+    assert.match(tsx, /<main className="engine-artboard"/);
+    assert.match(tsx, /<div className="engine-frame"/);
+    assert.match(tsx, /<svg className="engine-chart"/);
+    assert.match(tsx, /<svg className="engine-graph"/);
+    assert.match(tsx, /strokeWidth="3"/);
+    assert.match(tsx, /\{"Revenue < target"\}/);
+    assert.match(tsx, /\.engine-artboard,.engine-artboard \*\{box-sizing:border-box\}/);
+    assert.doesNotMatch(tsx, /dangerouslySetInnerHTML/);
+    assert.doesNotMatch(tsx, /@\/|@components|@lib/);
+    assert.doesNotMatch(tsx, /html,body|(?:^|\n)body\{/);
+  });
+
+  it("creates a deterministic TSX download payload", () => {
+    const first = createEngineV2ReactTsxExport(exportDocument());
+    const second = createEngineV2ReactTsxExport(exportDocument());
+    assert.deepEqual(first, second);
+    assert.equal(first.filename, "quarterly-revenue-flow.tsx");
+    assert.equal(first.mimeType, "text/typescript;charset=utf-8");
   });
 });
