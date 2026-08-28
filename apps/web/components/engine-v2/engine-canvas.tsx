@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, ArrowDown, ArrowUp, Check, ClipboardPaste, Code2, Copy, CopyPlus, Download, FileDown, GripVertical, History, Layers3, Loader2, MousePointer2, PanelRight, Plus, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, Users, Wifi, WifiOff, X } from "lucide-react";
 import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
@@ -262,7 +263,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [collaborationError, setCollaborationError] = useState<string | null>(null);
   const [openDrawer, setOpenDrawer] = useState<"layers" | "inspect" | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
+  const [shareState, setShareState] = useState<"idle" | "sharing" | "link-copied" | "embed-copied" | "error">("idle");
   const [treeDraggedId, setTreeDraggedId] = useState<string | null>(null);
   const [treeDropTarget, setTreeDropTarget] = useState<TreeDropTarget | null>(null);
   const [selectedBounds, setSelectedBounds] = useState<SelectedBounds | null>(null);
@@ -499,7 +500,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     }
   };
 
-  const shareDocument = async () => {
+  const shareDocument = async (kind: "link" | "embed") => {
     setShareState("sharing");
     try {
       const currentDocument = documentRef.current;
@@ -524,12 +525,20 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       }
       let preview: string | undefined;
       if (artboardRef.current) {
-        const { toPng } = await import("html-to-image");
-        preview = await toPng(artboardRef.current, { pixelRatio: 1, cacheBust: true });
+        try {
+          const { toPng } = await import("html-to-image");
+          preview = await toPng(artboardRef.current, { pixelRatio: 1, cacheBust: true });
+        } catch {
+          preview = undefined;
+        }
       }
       const token = await createShareLink(id, preview);
-      await navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
-      setShareState("copied");
+      const sharedUrl = `${window.location.origin}/${kind === "embed" ? "embed" : "s"}/${token}`;
+      const clipboardValue = kind === "embed"
+        ? `<iframe src="${sharedUrl}" title="drawxyz visual" loading="lazy" style="width:100%;height:720px;border:0" allowfullscreen></iframe>`
+        : sharedUrl;
+      await navigator.clipboard.writeText(clipboardValue);
+      setShareState(kind === "embed" ? "embed-copied" : "link-copied");
       window.setTimeout(() => setShareState("idle"), 1800);
     } catch {
       setShareState("error");
@@ -903,7 +912,17 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <span className="max-[420px]:sr-only">{generating ? "Compiling" : "Generate"}</span>
             </button>
           </div>
-          {generationError ? <p role="alert" className="px-3 pb-1 pt-2 text-xs text-[#B93815]">{generationError}</p> : null}
+          {generationError ? (
+            <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3 pb-1 pt-2 text-xs text-[#B93815]">
+              <span>{generationError}</span>
+              {generationError.toLowerCase().includes("credit") ? (
+                <span className="flex items-center gap-2">
+                  <Link href="/app/settings" className="font-semibold underline underline-offset-2">Add AI key</Link>
+                  <Link href="/app/billing" className="font-semibold underline underline-offset-2">Upgrade</Link>
+                </span>
+              ) : null}
+            </div>
+          ) : null}
         </form>
         {hasPersistenceConflict ? (
           <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#E6A23C] bg-[#FFF8E8] px-4 py-3 text-xs text-[#6E4A00]">
@@ -950,7 +969,8 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <button type="button" onClick={() => importRef.current?.click()} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Import Engine v2 JSON"><Upload size={14} /></button>
               <button type="button" onClick={() => setHistoryOpen(true)} disabled={!projectId} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Version history"><History size={14} /></button>
               <button type="button" onClick={saveDocument} disabled={saveState === "saving" || hasPersistenceConflict} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Save size={13} />{saveState === "saving" ? "Saving" : saveState === "saved" ? "Saved" : saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : projectId ? "Save" : "Save project"}</button>
-              <button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Share2 size={13} />{shareState === "sharing" ? "Sharing" : shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}</button>
+              <button type="button" onClick={() => shareDocument("link")} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Share2 size={13} />{shareState === "sharing" ? "Sharing" : shareState === "link-copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}</button>
+              <button type="button" onClick={() => shareDocument("embed")} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Code2 size={13} />{shareState === "sharing" ? "Preparing" : shareState === "embed-copied" ? "Embed copied" : shareState === "error" ? "Embed failed" : "Embed"}</button>
             </div>
             <div className="hidden shrink-0 items-center gap-0.5 rounded-lg border border-[#CED3CA] bg-[#F7F8F4] p-1 xl:flex">
               <button type="button" onClick={exportPng} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]"><Download size={13} />PNG</button>

@@ -38,8 +38,7 @@ export function AppHeader({ creditsLabel, showAdmin, headerIdentity, signOutActi
         {/* Desktop nav */}
         <nav className="hidden md:flex" style={{ alignItems: "center", gap: 20 }}>
           <Link href="/app" style={navLinkStyle}>Projects</Link>
-          <Link href="/app/editor" style={navLinkStyle}>Editor</Link>
-          <Link href="/app/engine-v2" style={navLinkStyle}>Engine v2</Link>
+          <Link href="/app/engine-v2" style={navLinkStyle}>Studio</Link>
           {creditsLabel && (
             <span style={badgeStyle}>{creditsLabel}</span>
           )}
@@ -57,13 +56,13 @@ export function AppHeader({ creditsLabel, showAdmin, headerIdentity, signOutActi
               Sign out
             </button>
           </form>
-          <Link href="/app/editor" style={ctaStyle}>Open editor →</Link>
+          <Link href="/app/engine-v2" style={ctaStyle}>New visual →</Link>
         </nav>
 
         {/* Mobile right side */}
         <div className="flex md:hidden" style={{ alignItems: "center", gap: 10 }}>
-          <Link href="/app/editor" style={{ ...ctaStyle, fontSize: 11, padding: "5px 10px" }}>
-            Open editor →
+          <Link href="/app/engine-v2" style={{ ...ctaStyle, fontSize: 11, padding: "5px 10px" }}>
+            New visual →
           </Link>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
@@ -105,8 +104,7 @@ export function AppHeader({ creditsLabel, showAdmin, headerIdentity, signOutActi
             <span style={{ ...badgeStyle, alignSelf: "flex-start" }}>{creditsLabel}</span>
           )}
           <Link href="/app" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Projects</Link>
-          <Link href="/app/editor" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Editor</Link>
-          <Link href="/app/engine-v2" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Engine v2</Link>
+          <Link href="/app/engine-v2" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Studio</Link>
           {showAdmin && (
             <Link href="/app/admin" onClick={() => setMenuOpen(false)} style={mobileNavLinkStyle}>Admin</Link>
           )}

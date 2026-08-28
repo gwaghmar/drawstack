@@ -33,7 +33,7 @@ export function LandingHeader({ isLoggedIn, editorHref }: Props) {
         {/* Desktop nav */}
         <nav className="hidden sm:flex" style={{ alignItems: "center", gap: 28 }}>
           {["Pricing", "Docs", "Templates"].map((label) => (
-            <Link key={label} href={`/${label.toLowerCase()}`} style={{ fontFamily: "var(--font-mono-fs)", fontSize: 13, color: "var(--charcoal-light)", textDecoration: "none", letterSpacing: "0.01em" }}>
+            <Link key={label} href={label === "Templates" ? "/app/templates" : `/${label.toLowerCase()}`} style={{ fontFamily: "var(--font-mono-fs)", fontSize: 13, color: "var(--charcoal-light)", textDecoration: "none", letterSpacing: "0.01em" }}>
               {label}
             </Link>
           ))}
@@ -51,7 +51,7 @@ export function LandingHeader({ isLoggedIn, editorHref }: Props) {
             className="fs-btn-press"
             style={{ fontFamily: "var(--font-mono-fs)", fontSize: 13, letterSpacing: "0.04em", background: "var(--charcoal)", color: "#fff", padding: "8px 18px", borderRadius: 2, textDecoration: "none", display: "inline-block" }}
           >
-            Open editor →
+            Open studio →
           </Link>
         </nav>
 
@@ -61,7 +61,7 @@ export function LandingHeader({ isLoggedIn, editorHref }: Props) {
             href={editorHref}
             style={{ fontFamily: "var(--font-mono-fs)", fontSize: 11, letterSpacing: "0.04em", background: "var(--charcoal)", color: "#fff", padding: "6px 12px", borderRadius: 2, textDecoration: "none" }}
           >
-            Open editor →
+            Open studio →
           </Link>
           <button
             onClick={() => setMenuOpen(!menuOpen)}
@@ -102,7 +102,7 @@ export function LandingHeader({ isLoggedIn, editorHref }: Props) {
           {["Pricing", "Docs", "Templates"].map((label) => (
             <Link
               key={label}
-              href={`/${label.toLowerCase()}`}
+              href={label === "Templates" ? "/app/templates" : `/${label.toLowerCase()}`}
               onClick={() => setMenuOpen(false)}
               style={{ fontFamily: "var(--font-mono-fs)", fontSize: 14, color: "var(--charcoal)", textDecoration: "none" }}
             >

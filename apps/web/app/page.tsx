@@ -17,8 +17,8 @@ export default async function HomePage() {
   const isLoggedIn = Boolean(session?.user?.email);
 
   const editorHref = isLoggedIn
-    ? "/app/editor"
-    : "/login?callbackUrl=" + encodeURIComponent("/app/editor");
+    ? "/app/engine-v2"
+    : "/login?callbackUrl=" + encodeURIComponent("/app/engine-v2");
 
   return (
     <div style={{ background: "var(--cream)", minHeight: "100vh" }}>
@@ -50,11 +50,11 @@ export default async function HomePage() {
           <div style={{ display: "flex", gap: 12, justifyContent: "center", marginBottom: 16 }}>
             {isLoggedIn ? (
               <Link
-                href="/app/editor"
+                href="/app/engine-v2"
                 className="fs-btn-press"
                 style={{ fontFamily: "var(--font-mono-fs)", fontSize: 13, letterSpacing: "0.05em", textTransform: "uppercase", background: "var(--charcoal)", color: "#fff", border: "1.5px solid var(--charcoal)", padding: "13px 28px", borderRadius: 2, textDecoration: "none" }}
               >
-                Open editor →
+                Open studio →
               </Link>
             ) : (
               <a
@@ -96,9 +96,9 @@ export default async function HomePage() {
           </h2>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 20, maxWidth: 860, margin: "0 auto" }}>
             {[
-              { icon: "✦", title: "AI builds it live", desc: "Describe what you need — AI places real, editable shapes directly on the canvas, instantly." },
-              { icon: "⌨", title: "Edit with source or canvas", desc: "Tweak the AI output in the source editor or drag nodes directly. Every change is live-previewed." },
-              { icon: "↗", title: "Export anywhere", desc: "PNG, SVG, PDF, or ZIP at any size. Sized for LinkedIn posts, pitch decks, docs, or presentations." },
+              { icon: "✦", title: "AI builds the document", desc: "Describe the outcome. AI creates editable structure, charts, metrics, and connected graphs." },
+              { icon: "⌨", title: "Edit every real node", desc: "Resize, reorder, align, duplicate, and edit content without flattening the result into a picture." },
+              { icon: "↗", title: "Export the same result", desc: "Download PNG, SVG, PDF, JSON, or editable React / TSX from the document you reviewed." },
             ].map(({ icon, title, desc }) => (
               <div key={title} style={{ background: "white", border: "1.5px solid var(--fs-border)", borderRadius: 4, padding: "28px 24px" }}>
                 <div style={{ width: 36, height: 36, background: "var(--fs-indigo-bg)", borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16, fontSize: 18 }}>{icon}</div>
@@ -145,7 +145,7 @@ export default async function HomePage() {
             className="fs-btn-press"
             style={{ fontFamily: "var(--font-mono-fs)", fontSize: 13, letterSpacing: "0.05em", textTransform: "uppercase", background: "white", color: "var(--charcoal)", border: "1.5px solid white", padding: "13px 28px", borderRadius: 2, textDecoration: "none", display: "inline-block" }}
           >
-            Open editor →
+            Open studio →
           </Link>
         </div>
 

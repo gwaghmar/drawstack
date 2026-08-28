@@ -92,3 +92,16 @@ test("billing checkout failure is visible and retryable", async ({ page }) => {
   await expect(checkout).toBeEnabled();
   expect(errors).toEqual([]);
 });
+
+test("no-credit generation error exposes recovery actions", async ({ page }) => {
+  await page.route("**/api/ai/engine-v2", (route) => route.fulfill({
+    status: 402,
+    contentType: "application/json",
+    body: JSON.stringify({ error: "No credits left. Add your own AI key or upgrade." }),
+  }));
+  await page.goto("/app/engine-v2");
+  await page.getByRole("button", { name: "Generate", exact: true }).click();
+  await expect(page.getByText("No credits left. Add your own AI key or upgrade.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Add AI key" })).toHaveAttribute("href", "/app/settings");
+  await expect(page.getByRole("link", { name: "Upgrade" })).toHaveAttribute("href", "/app/billing");
+});
