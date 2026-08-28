@@ -17,7 +17,8 @@ import {
   type ProjectAccess,
 } from "@/lib/project-access";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
-import { eq, and } from "drizzle-orm";
+import { parseEngineTransactionEnvelope, type EngineEditCursor, type EngineTransactionEnvelope, type EngineTransactionRecord } from "@/lib/engine-v2/collaboration";
+import { asc, eq, and, gt, or } from "drizzle-orm";
 
 async function getProjectAccess(projectId: string): Promise<{
   access: ProjectAccess;
@@ -240,5 +241,94 @@ export async function getProjectEdits(projectId: string, since?: Date) {
   } catch (err) {
     console.error("[getProjectEdits]", err);
     return [];
+  }
+}
+
+export async function submitEngineV2Transaction(
+  projectId: string,
+  envelope: EngineTransactionEnvelope,
+): Promise<{ success: true; duplicate: boolean } | { success: false; error: string }> {
+  try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canEditProject(context.access)) return { success: false, error: "Editor access required" };
+    if (!parseEngineTransactionEnvelope(JSON.stringify(envelope))) return { success: false, error: "Invalid Engine v2 transaction" };
+    const recordId = `${projectId}:${envelope.transaction.id}`;
+
+    const existing = await db.select({ id: projectEdits.id }).from(projectEdits)
+      .where(eq(projectEdits.id, recordId))
+      .limit(1);
+    if (existing.length) return { success: true, duplicate: true };
+
+    const inserted = await db.insert(projectEdits).values({
+      id: recordId,
+      projectId,
+      userId: context.userId,
+      operation: "engine-v2-transaction",
+      operationData: JSON.stringify(envelope),
+      clientId: envelope.clientId,
+      lamportTimestamp: Math.floor(Date.now() / 1000),
+    }).onConflictDoNothing({ target: projectEdits.id }).returning({ id: projectEdits.id });
+
+    return { success: true, duplicate: inserted.length === 0 };
+  } catch (err) {
+    console.error("[submitEngineV2Transaction]", err);
+    return { success: false, error: "Failed to record Engine v2 transaction" };
+  }
+}
+
+export async function pollEngineV2Collaboration(
+  projectId: string,
+  after: EngineEditCursor,
+): Promise<{
+  success: true;
+  records: EngineTransactionRecord[];
+  nextCursor: EngineEditCursor;
+  hasMore: boolean;
+  presence: Array<{ userId: string; sessionId: string; selectionId: string | null; color: string; lastHeartbeat: string }>;
+} | { success: false; error: string }> {
+  try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canReadProject(context.access)) return { success: false, error: "Project access required" };
+    const afterDate = new Date(after.createdAt);
+    if (Number.isNaN(afterDate.getTime())) return { success: false, error: "Invalid collaboration cursor" };
+
+    const rows = await db.select().from(projectEdits).where(and(
+      eq(projectEdits.projectId, projectId),
+      eq(projectEdits.operation, "engine-v2-transaction"),
+      or(
+        gt(projectEdits.createdAt, afterDate),
+        and(eq(projectEdits.createdAt, afterDate), gt(projectEdits.id, after.id)),
+      ),
+    )).orderBy(asc(projectEdits.createdAt), asc(projectEdits.id)).limit(201);
+    const page = rows.slice(0, 200);
+    const records = page.flatMap((row): EngineTransactionRecord[] => {
+      const envelope = parseEngineTransactionEnvelope(row.operationData);
+      if (!envelope) return [];
+      return [{ ...envelope, cursor: { createdAt: row.createdAt.toISOString(), id: row.id }, userId: row.userId }];
+    });
+    const last = page.at(-1);
+    const nextCursor = last ? { createdAt: last.createdAt.toISOString(), id: last.id } : after;
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const activePresence = await db.select().from(collaboratorPresence).where(and(
+      eq(collaboratorPresence.projectId, projectId),
+      gt(collaboratorPresence.lastHeartbeat, fiveMinutesAgo),
+    ));
+
+    return {
+      success: true,
+      records,
+      nextCursor,
+      hasMore: rows.length > page.length,
+      presence: activePresence.map((entry) => ({
+        userId: entry.userId,
+        sessionId: entry.sessionId,
+        selectionId: entry.selectionStart,
+        color: entry.color,
+        lastHeartbeat: entry.lastHeartbeat.toISOString(),
+      })),
+    };
+  } catch (err) {
+    console.error("[pollEngineV2Collaboration]", err);
+    return { success: false, error: "Failed to load Engine v2 collaboration updates" };
   }
 }
