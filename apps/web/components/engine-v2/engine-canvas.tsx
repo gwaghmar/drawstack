@@ -1,7 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, Code2, Copy, Download, Loader2, MousePointer2, RotateCcw, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, Check, Code2, Copy, CopyPlus, Download, History, Loader2, MousePointer2, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
+import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
+import { createShareLink } from "@/app/actions/share";
 import { DeterministicChart } from "@/components/engine-v2/charts";
 import { GraphRenderer } from "@/components/engine-v2/graph";
 import {
@@ -16,6 +19,9 @@ import {
   type EngineNode,
   type EngineTokens,
 } from "@/lib/engine-v2/document";
+import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
+import { duplicateNode, findParent, moveNodeDown, moveNodeUp, removeNode } from "@/lib/engine-v2/operations";
+import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 
 function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
   const layout = node.layout;
@@ -139,36 +145,70 @@ function Tree({ nodes, selectedId, depth = 0, onSelect }: { nodes: EngineNode[];
   );
 }
 
-export function EngineCanvas() {
-  const [document, setDocument] = useState<EngineDocument>(ENGINE_V2_SAMPLE);
+export function EngineDocumentView({ document, className = "" }: { document: EngineDocument; className?: string }) {
+  return (
+    <div className={className} data-engine-document="v2" style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}>
+      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedId="" onSelect={() => {}} />)}
+    </div>
+  );
+}
+
+export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjectId = null }: { initialDocument?: EngineDocument; initialProjectId?: string | null }) {
+  const router = useRouter();
+  const [document, setDocument] = useState<EngineDocument>(initialDocument);
+  const [projectId, setProjectId] = useState<string | null>(initialProjectId);
+  const [past, setPast] = useState<EngineDocument[]>([]);
+  const [future, setFuture] = useState<EngineDocument[]>([]);
   const [selectedId, setSelectedId] = useState("title");
   const [copied, setCopied] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [prompt, setPrompt] = useState("Create a concise product launch dashboard with revenue, conversion, and channel performance");
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
+  const [revisions, setRevisions] = useState<Array<{ id: string; label: string | null; createdAt: Date }>>([]);
   const artboardRef = useRef<HTMLDivElement>(null);
+  const importRef = useRef<HTMLInputElement>(null);
   const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
+  const storageKey = `drawstack.engine-v2.document.${projectId ?? "draft"}`;
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("drawstack.engine-v2.document");
+    const saved = projectId ? null : window.localStorage.getItem(storageKey);
     if (saved) {
       try {
         const parsed = JSON.parse(saved) as EngineDocument;
         if (parsed.version === 2 && parsed.engine === "dom-css") setDocument(parsed);
       } catch {
-        window.localStorage.removeItem("drawstack.engine-v2.document");
+        window.localStorage.removeItem(storageKey);
       }
     }
     setHydrated(true);
-  }, []);
+  }, [projectId, storageKey]);
 
   useEffect(() => {
-    if (hydrated) window.localStorage.setItem("drawstack.engine-v2.document", JSON.stringify(document));
-  }, [document, hydrated]);
+    if (hydrated) window.localStorage.setItem(storageKey, JSON.stringify(document));
+  }, [document, hydrated, storageKey]);
+
+  useEffect(() => {
+    if (!projectId || !historyOpen) return;
+    listEngineV2Revisions(projectId).then(setRevisions).catch(() => setRevisions([]));
+  }, [historyOpen, projectId, saveState]);
+
+  const commitDocument = (update: EngineDocument | ((current: EngineDocument) => EngineDocument)) => {
+    setDocument((current) => {
+      const next = typeof update === "function" ? update(current) : update;
+      if (next === current) return current;
+      setPast((items) => [...items.slice(-49), current]);
+      setFuture([]);
+      setSaveState("idle");
+      return next;
+    });
+  };
 
   const updateSelected = (update: (node: EngineNode) => EngineNode) => {
-    setDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
+    commitDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
   };
 
   const copyDocument = async () => {
@@ -178,9 +218,115 @@ export function EngineCanvas() {
   };
 
   const resetDocument = () => {
-    setDocument(ENGINE_V2_SAMPLE);
+    commitDocument(ENGINE_V2_SAMPLE);
     setSelectedId("title");
     setGenerationError(null);
+  };
+
+  const undo = () => {
+    const previous = past.at(-1);
+    if (!previous) return;
+    setPast((items) => items.slice(0, -1));
+    setFuture((items) => [document, ...items.slice(0, 49)]);
+    setDocument(previous);
+  };
+
+  const redo = () => {
+    const next = future[0];
+    if (!next) return;
+    setFuture((items) => items.slice(1));
+    setPast((items) => [...items.slice(-49), document]);
+    setDocument(next);
+  };
+
+  const saveDocument = async () => {
+    setSaveState("saving");
+    try {
+      if (projectId) {
+        await saveEngineV2Project(projectId, document.name, JSON.stringify(document), "Engine v2 save");
+      } else {
+        const id = await createEngineV2Project(document.name, JSON.stringify(document));
+        setProjectId(id);
+        router.replace(`/app/engine-v2?id=${id}`);
+      }
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+    }
+  };
+
+  const shareDocument = async () => {
+    setShareState("sharing");
+    try {
+      let id = projectId;
+      if (id) await saveEngineV2Project(id, document.name, JSON.stringify(document), "Shared version");
+      else {
+        id = await createEngineV2Project(document.name, JSON.stringify(document));
+        setProjectId(id);
+        router.replace(`/app/engine-v2?id=${id}`);
+      }
+      let preview: string | undefined;
+      if (artboardRef.current) {
+        const { toPng } = await import("html-to-image");
+        preview = await toPng(artboardRef.current, { pixelRatio: 1, cacheBust: true });
+      }
+      const token = await createShareLink(id, preview);
+      await navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
+      setShareState("copied");
+      window.setTimeout(() => setShareState("idle"), 1800);
+    } catch {
+      setShareState("error");
+    }
+  };
+
+  const importDocument = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const parsed = JSON.parse(await file.text()) as unknown;
+      const result = validateEngineV2Document(parsed);
+      if (!result.ok) throw new Error(result.issues[0]?.message || "Invalid document");
+      commitDocument(result.document);
+      setSelectedId(result.document.children[0]?.id ?? "");
+      setGenerationError(null);
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "Import failed");
+    } finally {
+      if (importRef.current) importRef.current.value = "";
+    }
+  };
+
+  const restoreRevision = async (revisionId: string) => {
+    if (!projectId) return;
+    try {
+      const source = await restoreEngineV2Revision(projectId, revisionId);
+      const result = validateEngineV2Document(JSON.parse(source) as unknown);
+      if (!result.ok) throw new Error("Stored revision is invalid");
+      commitDocument(result.document);
+      setHistoryOpen(false);
+      setSaveState("saved");
+    } catch {
+      setSaveState("error");
+    }
+  };
+
+  const duplicateSelected = () => {
+    const result = duplicateNode(document.children, selectedId);
+    if (result.nodes === document.children) return;
+    commitDocument({ ...document, children: result.nodes });
+    setSelectedId(result.duplicatedId);
+  };
+
+  const removeSelected = () => {
+    const location = findParent(document.children, selectedId);
+    if (!location || (location.parentId === null && document.children.length === 1)) return;
+    const next = removeNode(document.children, selectedId);
+    commitDocument({ ...document, children: next });
+    setSelectedId(location.parentId ?? next[0]?.id ?? "");
+  };
+
+  const moveSelected = (direction: "up" | "down") => {
+    const children = direction === "up" ? moveNodeUp(document.children, selectedId) : moveNodeDown(document.children, selectedId);
+    if (children !== document.children) commitDocument({ ...document, children });
   };
 
   const exportPng = async () => {
@@ -191,6 +337,23 @@ export function EngineCanvas() {
     link.download = `${document.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "drawstack"}.png`;
     link.href = dataUrl;
     link.click();
+  };
+
+  const downloadPayload = (payload: EngineV2ExportPayload) => {
+    const url = URL.createObjectURL(new Blob([payload.contents], { type: payload.mimeType }));
+    const link = window.document.createElement("a");
+    link.download = payload.filename;
+    link.href = url;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printPdf = () => {
+    const payload = createEngineV2PrintHtmlExport(document);
+    const url = URL.createObjectURL(new Blob([payload.contents], { type: payload.mimeType }));
+    const preview = window.open(url, "_blank", "noopener,noreferrer");
+    if (!preview) downloadPayload(payload);
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
   };
 
   const generateDocument = async (event: React.FormEvent) => {
@@ -207,7 +370,7 @@ export function EngineCanvas() {
       });
       const body = await response.json() as { document?: EngineDocument; error?: string };
       if (!response.ok || !body.document) throw new Error(body.error || "Generation failed");
-      setDocument(body.document);
+      commitDocument(body.document);
       setSelectedId(body.document.children[0]?.id ?? "");
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Generation failed");
@@ -251,8 +414,18 @@ export function EngineCanvas() {
         <div className="mx-auto mb-3 flex max-w-[1080px] items-center justify-between text-[#596159]">
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]"><MousePointer2 size={13} /> Select any element to edit its real node</div>
           <div className="flex items-center gap-1">
+            <button type="button" onClick={undo} disabled={!past.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Undo"><Undo2 size={14} /></button>
+            <button type="button" onClick={redo} disabled={!future.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Redo"><Redo2 size={14} /></button>
             <button type="button" onClick={resetDocument} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Reset sample"><RotateCcw size={14} /></button>
+            <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => importDocument(event.target.files?.[0])} />
+            <button type="button" onClick={() => importRef.current?.click()} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Import Engine v2 JSON"><Upload size={14} /></button>
+            <button type="button" onClick={() => setHistoryOpen(true)} disabled={!projectId} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Version history"><History size={14} /></button>
+            <button type="button" onClick={saveDocument} disabled={saveState === "saving"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Save size={13} />{saveState === "saving" ? "Saving" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : projectId ? "Save" : "Save project"}</button>
+            <button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Share2 size={13} />{shareState === "sharing" ? "Sharing" : shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}</button>
             <button type="button" onClick={exportPng} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]"><Download size={13} /> Export PNG</button>
+            <button type="button" onClick={() => downloadPayload(createEngineV2SvgExport(document))} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">SVG</button>
+            <button type="button" onClick={printPdf} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">PDF</button>
+            <button type="button" onClick={() => downloadPayload(createEngineV2JsonExport(document))} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">JSON</button>
             <span className="ml-2 font-mono text-[10px]">1080 × auto</span>
           </div>
         </div>
@@ -275,10 +448,47 @@ export function EngineCanvas() {
               <div><span className="text-[#3157F6]">name</span> {selected.name}</div>
             </div>
 
+            <div className="grid grid-cols-4 gap-2">
+              <button type="button" onClick={() => moveSelected("up")} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Move node up"><ArrowUp size={14} /></button>
+              <button type="button" onClick={() => moveSelected("down")} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Move node down"><ArrowDown size={14} /></button>
+              <button type="button" onClick={duplicateSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Duplicate node"><CopyPlus size={14} /></button>
+              <button type="button" onClick={removeSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 text-[#B93815] hover:border-[#B93815]" title="Delete node"><Trash2 size={14} /></button>
+            </div>
+
             {selected.type === "text" ? (
               <label className="block">
                 <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Text content</span>
                 <textarea value={selected.content} onChange={(event) => updateSelected((node) => node.type === "text" ? { ...node, content: event.target.value } : node)} rows={4} className="w-full resize-none rounded-lg border border-[#C8CEC4] bg-white p-3 text-sm outline-none focus:border-[#3157F6] focus:ring-2 focus:ring-[#3157F6]/15" />
+              </label>
+            ) : null}
+
+            {selected.type === "metric" ? (
+              <div className="space-y-3">
+                {(["label", "value", "detail"] as const).map((field) => (
+                  <label key={field} className="block">
+                    <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">{field}</span>
+                    <input value={selected[field]} onChange={(event) => updateSelected((node) => node.type === "metric" ? { ...node, [field]: event.target.value } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+
+            {selected.type === "chart" ? (
+              <label className="block">
+                <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart family</span>
+                <select value={selected.chartType} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, chartType: event.target.value as EngineChartNode["chartType"] } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
+                  {["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick"].map((type) => <option key={type} value={type}>{type}</option>)}
+                </select>
+              </label>
+            ) : null}
+
+            {selected.type === "graph" ? (
+              <label className="block">
+                <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Graph direction</span>
+                <select value={selected.graph.direction ?? "TB"} onChange={(event) => updateSelected((node) => node.type === "graph" ? { ...node, graph: { ...node.graph, direction: event.target.value as "TB" | "LR" } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
+                  <option value="TB">Top to bottom</option>
+                  <option value="LR">Left to right</option>
+                </select>
               </label>
             ) : null}
 
@@ -326,6 +536,23 @@ export function EngineCanvas() {
           </div>
         ) : <p className="text-sm text-[#667067]">Select a node on the canvas or in the structure tree.</p>}
       </aside>
+      {historyOpen ? (
+        <section className="fixed right-5 top-[72px] z-[80] w-[320px] rounded-xl border border-[#C8CEC4] bg-[#F7F8F4] p-3 shadow-2xl" aria-label="Version history">
+          <div className="flex items-center justify-between px-1 pb-3">
+            <div><div className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Version history</div><div className="mt-1 text-sm font-semibold">Restore a saved document</div></div>
+            <button type="button" onClick={() => setHistoryOpen(false)} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Close version history"><X size={15} /></button>
+          </div>
+          <div className="max-h-[420px] space-y-1 overflow-auto">
+            {revisions.map((revision) => (
+              <button key={revision.id} type="button" onClick={() => restoreRevision(revision.id)} className="flex w-full items-center justify-between rounded-lg border border-transparent px-3 py-2.5 text-left hover:border-[#C8CEC4] hover:bg-white">
+                <span className="text-xs font-medium">{revision.label || "Saved version"}</span>
+                <span className="font-mono text-[9px] text-[#667067]">{new Date(revision.createdAt).toLocaleString()}</span>
+              </button>
+            ))}
+            {!revisions.length ? <p className="px-3 py-6 text-center text-xs text-[#667067]">No saved versions yet.</p> : null}
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }

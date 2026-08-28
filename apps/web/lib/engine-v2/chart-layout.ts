@@ -1,8 +1,12 @@
 import {
   isCartesianDatum,
+  isCandlestickDatum,
+  isHeatmapDatum,
   isScatterDatum,
+  type CandlestickChartDatum,
   type CartesianChartDatum,
   type DeterministicChartDatum,
+  type HeatmapChartDatum,
   type ScatterChartDatum,
 } from "./chart-types.ts";
 
@@ -20,6 +24,15 @@ export type StackedSegment = {
   end: number;
 };
 
+export type TreemapRect = {
+  label: string;
+  value: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
 export function finiteCartesianData(data: DeterministicChartDatum[]): CartesianChartDatum[] {
   return data.filter((datum): datum is CartesianChartDatum =>
     isCartesianDatum(datum) && Number.isFinite(datum.value) && datum.label.trim().length > 0,
@@ -30,6 +43,24 @@ export function finiteScatterData(data: DeterministicChartDatum[]): ScatterChart
   return data.filter((datum): datum is ScatterChartDatum =>
     isScatterDatum(datum) && Number.isFinite(datum.x) && Number.isFinite(datum.y),
   );
+}
+
+export function finiteHeatmapData(data: DeterministicChartDatum[]): HeatmapChartDatum[] {
+  return data.filter((datum): datum is HeatmapChartDatum =>
+    isHeatmapDatum(datum) && Number.isFinite(datum.value) && datum.row.trim().length > 0 && datum.column.trim().length > 0,
+  );
+}
+
+export function finiteCandlestickData(data: DeterministicChartDatum[]): CandlestickChartDatum[] {
+  return data.filter((datum): datum is CandlestickChartDatum =>
+    isCandlestickDatum(datum)
+      && datum.label.trim().length > 0
+      && [datum.open, datum.high, datum.low, datum.close].every(Number.isFinite),
+  ).map((datum) => ({
+    ...datum,
+    high: Math.max(datum.high, datum.open, datum.low, datum.close),
+    low: Math.min(datum.low, datum.open, datum.high, datum.close),
+  }));
 }
 
 function niceStep(span: number, targetTicks: number): number {
@@ -141,4 +172,61 @@ export function areaPath(points: Array<{ x: number; y: number }>, baseline: numb
   const last = points[points.length - 1];
   const top = points.map((point) => `L${point.x},${point.y}`).join(" ");
   return `M${first.x},${baseline} ${top} L${last.x},${baseline} Z`;
+}
+
+export function polarPoint(cx: number, cy: number, radius: number, angle: number): { x: number; y: number } {
+  return { x: cx + Math.cos(angle) * radius, y: cy + Math.sin(angle) * radius };
+}
+
+export function interpolateHexColor(start: string, end: string, ratio: number): string {
+  const parse = (color: string) => {
+    const normalized = color.replace("#", "");
+    if (!/^[0-9a-f]{6}$/i.test(normalized)) return null;
+    return [0, 2, 4].map((offset) => Number.parseInt(normalized.slice(offset, offset + 2), 16));
+  };
+  const from = parse(start);
+  const to = parse(end);
+  if (!from || !to) return end;
+  const bounded = Math.min(Math.max(ratio, 0), 1);
+  return `#${from.map((channel, index) => Math.round(channel + (to[index] - channel) * bounded).toString(16).padStart(2, "0")).join("")}`;
+}
+
+export function layoutTreemap(
+  data: CartesianChartDatum[],
+  width: number,
+  height: number,
+): TreemapRect[] {
+  const items = data
+    .filter((datum) => datum.value > 0)
+    .map((datum) => ({ label: datum.label, value: datum.value }))
+    .sort((a, b) => b.value - a.value || a.label.localeCompare(b.label));
+  const rectangles: TreemapRect[] = [];
+
+  const place = (subset: typeof items, x: number, y: number, boxWidth: number, boxHeight: number) => {
+    if (subset.length === 0) return;
+    if (subset.length === 1) {
+      rectangles.push({ ...subset[0], x, y, width: boxWidth, height: boxHeight });
+      return;
+    }
+    const total = subset.reduce((sum, item) => sum + item.value, 0);
+    let splitIndex = 1;
+    let firstTotal = subset[0].value;
+    while (splitIndex < subset.length - 1 && firstTotal + subset[splitIndex].value <= total / 2) {
+      firstTotal += subset[splitIndex].value;
+      splitIndex += 1;
+    }
+    const ratio = firstTotal / total;
+    if (boxWidth >= boxHeight) {
+      const firstWidth = boxWidth * ratio;
+      place(subset.slice(0, splitIndex), x, y, firstWidth, boxHeight);
+      place(subset.slice(splitIndex), x + firstWidth, y, boxWidth - firstWidth, boxHeight);
+    } else {
+      const firstHeight = boxHeight * ratio;
+      place(subset.slice(0, splitIndex), x, y, boxWidth, firstHeight);
+      place(subset.slice(splitIndex), x, y + firstHeight, boxWidth, boxHeight - firstHeight);
+    }
+  };
+
+  place(items, 0, 0, Math.max(width, 0), Math.max(height, 0));
+  return rectangles;
 }

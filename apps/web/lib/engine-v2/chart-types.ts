@@ -4,7 +4,13 @@ export type DeterministicChartType =
   | "area"
   | "donut"
   | "scatter"
-  | "stacked-bar";
+  | "stacked-bar"
+  | "radar"
+  | "heatmap"
+  | "treemap"
+  | "funnel"
+  | "gauge"
+  | "candlestick";
 
 export type CartesianChartDatum = {
   label: string;
@@ -19,7 +25,25 @@ export type ScatterChartDatum = {
   series?: string;
 };
 
-export type DeterministicChartDatum = CartesianChartDatum | ScatterChartDatum;
+export type HeatmapChartDatum = {
+  row: string;
+  column: string;
+  value: number;
+};
+
+export type CandlestickChartDatum = {
+  label: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+};
+
+export type DeterministicChartDatum =
+  | CartesianChartDatum
+  | ScatterChartDatum
+  | HeatmapChartDatum
+  | CandlestickChartDatum;
 
 export type DeterministicChartPalette = {
   foreground: string;
@@ -39,6 +63,9 @@ export type DeterministicChartSpec = {
   yLabel?: string;
   showLegend?: boolean;
   showValues?: boolean;
+  minValue?: number;
+  maxValue?: number;
+  targetValue?: number;
   palette?: Partial<DeterministicChartPalette>;
   emptyMessage?: string;
 };
@@ -57,4 +84,12 @@ export function isScatterDatum(datum: DeterministicChartDatum): datum is Scatter
 
 export function isCartesianDatum(datum: DeterministicChartDatum): datum is CartesianChartDatum {
   return "value" in datum && "label" in datum;
+}
+
+export function isHeatmapDatum(datum: DeterministicChartDatum): datum is HeatmapChartDatum {
+  return "row" in datum && "column" in datum && "value" in datum;
+}
+
+export function isCandlestickDatum(datum: DeterministicChartDatum): datum is CandlestickChartDatum {
+  return "open" in datum && "high" in datum && "low" in datum && "close" in datum && "label" in datum;
 }

@@ -60,6 +60,8 @@ describe("classifyEngineV2Prompt", () => {
     });
     assert.equal(classifyEngineV2Prompt("Create a KPI dashboard with a bar chart").composition, "dashboard");
     assert.equal(classifyEngineV2Prompt("Show a pie chart").chartType, "donut");
+    assert.equal(classifyEngineV2Prompt("Create a heatmap").chartType, "heatmap");
+    assert.equal(classifyEngineV2Prompt("Build a candlestick chart").chartType, "candlestick");
   });
 
   it("does not invent a chart type when one is not specified", () => {
@@ -123,7 +125,7 @@ describe("validateEngineV2Document", () => {
     const root = (document.children as Array<Record<string, unknown>>)[0];
     const rootChildren = root.children as Array<Record<string, unknown>>;
     rootChildren[0].type = "html";
-    rootChildren[1].chartType = "radar";
+    rootChildren[1].chartType = "sankey";
     const result = validateEngineV2Document(document);
     assert.equal(result.ok, false);
     if (result.ok) return;

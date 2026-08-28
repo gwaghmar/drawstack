@@ -234,15 +234,16 @@ export default async function DashboardPage() {
           ) : (
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {projects.map((project) => {
-                const diagramType = (project.diagramType as DiagramType) ?? "freeform";
-                const meta = getDiagramTypeMeta(diagramType);
+                const isEngineV2 = project.diagramType === "engine-v2";
+                const diagramType = isEngineV2 ? "freeform" : ((project.diagramType as DiagramType) ?? "freeform");
+                const meta = isEngineV2 ? { label: "Engine v2" } : getDiagramTypeMeta(diagramType);
                 return (
                   <div
                     key={project.id}
                     className="group relative rounded-xl border border-slate-200 bg-white p-4 shadow-xs transition hover:border-slate-300 hover:shadow-md"
                   >
                     <Link
-                      href={`/app/editor?id=${project.id}`}
+                      href={isEngineV2 ? `/app/engine-v2?id=${project.id}` : `/app/editor?id=${project.id}`}
                       className="absolute inset-0 rounded-xl"
                       aria-label={project.title}
                     />

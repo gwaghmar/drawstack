@@ -8,6 +8,7 @@ import { sha256Hex } from "@/lib/crypto";
 
 const TYPE_LABELS: Record<string, string> = {
   freeform: "Free Canvas",
+  "engine-v2": "Engine v2 document",
 };
 
 async function resolveShare(token: string) {

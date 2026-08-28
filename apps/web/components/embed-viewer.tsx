@@ -1,25 +1,38 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import type { DiagramType } from "@flowchart/core";
+import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
 
 const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
   { ssr: false }
+);
+const EngineDocumentView = dynamic(
+  () => import("./engine-v2/engine-canvas").then((module) => module.EngineDocumentView),
+  { ssr: false },
 );
 
 type ShareData = {
   title: string;
   source: string;
   themeId: string;
-  diagramType: DiagramType;
+  diagramType: string;
 };
 
 export function EmbedViewer({ token }: { token: string }) {
   const [data, setData] = useState<ShareData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sourceCopied, setSourceCopied] = useState(false);
+  const engineDocument = useMemo(() => {
+    if (data?.diagramType !== "engine-v2") return null;
+    try {
+      const result = validateEngineV2Document(JSON.parse(data.source) as unknown);
+      return result.ok ? result.document : null;
+    } catch {
+      return null;
+    }
+  }, [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +83,7 @@ export function EmbedViewer({ token }: { token: string }) {
       >
         {sourceCopied ? "Copied!" : "</> source"}
       </button>
-      <FreeformRenderer source={data.source} readOnly onChange={() => {}} />
+      {engineDocument ? <EngineDocumentView document={engineDocument} className="mx-auto" /> : <FreeformRenderer source={data.source} readOnly onChange={() => {}} />}
     </div>
   );
 }

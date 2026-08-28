@@ -1,6 +1,19 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { areaPath, finiteCartesianData, finiteScatterData, formatChartValue, numericDomain, scaleLinear, stackCartesianData } from "./chart-layout.ts";
+import {
+  areaPath,
+  finiteCandlestickData,
+  finiteCartesianData,
+  finiteHeatmapData,
+  finiteScatterData,
+  formatChartValue,
+  interpolateHexColor,
+  layoutTreemap,
+  numericDomain,
+  polarPoint,
+  scaleLinear,
+  stackCartesianData,
+} from "./chart-layout.ts";
 
 describe("engine-v2 chart layout", () => {
   it("creates a usable domain for empty and constant values", () => {
@@ -58,5 +71,42 @@ describe("engine-v2 chart layout", () => {
     const path = areaPath([{ x: 10, y: 20 }, { x: 30, y: 5 }], 40);
     assert.equal(path, "M10,40 L10,20 L30,5 L30,40 Z");
     assert.equal(areaPath([], 40), "");
+  });
+
+  it("filters heatmap cells and normalizes malformed candle ranges", () => {
+    const heatmap = finiteHeatmapData([
+      { row: "Mon", column: "AM", value: 8 },
+      { row: "", column: "PM", value: 3 },
+      { row: "Tue", column: "PM", value: Number.NaN },
+    ]);
+    assert.deepEqual(heatmap, [{ row: "Mon", column: "AM", value: 8 }]);
+
+    const candles = finiteCandlestickData([
+      { label: "Day 1", open: 12, high: 10, low: 14, close: 13 },
+      { label: "Day 2", open: 10, high: Number.NaN, low: 8, close: 9 },
+    ]);
+    assert.deepEqual(candles, [{ label: "Day 1", open: 12, high: 14, low: 10, close: 13 }]);
+  });
+
+  it("creates deterministic treemap rectangles that preserve area", () => {
+    const rectangles = layoutTreemap([
+      { label: "A", value: 50 },
+      { label: "B", value: 30 },
+      { label: "C", value: 20 },
+      { label: "Ignored", value: 0 },
+    ], 400, 200);
+    assert.deepEqual(rectangles.map(({ label }) => label), ["A", "B", "C"]);
+    const area = rectangles.reduce((sum, rectangle) => sum + rectangle.width * rectangle.height, 0);
+    assert.ok(Math.abs(area - 80_000) < 0.001);
+    assert.ok(rectangles.every((rectangle) => rectangle.width > 0 && rectangle.height > 0));
+  });
+
+  it("clamps color interpolation and calculates polar points", () => {
+    assert.equal(interpolateHexColor("#000000", "#ffffff", 0.5), "#808080");
+    assert.equal(interpolateHexColor("#000000", "#ffffff", 2), "#ffffff");
+    assert.equal(interpolateHexColor("invalid", "#3157F6", 0.5), "#3157F6");
+    const point = polarPoint(10, 10, 5, 0);
+    assert.equal(point.x, 15);
+    assert.equal(point.y, 10);
   });
 });

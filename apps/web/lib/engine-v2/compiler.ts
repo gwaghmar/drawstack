@@ -47,14 +47,14 @@ const STYLE_KEYS = new Set([
   "alignSelf",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
-const DATUM_KEYS = new Set(["label", "value", "series", "x", "y"]);
+const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "row", "column", "open", "high", "low", "close"]);
 const GRAPH_DOCUMENT_KEYS = new Set(["name", "direction", "nodes", "edges"]);
 const GRAPH_NODE_KEYS = new Set(["id", "label", "kind", "subtitle", "fields", "group", "width", "height", "tone"]);
 const GRAPH_EDGE_KEYS = new Set(["id", "source", "target", "kind", "label", "sourceLabel", "targetLabel"]);
 const GRAPH_FIELD_KEYS = new Set(["name", "type", "key"]);
 
 export type EngineV2Composition = "chart" | "graph" | "dashboard" | "document";
-export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | null;
+export type EngineV2ChartIntent = "bar" | "line" | "area" | "donut" | "scatter" | "stacked-bar" | "radar" | "heatmap" | "treemap" | "funnel" | "gauge" | "candlestick" | null;
 
 export type EngineV2PromptIntent = {
   normalizedPrompt: string;
@@ -384,6 +384,20 @@ function validateDatum(
   }
   hasExactKeys(value, DATUM_KEYS, context, path);
   const series = value.series === undefined ? undefined : readString(value.series, context, `${path}.series`, 1, 80) ?? undefined;
+  if (value.row !== undefined || value.column !== undefined) {
+    const row = readString(value.row, context, `${path}.row`, 1, 80);
+    const column = readString(value.column, context, `${path}.column`, 1, 80);
+    const number = readNumber(value.value, context, `${path}.value`, -1_000_000_000_000, 1_000_000_000_000);
+    return row !== null && column !== null && number !== null ? { row, column, value: number } : null;
+  }
+  if (value.open !== undefined || value.high !== undefined || value.low !== undefined || value.close !== undefined) {
+    const label = readString(value.label, context, `${path}.label`, 1, 80);
+    const open = readNumber(value.open, context, `${path}.open`, -1_000_000_000_000, 1_000_000_000_000);
+    const high = readNumber(value.high, context, `${path}.high`, -1_000_000_000_000, 1_000_000_000_000);
+    const low = readNumber(value.low, context, `${path}.low`, -1_000_000_000_000, 1_000_000_000_000);
+    const close = readNumber(value.close, context, `${path}.close`, -1_000_000_000_000, 1_000_000_000_000);
+    return label !== null && open !== null && high !== null && low !== null && close !== null ? { label, open, high, low, close } : null;
+  }
   if (value.x !== undefined || value.y !== undefined) {
     const x = readNumber(value.x, context, `${path}.x`, -1_000_000_000_000, 1_000_000_000_000);
     const y = readNumber(value.y, context, `${path}.y`, -1_000_000_000_000, 1_000_000_000_000);
@@ -522,7 +536,7 @@ function validateNode(
   }
   if (type === "chart") {
     const title = readString(value.title, context, `${path}.title`, 1, 160);
-    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar"], context, `${path}.chartType`);
+    const chartType = readEnum(value.chartType, ["bar", "line", "area", "donut", "scatter", "stacked-bar", "radar", "heatmap", "treemap", "funnel", "gauge", "candlestick"], context, `${path}.chartType`);
     if (!Array.isArray(value.data) || value.data.length < 1 || value.data.length > MAX_CHART_POINTS) {
       addIssue(context, `${path}.data`, `Expected 1-${MAX_CHART_POINTS} data points`);
       return null;
@@ -597,6 +611,12 @@ export function classifyEngineV2Prompt(prompt: string): EngineV2PromptIntent {
   const words = ` ${normalizedPrompt.toLowerCase()} `;
   let chartType: EngineV2ChartIntent = null;
   if (/\b(?:donut|doughnut|pie)\s+(?:chart|graph)\b/.test(words)) chartType = "donut";
+  else if (/\bcandlestick\s+chart\b/.test(words)) chartType = "candlestick";
+  else if (/\bheatmap\b|\bheat\s+map\b/.test(words)) chartType = "heatmap";
+  else if (/\btreemap\b|\btree\s+map\b/.test(words)) chartType = "treemap";
+  else if (/\bradar\s+chart\b|\bspider\s+chart\b/.test(words)) chartType = "radar";
+  else if (/\bfunnel\s+chart\b/.test(words)) chartType = "funnel";
+  else if (/\bgauge\s+chart\b/.test(words)) chartType = "gauge";
   else if (/\bscatter\s+(?:chart|plot|graph)\b/.test(words)) chartType = "scatter";
   else if (/\bstacked\s+(?:bar|column)\s+chart\b/.test(words)) chartType = "stacked-bar";
   else if (/\barea\s+chart\b/.test(words)) chartType = "area";
@@ -614,12 +634,13 @@ export function buildEngineV2GenerationPrompt(intent: EngineV2PromptIntent): str
     "Create one EngineDocument JSON object for the user's request.",
     "Return JSON only. Do not include Markdown, explanations, or JavaScript.",
     'The root must use version 2 and engine "dom-css".',
-    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, and stacked-bar.",
+    "Use only frame, text, metric, chart, and graph nodes. Chart types are bar, line, area, donut, scatter, stacked-bar, radar, heatmap, treemap, funnel, gauge, and candlestick.",
     "Use flex or grid frames for layout. Every node id must be unique.",
     "Document fields: version, engine, name, artboard {width,minHeight,background}, tokens {colors,spacing,radii}, children.",
     "Every node needs id, name, and type. Text needs content and variant. Metric needs label, value, detail, and tone.",
     "Chart needs title, chartType, and data [{label,value}]. Frame needs layout {mode,gap,padding} and children.",
     "Scatter data uses [{x,y,label?,series?}]. Other chart data can add series for multiple series.",
+    "Heatmap data uses [{row,column,value}]. Candlestick data uses [{label,open,high,low,close}].",
     "Graph needs title and graph {name,direction,nodes,edges}. Graph nodes use id,label,kind. Kinds: process, decision, entity, database, person, service, system. Graph edges use id,source,target and optional kind or label.",
     "Flex layout also needs direction. Grid layout also needs columns.",
     "Do not invent facts presented as user data. Clearly label illustrative data.",

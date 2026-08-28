@@ -1,23 +1,28 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { toPng } from "html-to-image";
 import Link from "next/link";
 import type { DiagramType } from "@flowchart/core";
 import { downloadSource, sourceFileExtension } from "@/lib/diagrams/source-export";
+import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
 
 // Lazy-load heavy renderer so it doesn't bloat the share page bundle
 const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
   { ssr: false }
 );
+const EngineDocumentView = dynamic(
+  () => import("./engine-v2/engine-canvas").then((module) => module.EngineDocumentView),
+  { ssr: false },
+);
 
 type ShareData = {
   title: string;
   source: string;
   themeId: string;
-  diagramType: DiagramType;
+  diagramType: string;
 };
 
 export function ShareViewer({ token, authorHandle }: { token: string; authorHandle?: string | null }) {
@@ -25,6 +30,15 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
   const [error, setError] = useState<string | null>(null);
   const [sourceCopied, setSourceCopied] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
+  const engineDocument = useMemo(() => {
+    if (data?.diagramType !== "engine-v2") return null;
+    try {
+      const result = validateEngineV2Document(JSON.parse(data.source) as unknown);
+      return result.ok ? result.document : null;
+    } catch {
+      return null;
+    }
+  }, [data]);
 
   // Fetch share data
   useEffect(() => {
@@ -65,8 +79,9 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
   };
 
   const diagramType = data?.diagramType ?? "freeform";
-  const DIAGRAM_TYPE_LABELS: Record<DiagramType, string> = {
+  const DIAGRAM_TYPE_LABELS: Record<string, string> = {
     freeform: "Free Canvas",
+    "engine-v2": "Engine v2 document",
   };
 
   return (
@@ -109,14 +124,14 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
               >
                 {sourceCopied ? "Copied!" : "Copy source"}
               </button>
-              {data && (
+              {data && diagramType !== "engine-v2" ? (
                 <button
-                  onClick={() => downloadSource(data.source, diagramType, data.title || "diagram")}
+                  onClick={() => downloadSource(data.source, diagramType as DiagramType, data.title || "diagram")}
                   className="rounded-sm border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
                 >
-                  {`Download .${sourceFileExtension(diagramType)}`}
+                  {`Download .${sourceFileExtension(diagramType as DiagramType)}`}
                 </button>
-              )}
+              ) : null}
             </div>
 
             <div
@@ -124,9 +139,13 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
               className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white"
               style={{ minHeight: "400px" }}
             >
-              <div className="h-[600px]">
-                <FreeformRenderer source={data.source} readOnly onChange={() => {}} />
-              </div>
+              {engineDocument ? (
+                <EngineDocumentView document={engineDocument} className="mx-auto" />
+              ) : data.diagramType === "engine-v2" ? (
+                <div className="flex h-[400px] items-center justify-center text-sm text-red-600">This Engine v2 document is invalid.</div>
+              ) : (
+                <div className="h-[600px]"><FreeformRenderer source={data.source} readOnly onChange={() => {}} /></div>
+              )}
             </div>
           </>
         )}
@@ -149,4 +168,3 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
     </div>
   );
 }
-
