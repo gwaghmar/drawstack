@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import type { EngineNode } from "./document.ts";
 import {
   alignNodes,
+  copyNodes,
   duplicateNode,
   duplicateNodes,
   distributeNodes,
@@ -12,10 +13,12 @@ import {
   moveNodeByArrow,
   moveNodeToParent,
   moveNodeUp,
+  pasteNodes,
   removeNode,
   removeNodes,
   reorderNode,
   replaceNode,
+  uniqueNodeId,
 } from "./operations.ts";
 
 const text = (id: string): EngineNode => ({
@@ -189,5 +192,28 @@ describe("engine-v2 tree operations", () => {
     const nested = findParent(distributed, "nested")!.node as Extract<EngineNode, { type: "frame" }>;
     assert.equal(nested.layout.justify, "space-evenly");
     assert.equal(distributeNodes(nodes, ["a", "c"], "between"), nodes);
+  });
+
+  it("copies and pastes isolated subtrees with fresh ids", () => {
+    const nodes = tree();
+    const clipboard = copyNodes(nodes, ["nested", "b"]);
+    assert.equal(clipboard.length, 1);
+    const source = findParent(nodes, "nested")!.node as Extract<EngineNode, { type: "frame" }>;
+    assert.notEqual(clipboard[0], source);
+    assert.notEqual((clipboard[0] as Extract<EngineNode, { type: "frame" }>).children, source.children);
+
+    const pasted = pasteNodes(nodes, clipboard, "frame", 1);
+    assert.deepEqual(pasted.pastedIds, ["nested-copy"]);
+    const pastedFrame = findParent(pasted.nodes, "nested-copy")!.node as Extract<EngineNode, { type: "frame" }>;
+    assert.deepEqual(pastedFrame.children.map((node) => node.id), ["b-copy-2", "b-copy-copy"]);
+    assert.notEqual(pastedFrame.children[0], source.children[0]);
+    assert.equal(findParent(nodes, "nested-copy"), null);
+    assert.equal(pasteNodes(nodes, clipboard, "c", 0).nodes, nodes);
+  });
+
+  it("generates stable unique ids for inserted nodes", () => {
+    const nodes = [...tree(), text("text"), text("text-2")];
+    assert.equal(uniqueNodeId(nodes, "chart"), "chart");
+    assert.equal(uniqueNodeId(nodes, "text"), "text-3");
   });
 });

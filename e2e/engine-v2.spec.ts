@@ -107,3 +107,32 @@ test("engine v2 multi-selects and edits sibling nodes in layout flow", async ({ 
   await page.keyboard.press("Control+a");
   await expect(page.getByText("3 nodes selected", { exact: true })).toBeVisible();
 });
+
+test("engine v2 inserts deterministic nodes and pastes fresh copies", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+
+  await page.locator('[data-tree-node-id="mrr"]').click();
+  await page.getByRole("button", { name: "Add node" }).click();
+  await page.getByRole("menuitem", { name: /text/i }).click();
+  await expect(page.locator('[data-tree-node-id="text"]')).toBeVisible();
+  await expect(page.locator('[data-node-id="text"]')).toHaveText("New text");
+
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(page.locator('[data-tree-node-id="text-copy"]')).toBeVisible();
+  await page.keyboard.press("Control+v");
+  await expect(page.locator('[data-tree-node-id="text-copy-2"]')).toBeVisible();
+
+  for (const type of ["metric", "chart", "frame"] as const) {
+    await page.getByRole("button", { name: "Add node" }).click();
+    await page.getByRole("menuitem", { name: new RegExp(type, "i") }).click();
+    await expect(page.locator(`[data-tree-node-id="${type}"]`)).toBeVisible();
+  }
+
+  await page.locator('[data-tree-node-id="frame"]').click();
+  await page.getByRole("button", { name: "Add node" }).click();
+  await page.getByRole("menuitem", { name: /graph/i }).click();
+  await expect(page.locator('[data-tree-node-id="graph"]')).toBeVisible();
+  const frameTreeItem = page.locator('[data-tree-node-id="frame"]').locator("..");
+  await expect(frameTreeItem.locator('[data-tree-node-id="graph"]')).toBeVisible();
+});

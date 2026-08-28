@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Check, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ClipboardPaste, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Plus, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
 import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { DeterministicChart } from "@/components/engine-v2/charts";
@@ -20,7 +20,8 @@ import {
   type EngineTokens,
 } from "@/lib/engine-v2/document";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
-import { alignNodes, distributeNodes, duplicateNodes, findParent, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, removeNodes } from "@/lib/engine-v2/operations";
+import { createDefaultNode, type InsertableNodeType } from "@/lib/engine-v2/node-factory";
+import { alignNodes, copyNodes, distributeNodes, duplicateNodes, findParent, insertNode, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, pasteNodes, removeNodes, uniqueNodeId } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 
 const EMPTY_SELECTION = new Set<string>();
@@ -258,12 +259,15 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [treeDraggedId, setTreeDraggedId] = useState<string | null>(null);
   const [treeDropTarget, setTreeDropTarget] = useState<TreeDropTarget | null>(null);
   const [selectedBounds, setSelectedBounds] = useState<SelectedBounds | null>(null);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [clipboardCount, setClipboardCount] = useState(0);
   const [revisions, setRevisions] = useState<Array<{ id: string; label: string | null; createdAt: Date }>>([]);
   const artboardRef = useRef<HTMLDivElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
   const resizeSessionRef = useRef<ResizeSession | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
+  const clipboardNodesRef = useRef<EngineNode[]>([]);
   const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const storageKey = `drawstack.engine-v2.document.${projectId ?? "draft"}`;
@@ -600,6 +604,39 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     return parentId !== null && parentId !== undefined && locations.every((location) => location?.parentId === parentId);
   }, [document.children, selectedIds]);
 
+  const insertionTarget = () => {
+    const location = findParent(document.children, selectedId);
+    if (!location) return { parentId: null, index: document.children.length };
+    if (location.node.type === "frame") return { parentId: location.node.id, index: location.node.children.length };
+    return { parentId: location.parentId, index: location.index + 1 };
+  };
+
+  const addNode = (type: InsertableNodeType) => {
+    const id = uniqueNodeId(document.children, type);
+    const node = createDefaultNode(type, id);
+    const target = insertionTarget();
+    const children = insertNode(document.children, node, target.parentId, target.index);
+    commitDocument({ ...document, children });
+    replaceSelection([id]);
+    setAddMenuOpen(false);
+  };
+
+  const copySelection = () => {
+    const copied = copyNodes(document.children, selectedIds);
+    if (!copied.length) return;
+    clipboardNodesRef.current = copied;
+    setClipboardCount(copied.length);
+    navigator.clipboard?.writeText(`drawstack-engine-v2:${JSON.stringify(copied)}`).catch(() => {});
+  };
+
+  const pasteSelection = () => {
+    const target = insertionTarget();
+    const result = pasteNodes(document.children, clipboardNodesRef.current, target.parentId, target.index);
+    if (result.nodes === document.children) return;
+    commitDocument({ ...document, children: result.nodes });
+    replaceSelection(result.pastedIds);
+  };
+
   useEffect(() => {
     const handleShortcut = (event: KeyboardEvent) => {
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -616,6 +653,12 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       } else if (modifier && key === "d") {
         event.preventDefault();
         duplicateSelected();
+      } else if (modifier && key === "c") {
+        event.preventDefault();
+        copySelection();
+      } else if (modifier && key === "v") {
+        event.preventDefault();
+        pasteSelection();
       } else if (modifier && key === "a") {
         event.preventDefault();
         const location = findParent(document.children, selectedId);
@@ -623,6 +666,9 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       } else if (!modifier && !event.altKey && event.key === "Escape" && selectedIds.length > 1) {
         event.preventDefault();
         replaceSelection([selectedId]);
+      } else if (!modifier && !event.altKey && event.key === "Escape" && addMenuOpen) {
+        event.preventDefault();
+        setAddMenuOpen(false);
       } else if (!modifier && !event.altKey && (event.key === "Delete" || event.key === "Backspace")) {
         event.preventDefault();
         removeSelected();
@@ -691,7 +737,17 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
         </div>
         <div className="flex items-center justify-between px-4 pb-2 pt-4">
           <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">{selectedIds.length > 1 ? `${selectedIds.length} nodes selected` : "Structure"}</span>
-          <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold ${hydrated ? "bg-[#B7FF4A]" : "bg-[#E4E7E1]"}`}>{hydrated ? "LIVE DOM" : "CONNECTING"}</span>
+          <div className="relative flex items-center gap-1.5">
+            <button type="button" onClick={() => setAddMenuOpen((open) => !open)} aria-label="Add node" aria-haspopup="menu" aria-expanded={addMenuOpen} className="flex items-center gap-1 rounded-md border border-[#C8CEC4] bg-white px-2 py-1 font-mono text-[9px] font-semibold hover:border-[#3157F6]"><Plus size={11} />Add</button>
+            <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold ${hydrated ? "bg-[#B7FF4A]" : "bg-[#E4E7E1]"}`}>{hydrated ? "LIVE DOM" : "CONNECTING"}</span>
+            {addMenuOpen ? (
+              <div role="menu" aria-label="Add node type" className="absolute right-0 top-8 z-[70] w-40 rounded-lg border border-[#C8CEC4] bg-white p-1.5 shadow-xl">
+                {(["text", "metric", "frame", "chart", "graph"] as const).map((type) => (
+                  <button key={type} type="button" role="menuitem" onClick={() => addNode(type)} className="flex w-full items-center justify-between rounded-md px-2.5 py-2 text-left text-xs capitalize hover:bg-[#E9EDFF] hover:text-[#2448D8]"><span>{type}</span><span className="font-mono text-[8px] uppercase text-[#667067]">new</span></button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div ref={treeRef} className="min-h-0 flex-1 overflow-auto px-2 pb-4">
           <Tree nodes={document.children} selectedId={selectedId} selectedIds={selectedIdSet} draggedId={treeDraggedId} dropTarget={treeDropTarget} onSelect={selectNode} onDragStart={setTreeDraggedId} onDragEnd={endTreeDrag} onDropTarget={setTreeDropTarget} onMove={moveTreeNode} onKeyboardMove={moveTreeNodeByKeyboard} />
@@ -763,10 +819,12 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <div><span className="text-[#3157F6]">name</span> {selected.name}</div>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               <button type="button" onClick={() => moveSelected("up")} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Move node up"><ArrowUp size={14} /></button>
               <button type="button" onClick={() => moveSelected("down")} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Move node down"><ArrowDown size={14} /></button>
               <button type="button" onClick={duplicateSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Duplicate node"><CopyPlus size={14} /></button>
+              <button type="button" onClick={copySelection} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6]" title="Copy selected nodes"><Copy size={14} /></button>
+              <button type="button" onClick={pasteSelection} disabled={!clipboardCount} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 hover:border-[#3157F6] disabled:cursor-not-allowed disabled:opacity-35" title="Paste nodes"><ClipboardPaste size={14} /></button>
               <button type="button" onClick={removeSelected} className="flex items-center justify-center rounded-lg border border-[#D7DBD2] bg-white p-2.5 text-[#B93815] hover:border-[#B93815]" title="Delete node"><Trash2 size={14} /></button>
             </div>
 

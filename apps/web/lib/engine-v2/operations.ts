@@ -17,6 +17,11 @@ export type DuplicateNodesResult = {
   duplicatedIds: string[];
 };
 
+export type PasteNodesResult = {
+  nodes: EngineNode[];
+  pastedIds: string[];
+};
+
 export function findParent(nodes: EngineNode[], id: string): EngineNodeLocation | null {
   const visit = (children: EngineNode[], parent: EngineFrameNode | null): EngineNodeLocation | null => {
     for (let index = 0; index < children.length; index += 1) {
@@ -189,6 +194,14 @@ function collectIds(nodes: EngineNode[], ids = new Set<string>()): Set<string> {
   return ids;
 }
 
+export function uniqueNodeId(nodes: EngineNode[], base: string): string {
+  const usedIds = collectIds(nodes);
+  if (!usedIds.has(base)) return base;
+  let suffix = 2;
+  while (usedIds.has(`${base}-${suffix}`)) suffix += 1;
+  return `${base}-${suffix}`;
+}
+
 function copyId(id: string, usedIds: Set<string>): string {
   let candidate = `${id}-copy`;
   let suffix = 2;
@@ -246,6 +259,33 @@ export function duplicateNodes(nodes: EngineNode[], ids: Iterable<string>): Dupl
     next = result.nodes;
   }
   return { nodes: next, duplicatedIds };
+}
+
+export function copyNodes(nodes: EngineNode[], ids: Iterable<string>): EngineNode[] {
+  const roots = selectedRoots(nodes, new Set(ids));
+  return roots.map((id) => structuredClone(findParent(nodes, id)!.node));
+}
+
+export function pasteNodes(
+  nodes: EngineNode[],
+  clipboardNodes: EngineNode[],
+  parentId: string | null,
+  insertionIndex?: number,
+): PasteNodesResult {
+  if (!clipboardNodes.length) return { nodes, pastedIds: [] };
+  const parent = parentId === null ? null : findParent(nodes, parentId)?.node;
+  if (parentId !== null && parent?.type !== "frame") return { nodes, pastedIds: [] };
+  const usedIds = collectIds(nodes);
+  let next = nodes;
+  const pastedIds: string[] = [];
+  let index = boundedIndex(insertionIndex, parent?.type === "frame" ? parent.children.length : nodes.length);
+  for (const clipboardNode of clipboardNodes) {
+    const clone = cloneWithNewIds(structuredClone(clipboardNode), usedIds, false);
+    next = insertNode(next, clone, parentId, index);
+    pastedIds.push(clone.id);
+    index += 1;
+  }
+  return { nodes: next, pastedIds };
 }
 
 export function removeNodes(nodes: EngineNode[], ids: Iterable<string>): EngineNode[] {
