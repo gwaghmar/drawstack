@@ -21,6 +21,19 @@ test("dashboard prompt reaches Engine v2 generation unchanged", async ({ page })
   const errors = collectPageErrors(page);
   const requestedPrompt = "Create a quarterly revenue chart grouped by product";
   let generatedPrompt: string | undefined;
+  let generationRequests = 0;
+
+  await page.route("**/api/ai/engine-v2", async (route) => {
+    generationRequests += 1;
+    const request = route.request();
+    const body = request.postDataJSON() as { prompt?: string; currentDocument: unknown };
+    generatedPrompt = body.prompt;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ document: body.currentDocument }),
+    });
+  });
 
   await page.goto("/app");
   await page.getByPlaceholder(/Create a multilingual sales funnel/).fill(requestedPrompt);
@@ -31,19 +44,10 @@ test("dashboard prompt reaches Engine v2 generation unchanged", async ({ page })
 
   const promptInput = page.getByLabel("Describe what to build");
   await expect(promptInput).toHaveValue(requestedPrompt);
-
-  await page.route("**/api/ai/engine-v2", async (route) => {
-    const request = route.request();
-    const body = request.postDataJSON() as { prompt?: string; currentDocument: unknown };
-    generatedPrompt = body.prompt;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ document: body.currentDocument }),
-    });
-  });
-  await page.getByRole("button", { name: "Generate", exact: true }).click();
   await expect.poll(() => generatedPrompt).toBe(requestedPrompt);
+  await expect.poll(() => generationRequests).toBe(1);
+  await page.waitForTimeout(300);
+  expect(generationRequests).toBe(1);
   await expect(page.getByRole("button", { name: "Generate", exact: true })).toBeEnabled();
   expect(errors).toEqual([]);
 });
