@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
+import { parseSharedEngineV2Document } from "@/lib/engine-v2/shared-document";
 
 const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
@@ -25,13 +25,7 @@ export function EmbedViewer({ token }: { token: string }) {
   const [error, setError] = useState<string | null>(null);
   const [sourceCopied, setSourceCopied] = useState(false);
   const engineDocument = useMemo(() => {
-    if (data?.diagramType !== "engine-v2") return null;
-    try {
-      const result = validateEngineV2Document(JSON.parse(data.source) as unknown);
-      return result.ok ? result.document : null;
-    } catch {
-      return null;
-    }
+    return data ? parseSharedEngineV2Document(data.diagramType, data.source) : null;
   }, [data]);
 
   useEffect(() => {
@@ -83,7 +77,11 @@ export function EmbedViewer({ token }: { token: string }) {
       >
         {sourceCopied ? "Copied!" : "</> source"}
       </button>
-      {engineDocument ? <EngineDocumentView document={engineDocument} className="mx-auto" /> : <FreeformRenderer source={data.source} readOnly onChange={() => {}} />}
+      {data.diagramType === "engine-v2" ? (
+        engineDocument
+          ? <EngineDocumentView document={engineDocument} className="mx-auto" />
+          : <div className="flex h-screen items-center justify-center px-4 text-center text-sm text-red-600">This Engine v2 document is invalid.</div>
+      ) : <FreeformRenderer source={data.source} readOnly onChange={() => {}} />}
     </div>
   );
 }

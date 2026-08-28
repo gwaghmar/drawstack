@@ -4,23 +4,13 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { shareLinks, projects } from "@/lib/db/schema";
 import { sha256Hex } from "@/lib/crypto";
+import { parseSharePreviewDataUrl } from "@/lib/share-preview";
 
 export const runtime = "nodejs";
 
 const TYPE_LABELS: Record<string, string> = {
   freeform: "Free Canvas",
 };
-
-function decodeDataUrl(dataUrl: string): { mime: string; bytes: Buffer } | null {
-  // Format: data:<mime>;base64,<payload>
-  const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
-  if (!match) return null;
-  try {
-    return { mime: match[1], bytes: Buffer.from(match[2], "base64") };
-  } catch {
-    return null;
-  }
-}
 
 export async function GET(_req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -50,12 +40,14 @@ export async function GET(_req: Request, { params }: { params: Promise<{ token: 
   // If we captured a real diagram preview at share-create time, serve it
   // directly. This is the actual rendered diagram, not a generic card.
   if (storedPreview) {
-    const decoded = decodeDataUrl(storedPreview);
+    const parsed = parseSharePreviewDataUrl(storedPreview);
+    const decoded = parsed ? { mime: parsed.mime, bytes: Buffer.from(parsed.base64, "base64") } : null;
     if (decoded) {
       const body = new Uint8Array(decoded.bytes);
       return new NextResponse(body, {
         headers: {
           "Content-Type": decoded.mime,
+          "X-Content-Type-Options": "nosniff",
           "Cache-Control": "public, max-age=300, s-maxage=600",
         },
       });

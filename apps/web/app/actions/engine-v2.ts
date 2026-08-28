@@ -4,8 +4,9 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { projects, revisions } from "@/lib/db/schema";
 import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
+import { revisionIdsBeyondLimit } from "@/lib/engine-v2/revision-retention";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
-import { and, desc, eq, lt } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 function validSource(source: string): string {
@@ -25,6 +26,16 @@ async function engineContext() {
   const email = session?.user?.email;
   if (!email) throw new Error("Unauthorized");
   return ensureUserAndWorkspace(email);
+}
+
+async function pruneEngineV2Revisions(projectId: string) {
+  const ordered = await db.select({ id: revisions.id }).from(revisions)
+    .where(eq(revisions.projectId, projectId))
+    .orderBy(desc(revisions.createdAt), desc(revisions.id));
+  const staleIds = revisionIdsBeyondLimit(ordered, 50);
+  if (staleIds.length) {
+    await db.delete(revisions).where(and(eq(revisions.projectId, projectId), inArray(revisions.id, staleIds)));
+  }
 }
 
 export async function createEngineV2Project(title: string, source: string) {
@@ -62,10 +73,7 @@ export async function saveEngineV2Project(id: string, title: string, source: str
   const now = new Date();
   await db.update(projects).set({ title: title.trim().slice(0, 120) || project.title, source: normalized, updatedAt: now }).where(eq(projects.id, id));
   await db.insert(revisions).values({ id: crypto.randomUUID(), projectId: id, source: normalized, label, createdAt: now, createdBy: user.id });
-  const kept = await db.select({ createdAt: revisions.createdAt }).from(revisions).where(eq(revisions.projectId, id)).orderBy(desc(revisions.createdAt)).limit(50);
-  if (kept.length === 50) {
-    await db.delete(revisions).where(and(eq(revisions.projectId, id), lt(revisions.createdAt, kept[kept.length - 1].createdAt)));
-  }
+  await pruneEngineV2Revisions(id);
   revalidatePath("/app");
 }
 
@@ -87,5 +95,6 @@ export async function restoreEngineV2Revision(projectId: string, revisionId: str
   const now = new Date();
   await db.update(projects).set({ source, updatedAt: now }).where(eq(projects.id, projectId));
   await db.insert(revisions).values({ id: crypto.randomUUID(), projectId, source, label: "Restored revision", createdAt: now, createdBy: user.id });
+  await pruneEngineV2Revisions(projectId);
   return source;
 }

@@ -6,18 +6,8 @@ import { projects, shareLinks } from "@/lib/db/schema";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { sha256Hex, token } from "@/lib/crypto";
+import { sanitizeSharePreviewDataUrl } from "@/lib/share-preview";
 
-// Cap stored preview size so we don't bloat the row. A modest-quality 1200x630
-// PNG generally fits well below this. Oversized uploads are dropped and the OG
-// route falls back to the branded card.
-const MAX_PREVIEW_DATA_URL_BYTES = 400_000;
-
-function sanitizePreview(previewDataUrl: string | undefined): string | null {
-  if (!previewDataUrl) return null;
-  if (!previewDataUrl.startsWith("data:image/")) return null;
-  if (previewDataUrl.length > MAX_PREVIEW_DATA_URL_BYTES) return null;
-  return previewDataUrl;
-}
 
 export async function createShareLink(projectId: string, previewDataUrl?: string) {
   const session = await auth();
@@ -32,7 +22,7 @@ export async function createShareLink(projectId: string, previewDataUrl?: string
     .limit(1);
   if (!p || p.workspaceId !== workspace.id) throw new Error("Not found");
 
-  const preview = sanitizePreview(previewDataUrl);
+  const preview = sanitizeSharePreviewDataUrl(previewDataUrl);
 
   // Return an existing active (non-expired) token instead of creating duplicates
   const now = new Date();
@@ -95,7 +85,7 @@ export async function updateSharePreview(projectId: string, previewDataUrl: stri
     .limit(1);
   if (!p || p.workspaceId !== workspace.id) throw new Error("Not found");
 
-  const preview = sanitizePreview(previewDataUrl);
+  const preview = sanitizeSharePreviewDataUrl(previewDataUrl);
   if (!preview) return { updated: false };
 
   const [existing] = await db

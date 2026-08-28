@@ -6,7 +6,7 @@ import { toPng } from "html-to-image";
 import Link from "next/link";
 import type { DiagramType } from "@flowchart/core";
 import { downloadSource, sourceFileExtension } from "@/lib/diagrams/source-export";
-import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
+import { parseSharedEngineV2Document } from "@/lib/engine-v2/shared-document";
 
 // Lazy-load heavy renderer so it doesn't bloat the share page bundle
 const FreeformRenderer = dynamic(
@@ -31,13 +31,7 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
   const [sourceCopied, setSourceCopied] = useState(false);
   const frameRef = useRef<HTMLDivElement>(null);
   const engineDocument = useMemo(() => {
-    if (data?.diagramType !== "engine-v2") return null;
-    try {
-      const result = validateEngineV2Document(JSON.parse(data.source) as unknown);
-      return result.ok ? result.document : null;
-    } catch {
-      return null;
-    }
+    return data ? parseSharedEngineV2Document(data.diagramType, data.source) : null;
   }, [data]);
 
   // Fetch share data
