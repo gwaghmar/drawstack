@@ -1,0 +1,329 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, Code2, Copy, Download, Loader2, MousePointer2, RotateCcw, Sparkles } from "lucide-react";
+import { DeterministicChart } from "@/components/engine-v2/charts";
+import { GraphRenderer } from "@/components/engine-v2/graph";
+import {
+  ENGINE_V2_SAMPLE,
+  findNode,
+  mapNode,
+  nodeStyle,
+  resolveToken,
+  type EngineChartNode,
+  type EngineDocument,
+  type EngineFrameNode,
+  type EngineNode,
+  type EngineTokens,
+} from "@/lib/engine-v2/document";
+
+function Frame({ node, tokens, selectedId, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
+  const layout = node.layout;
+  const layoutStyle = layout.mode === "grid"
+    ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding }
+    : { display: "flex", flexDirection: layout.direction ?? "row", gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify };
+
+  return (
+    <div
+      data-node-id={node.id}
+      data-node-type={node.type}
+      onClick={(event) => { event.stopPropagation(); onSelect(node.id); }}
+      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens) }}
+      className={`relative box-border ${selectedId === node.id ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
+    >
+      {node.children.map((child) => (
+        <Node key={child.id} node={child} tokens={tokens} selectedId={selectedId} onSelect={onSelect} />
+      ))}
+    </div>
+  );
+}
+
+function Node({ node, tokens, selectedId, onSelect }: { node: EngineNode; tokens: EngineTokens; selectedId: string; onSelect: (id: string) => void }) {
+  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedId={selectedId} onSelect={onSelect} />;
+
+  const selected = selectedId === node.id;
+  const shared = {
+    "data-node-id": node.id,
+    "data-node-type": node.type,
+    onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id); },
+    style: nodeStyle(node.style, tokens),
+    className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
+  };
+
+  if (node.type === "text") {
+    const variants = {
+      eyebrow: "font-mono text-[11px] font-semibold tracking-[0.18em]",
+      display: "max-w-[720px] text-[58px] font-semibold leading-[0.94] tracking-[-0.055em]",
+      heading: "text-2xl font-semibold tracking-[-0.03em]",
+      body: "text-[15px] leading-6",
+      caption: "font-mono text-[11px] tracking-wide",
+    };
+    return <div {...shared} className={`${shared.className} ${variants[node.variant]}`}>{node.content}</div>;
+  }
+
+  if (node.type === "metric") {
+    const accent = node.tone === "positive" ? tokens.colors.cobalt : node.tone === "warning" ? tokens.colors.orange : tokens.colors.ink;
+    return (
+      <section {...shared} className={`${shared.className} min-w-0 rounded-[14px] border border-[#D7DBD2] bg-white p-5`}>
+        <div className="font-mono text-[10px] font-medium uppercase tracking-[0.13em] text-[#667067]">{node.label}</div>
+        <div className="mt-3 text-[32px] font-semibold leading-none tracking-[-0.045em]" style={{ color: accent }}>{node.value}</div>
+        <div className="mt-3 text-xs text-[#667067]">{node.detail}</div>
+      </section>
+    );
+  }
+
+  if (node.type === "graph") {
+    return (
+      <section {...shared} className={`${shared.className} min-w-0 rounded-[14px] border border-[#D7DBD2] bg-white p-5`}>
+        <div className="flex items-center justify-between gap-4">
+          <h3 className="text-[15px] font-semibold tracking-[-0.02em]">{node.title}</h3>
+          <span className="rounded-full bg-[#E9EDFF] px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-[#3157F6]">deterministic graph</span>
+        </div>
+        <GraphRenderer
+          graph={node.graph}
+          className="mt-4"
+          palette={{ background: tokens.colors.panel, ink: tokens.colors.ink, quiet: tokens.colors.quiet, rule: tokens.colors.rule, accent: tokens.colors.cobalt, warning: tokens.colors.orange }}
+        />
+      </section>
+    );
+  }
+
+  return (
+    <section {...shared} className={`${shared.className} min-w-0 rounded-[14px] border border-[#D7DBD2] bg-white p-5`}>
+      <div className="flex items-center justify-between gap-4">
+        <h3 className="text-[15px] font-semibold tracking-[-0.02em]">{node.title}</h3>
+        <span className="rounded-full bg-[#F0F2EC] px-2.5 py-1 font-mono text-[9px] font-semibold uppercase tracking-wider text-[#667067]">deterministic {node.chartType}</span>
+      </div>
+      <DeterministicChart
+        className="mt-4"
+        spec={{
+          type: node.chartType,
+          title: node.title,
+          data: node.data,
+          valuePrefix: node.valuePrefix,
+          valueSuffix: node.valueSuffix,
+          showValues: node.chartType === "bar",
+          palette: {
+            foreground: tokens.colors.ink,
+            muted: tokens.colors.quiet,
+            grid: tokens.colors.rule,
+            surface: tokens.colors.panel,
+            series: [tokens.colors.cobalt, tokens.colors.orange, "#1D8A6A", "#8755D9"],
+          },
+        }}
+      />
+    </section>
+  );
+}
+
+function Tree({ nodes, selectedId, depth = 0, onSelect }: { nodes: EngineNode[]; selectedId: string; depth?: number; onSelect: (id: string) => void }) {
+  return (
+    <div className="space-y-0.5">
+      {nodes.map((node) => (
+        <div key={node.id}>
+          <button
+            type="button"
+            onClick={() => onSelect(node.id)}
+            style={{ paddingLeft: 10 + depth * 14 }}
+            className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-xs ${selectedId === node.id ? "bg-[#E9EDFF] text-[#2448D8]" : "text-[#566057] hover:bg-[#F0F2EC]"}`}
+          >
+            <span className="w-12 shrink-0 font-mono text-[9px] uppercase tracking-wide opacity-70">{node.type}</span>
+            <span className="truncate font-medium">{node.name}</span>
+          </button>
+          {node.type === "frame" ? <Tree nodes={node.children} selectedId={selectedId} depth={depth + 1} onSelect={onSelect} /> : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function EngineCanvas() {
+  const [document, setDocument] = useState<EngineDocument>(ENGINE_V2_SAMPLE);
+  const [selectedId, setSelectedId] = useState("title");
+  const [copied, setCopied] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [prompt, setPrompt] = useState("Create a concise product launch dashboard with revenue, conversion, and channel performance");
+  const [generating, setGenerating] = useState(false);
+  const [generationError, setGenerationError] = useState<string | null>(null);
+  const artboardRef = useRef<HTMLDivElement>(null);
+  const selected = useMemo(() => findNode(document.children, selectedId), [document, selectedId]);
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem("drawstack.engine-v2.document");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved) as EngineDocument;
+        if (parsed.version === 2 && parsed.engine === "dom-css") setDocument(parsed);
+      } catch {
+        window.localStorage.removeItem("drawstack.engine-v2.document");
+      }
+    }
+    setHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (hydrated) window.localStorage.setItem("drawstack.engine-v2.document", JSON.stringify(document));
+  }, [document, hydrated]);
+
+  const updateSelected = (update: (node: EngineNode) => EngineNode) => {
+    setDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
+  };
+
+  const copyDocument = async () => {
+    await navigator.clipboard.writeText(JSON.stringify(document, null, 2));
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  };
+
+  const resetDocument = () => {
+    setDocument(ENGINE_V2_SAMPLE);
+    setSelectedId("title");
+    setGenerationError(null);
+  };
+
+  const exportPng = async () => {
+    if (!artboardRef.current) return;
+    const { toPng } = await import("html-to-image");
+    const dataUrl = await toPng(artboardRef.current, { pixelRatio: 2, cacheBust: true });
+    const link = window.document.createElement("a");
+    link.download = `${document.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "drawstack"}.png`;
+    link.href = dataUrl;
+    link.click();
+  };
+
+  const generateDocument = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const value = prompt.trim();
+    if (!value || generating) return;
+    setGenerating(true);
+    setGenerationError(null);
+    try {
+      const response = await fetch("/api/ai/engine-v2", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ prompt: value, currentDocument: document }),
+      });
+      const body = await response.json() as { document?: EngineDocument; error?: string };
+      if (!response.ok || !body.document) throw new Error(body.error || "Generation failed");
+      setDocument(body.document);
+      setSelectedId(body.document.children[0]?.id ?? "");
+    } catch (error) {
+      setGenerationError(error instanceof Error ? error.message : "Generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  return (
+    <main className="flex min-h-0 flex-1 overflow-hidden bg-[#E9ECE6] text-[#15171A]">
+      <aside className="flex w-[248px] shrink-0 flex-col border-r border-[#CED3CA] bg-[#F7F8F4]">
+        <div className="border-b border-[#D7DBD2] px-4 py-4">
+          <div className="font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-[#3157F6]">Engine v2 laboratory</div>
+          <h1 className="mt-1 text-lg font-semibold tracking-[-0.035em]">A document, not a picture</h1>
+        </div>
+        <div className="flex items-center justify-between px-4 pb-2 pt-4">
+          <span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Structure</span>
+          <span className={`rounded-full px-2 py-0.5 font-mono text-[9px] font-semibold ${hydrated ? "bg-[#B7FF4A]" : "bg-[#E4E7E1]"}`}>{hydrated ? "LIVE DOM" : "CONNECTING"}</span>
+        </div>
+        <div className="min-h-0 flex-1 overflow-auto px-2 pb-4">
+          <Tree nodes={document.children} selectedId={selectedId} onSelect={setSelectedId} />
+        </div>
+        <button type="button" onClick={copyDocument} className="m-3 flex items-center justify-center gap-2 rounded-lg border border-[#C8CEC4] bg-white px-3 py-2.5 text-xs font-semibold hover:border-[#3157F6] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#3157F6]">
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          {copied ? "Document copied" : "Copy agent document"}
+        </button>
+      </aside>
+
+      <section className="min-w-0 flex-1 overflow-auto p-8">
+        <form onSubmit={generateDocument} className="mx-auto mb-5 max-w-[1080px] rounded-xl border border-[#C8CEC4] bg-[#F7F8F4] p-2 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Sparkles size={16} className="ml-2 shrink-0 text-[#3157F6]" />
+            <input aria-label="Describe what to build" value={prompt} onChange={(event) => setPrompt(event.target.value)} className="min-w-0 flex-1 bg-transparent px-2 py-2 text-sm outline-none" placeholder="Describe the chart, graph, or visual you need" />
+            <button type="submit" disabled={generating || !prompt.trim()} className="flex shrink-0 items-center gap-2 rounded-lg bg-[#15171A] px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+              {generating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              {generating ? "Compiling" : "Generate"}
+            </button>
+          </div>
+          {generationError ? <p role="alert" className="px-3 pb-1 pt-2 text-xs text-[#B93815]">{generationError}</p> : null}
+        </form>
+        <div className="mx-auto mb-3 flex max-w-[1080px] items-center justify-between text-[#596159]">
+          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]"><MousePointer2 size={13} /> Select any element to edit its real node</div>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={resetDocument} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Reset sample"><RotateCcw size={14} /></button>
+            <button type="button" onClick={exportPng} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]"><Download size={13} /> Export PNG</button>
+            <span className="ml-2 font-mono text-[10px]">1080 × auto</span>
+          </div>
+        </div>
+        <div
+          ref={artboardRef}
+          className="mx-auto overflow-hidden shadow-[0_24px_70px_rgba(35,42,34,0.16)]"
+          style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}
+        >
+          {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedId={selectedId} onSelect={setSelectedId} />)}
+        </div>
+      </section>
+
+      <aside className="w-[284px] shrink-0 overflow-auto border-l border-[#CED3CA] bg-[#F7F8F4] p-4">
+        <div className="mb-5 flex items-center gap-2"><Code2 size={15} /><h2 className="text-sm font-semibold">Computed node</h2></div>
+        {selected ? (
+          <div className="space-y-5">
+            <div className="rounded-lg border border-[#D7DBD2] bg-white p-3 font-mono text-[10px] leading-5 text-[#566057]">
+              <div><span className="text-[#3157F6]">id</span> {selected.id}</div>
+              <div><span className="text-[#3157F6]">type</span> {selected.type}</div>
+              <div><span className="text-[#3157F6]">name</span> {selected.name}</div>
+            </div>
+
+            {selected.type === "text" ? (
+              <label className="block">
+                <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Text content</span>
+                <textarea value={selected.content} onChange={(event) => updateSelected((node) => node.type === "text" ? { ...node, content: event.target.value } : node)} rows={4} className="w-full resize-none rounded-lg border border-[#C8CEC4] bg-white p-3 text-sm outline-none focus:border-[#3157F6] focus:ring-2 focus:ring-[#3157F6]/15" />
+              </label>
+            ) : null}
+
+            {selected.type === "frame" ? (
+              <>
+                <label className="block">
+                  <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Layout mode</span>
+                  <select value={selected.layout.mode} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, mode: event.target.value as "flex" | "grid" } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
+                    <option value="flex">Flex</option>
+                    <option value="grid">Grid</option>
+                  </select>
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <label>
+                    <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Gap</span>
+                    <input type="number" min="0" max="96" value={selected.layout.gap} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, gap: Number(event.target.value) } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                  </label>
+                  <label>
+                    <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Padding</span>
+                    <input type="number" min="0" max="120" value={selected.layout.padding} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, padding: Number(event.target.value) } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                  </label>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {selected.layout.mode === "grid" ? (
+                    <label>
+                      <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Columns</span>
+                      <input type="number" min="1" max="6" value={selected.layout.columns ?? 1} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, columns: Number(event.target.value) } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                    </label>
+                  ) : (
+                    <label>
+                      <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Direction</span>
+                      <select value={selected.layout.direction ?? "row"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, direction: event.target.value as "row" | "column" } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
+                        <option value="row">Row</option>
+                        <option value="column">Column</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
+              </>
+            ) : null}
+
+            <div className="border-t border-[#D7DBD2] pt-4 text-xs leading-5 text-[#667067]">
+              The browser computes this node’s final geometry. The model edits structure and intent, not raw pixel coordinates.
+            </div>
+          </div>
+        ) : <p className="text-sm text-[#667067]">Select a node on the canvas or in the structure tree.</p>}
+      </aside>
+    </main>
+  );
+}

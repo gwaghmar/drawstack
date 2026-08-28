@@ -1,0 +1,173 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import {
+  buildEngineV2GenerationPrompt,
+  classifyEngineV2Prompt,
+  compileEngineV2ModelOutput,
+  validateEngineV2Document,
+} from "./compiler.ts";
+
+function validDocument(): Record<string, unknown> {
+  return {
+    version: 2,
+    engine: "dom-css",
+    name: " Revenue summary ",
+    artboard: { width: 1080, minHeight: 720, background: "$paper" },
+    tokens: {
+      colors: { paper: "#ffffff", ink: "#111111", accent: "rgb(20, 80, 220)" },
+      spacing: { sm: 8, md: 16 },
+      radii: { panel: 12 },
+    },
+    children: [
+      {
+        id: "root",
+        name: " Main frame ",
+        type: "frame",
+        layout: { mode: "grid", columns: 2, gap: 16, padding: 24 },
+        style: { background: "$paper", color: "$ink", width: "100%" },
+        children: [
+          {
+            id: "title",
+            name: "Title",
+            type: "text",
+            content: " Revenue ",
+            variant: "heading",
+          },
+          {
+            id: "revenue",
+            name: "Revenue chart",
+            type: "chart",
+            title: "Revenue by month",
+            chartType: "line",
+            valuePrefix: "$",
+            data: [
+              { label: "Jan", value: 10 },
+              { label: "Feb", value: 14 },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+describe("classifyEngineV2Prompt", () => {
+  it("normalizes whitespace and uses explicit chart signals", () => {
+    assert.deepEqual(classifyEngineV2Prompt("  Make\n a time series chart over time  "), {
+      normalizedPrompt: "Make a time series chart over time",
+      composition: "chart",
+      chartType: "line",
+    });
+    assert.equal(classifyEngineV2Prompt("Create a KPI dashboard with a bar chart").composition, "dashboard");
+    assert.equal(classifyEngineV2Prompt("Show a pie chart").chartType, "donut");
+  });
+
+  it("does not invent a chart type when one is not specified", () => {
+    assert.deepEqual(classifyEngineV2Prompt("Create a quarterly planning brief"), {
+      normalizedPrompt: "Create a quarterly planning brief",
+      composition: "document",
+      chartType: null,
+    });
+  });
+
+  it("rejects empty and oversized prompts", () => {
+    assert.throws(() => classifyEngineV2Prompt(" \n "), /cannot be empty/);
+    assert.throws(() => classifyEngineV2Prompt("x".repeat(4_001)), /cannot exceed/);
+  });
+});
+
+describe("buildEngineV2GenerationPrompt", () => {
+  it("bounds the model vocabulary and safely quotes user input", () => {
+    const prompt = buildEngineV2GenerationPrompt(classifyEngineV2Prompt('Chart titled "Revenue"'));
+    assert.match(prompt, /Return JSON only/);
+    assert.match(prompt, /frame, text, metric, chart, and graph/);
+    assert.match(prompt, /User request: "Chart titled \\"Revenue\\""/);
+  });
+});
+
+describe("validateEngineV2Document", () => {
+  it("returns a normalized EngineDocument", () => {
+    const result = validateEngineV2Document(validDocument());
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.document.name, "Revenue summary");
+    assert.equal(result.document.children[0].name, "Main frame");
+  });
+
+  it("rejects unknown fields and duplicate ids", () => {
+    const document = validDocument();
+    document.secret = "ignored";
+    const children = document.children as Array<Record<string, unknown>>;
+    const root = children[0];
+    const rootChildren = root.children as Array<Record<string, unknown>>;
+    rootChildren[1].id = "title";
+    const result = validateEngineV2Document(document);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.issues.some((issue) => issue.path === "$.secret"));
+    assert.ok(result.issues.some((issue) => issue.message === "Node ids must be unique"));
+  });
+
+  it("rejects unsafe styles and unresolved tokens", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    root.style = { background: "url(https://example.com/track)", color: "$missing" };
+    const result = validateEngineV2Document(document);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.equal(result.issues.filter((issue) => issue.message.includes("color token")).length, 2);
+  });
+
+  it("rejects unsupported node and chart types", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const rootChildren = root.children as Array<Record<string, unknown>>;
+    rootChildren[0].type = "html";
+    rootChildren[1].chartType = "radar";
+    const result = validateEngineV2Document(document);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.issues.some((issue) => issue.path.endsWith(".type")));
+    assert.ok(result.issues.some((issue) => issue.path.endsWith(".chartType")));
+  });
+
+  it("rejects invalid layout fields and excessive chart data", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    root.layout = { mode: "flex", direction: "row", columns: 3, gap: 8, padding: 8 };
+    const rootChildren = root.children as Array<Record<string, unknown>>;
+    rootChildren[1].data = Array.from({ length: 121 }, (_, index) => ({ label: String(index), value: index }));
+    const result = validateEngineV2Document(document);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.issues.some((issue) => issue.path.endsWith(".columns")));
+    assert.ok(result.issues.some((issue) => issue.path.endsWith(".data")));
+  });
+});
+
+describe("compileEngineV2ModelOutput", () => {
+  it("accepts exact JSON and a single JSON fence", () => {
+    const json = JSON.stringify(validDocument());
+    assert.equal(compileEngineV2ModelOutput("Make a line chart", json).ok, true);
+    assert.equal(compileEngineV2ModelOutput("Make a line chart", `\`\`\`json\n${json}\n\`\`\``).ok, true);
+  });
+
+  it("rejects prose, malformed JSON, and invalid prompts", () => {
+    assert.equal(compileEngineV2ModelOutput("Make a chart", `Here it is: ${JSON.stringify(validDocument())}`).ok, false);
+    assert.equal(compileEngineV2ModelOutput("Make a chart", "{broken").ok, false);
+    const result = compileEngineV2ModelOutput(" ", JSON.stringify(validDocument()));
+    assert.equal(result.ok, false);
+    assert.equal(result.intent, null);
+  });
+
+  it("rejects output that conflicts with an explicit chart request", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const rootChildren = root.children as Array<Record<string, unknown>>;
+    rootChildren[1].chartType = "bar";
+    const result = compileEngineV2ModelOutput("Make a line chart", JSON.stringify(document));
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.issues.some((issue) => issue.message === "The request requires a line chart"));
+  });
+});
