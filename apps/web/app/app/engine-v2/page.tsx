@@ -18,5 +18,5 @@ export default async function EngineV2Page({ searchParams }: { searchParams: Pro
   }
   const validated = validateEngineV2Document(parsed);
   if (!validated.ok) notFound();
-  return <EngineCanvas initialDocument={validated.document} initialProjectId={project.id} />;
+  return <EngineCanvas initialDocument={validated.document} initialProjectId={project.id} initialUpdatedAt={project.updatedAt.toISOString()} />;
 }

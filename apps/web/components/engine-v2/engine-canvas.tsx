@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDown, ArrowUp, Check, ClipboardPaste, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Plus, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Check, ClipboardPaste, Code2, Copy, CopyPlus, Download, GripVertical, History, Loader2, MousePointer2, Plus, Redo2, RotateCcw, Save, Share2, Sparkles, Trash2, Undo2, Upload, X } from "lucide-react";
 import { createEngineV2Project, listEngineV2Revisions, restoreEngineV2Revision, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { DeterministicChart } from "@/components/engine-v2/charts";
@@ -23,6 +23,7 @@ import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
 import { createDefaultNode, type InsertableNodeType } from "@/lib/engine-v2/node-factory";
 import { alignNodes, copyNodes, distributeNodes, duplicateNodes, findParent, insertNode, moveNodeByArrow, moveNodeDown, moveNodeToParent, moveNodeUp, pasteNodes, removeNodes, uniqueNodeId } from "@/lib/engine-v2/operations";
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
+import { applyEngineDocumentTransaction, createEngineDocumentTransaction, type EngineTransactionOrigin } from "@/lib/engine-v2/transactions";
 
 const EMPTY_SELECTION = new Set<string>();
 
@@ -240,10 +241,11 @@ export function EngineDocumentView({ document, className = "" }: { document: Eng
   );
 }
 
-export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjectId = null }: { initialDocument?: EngineDocument; initialProjectId?: string | null }) {
+export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjectId = null, initialUpdatedAt = null }: { initialDocument?: EngineDocument; initialProjectId?: string | null; initialUpdatedAt?: string | null }) {
   const router = useRouter();
   const [document, setDocument] = useState<EngineDocument>(initialDocument);
   const [projectId, setProjectId] = useState<string | null>(initialProjectId);
+  const [savedUpdatedAt, setSavedUpdatedAt] = useState<string | null>(initialUpdatedAt);
   const [past, setPast] = useState<EngineDocument[]>([]);
   const [future, setFuture] = useState<EngineDocument[]>([]);
   const [selectedId, setSelectedId] = useState("title");
@@ -253,7 +255,8 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [prompt, setPrompt] = useState("Create a concise product launch dashboard with revenue, conversion, and channel performance");
   const [generating, setGenerating] = useState(false);
   const [generationError, setGenerationError] = useState<string | null>(null);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
+  const [hasPersistenceConflict, setHasPersistenceConflict] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
   const [treeDraggedId, setTreeDraggedId] = useState<string | null>(null);
@@ -294,10 +297,12 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     listEngineV2Revisions(projectId).then(setRevisions).catch(() => setRevisions([]));
   }, [historyOpen, projectId, saveState]);
 
-  const commitDocument = (update: EngineDocument | ((current: EngineDocument) => EngineDocument)) => {
+  const commitDocument = (update: EngineDocument | ((current: EngineDocument) => EngineDocument), origin: EngineTransactionOrigin = "local") => {
     setDocument((current) => {
-      const next = typeof update === "function" ? update(current) : update;
-      if (next === current) return current;
+      const requested = typeof update === "function" ? update(current) : update;
+      const transaction = createEngineDocumentTransaction(current, requested, origin);
+      if (!transaction.operations.length) return current;
+      const next = applyEngineDocumentTransaction(current, transaction);
       setPast((items) => [...items.slice(-49), current]);
       setFuture([]);
       setSaveState("idle");
@@ -377,7 +382,8 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     if (!previous) return;
     setPast((items) => items.slice(0, -1));
     setFuture((items) => [document, ...items.slice(0, 49)]);
-    setDocument(previous);
+    setDocument((current) => applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, previous, "undo")));
+    setSaveState("idle");
   };
 
   const redo = () => {
@@ -385,19 +391,30 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     if (!next) return;
     setFuture((items) => items.slice(1));
     setPast((items) => [...items.slice(-49), document]);
-    setDocument(next);
+    setDocument((current) => applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, next, "redo")));
+    setSaveState("idle");
   };
 
   const saveDocument = async () => {
+    if (hasPersistenceConflict) return;
     setSaveState("saving");
     try {
       if (projectId) {
-        await saveEngineV2Project(projectId, document.name, JSON.stringify(document), "Engine v2 save");
+        if (!savedUpdatedAt) throw new Error("Missing project version");
+        const result = await saveEngineV2Project(projectId, document.name, JSON.stringify(document), savedUpdatedAt, "Engine v2 save");
+        if (!result.ok) {
+          setHasPersistenceConflict(true);
+          setSaveState("conflict");
+          return;
+        }
+        setSavedUpdatedAt(result.updatedAt);
       } else {
-        const id = await createEngineV2Project(document.name, JSON.stringify(document));
-        setProjectId(id);
-        router.replace(`/app/engine-v2?id=${id}`);
+        const created = await createEngineV2Project(document.name, JSON.stringify(document));
+        setProjectId(created.id);
+        setSavedUpdatedAt(created.updatedAt);
+        router.replace(`/app/engine-v2?id=${created.id}`);
       }
+      setHasPersistenceConflict(false);
       setSaveState("saved");
     } catch {
       setSaveState("error");
@@ -408,11 +425,23 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     setShareState("sharing");
     try {
       let id = projectId;
-      if (id) await saveEngineV2Project(id, document.name, JSON.stringify(document), "Shared version");
+      if (id) {
+        if (!savedUpdatedAt) throw new Error("Missing project version");
+        const result = await saveEngineV2Project(id, document.name, JSON.stringify(document), savedUpdatedAt, "Shared version");
+        if (!result.ok) {
+          setHasPersistenceConflict(true);
+          setSaveState("conflict");
+          setShareState("idle");
+          return;
+        }
+        setSavedUpdatedAt(result.updatedAt);
+      }
       else {
-        id = await createEngineV2Project(document.name, JSON.stringify(document));
-        setProjectId(id);
-        router.replace(`/app/engine-v2?id=${id}`);
+        const created = await createEngineV2Project(document.name, JSON.stringify(document));
+        id = created.id;
+        setProjectId(created.id);
+        setSavedUpdatedAt(created.updatedAt);
+        router.replace(`/app/engine-v2?id=${created.id}`);
       }
       let preview: string | undefined;
       if (artboardRef.current) {
@@ -434,7 +463,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const parsed = JSON.parse(await file.text()) as unknown;
       const result = validateEngineV2Document(parsed);
       if (!result.ok) throw new Error(result.issues[0]?.message || "Invalid document");
-      commitDocument(result.document);
+      commitDocument(result.document, "import");
       replaceSelection([result.document.children[0]?.id ?? ""]);
       setGenerationError(null);
     } catch (error) {
@@ -447,10 +476,19 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const restoreRevision = async (revisionId: string) => {
     if (!projectId) return;
     try {
-      const source = await restoreEngineV2Revision(projectId, revisionId);
-      const result = validateEngineV2Document(JSON.parse(source) as unknown);
+      if (!savedUpdatedAt) throw new Error("Missing project version");
+      const restored = await restoreEngineV2Revision(projectId, revisionId, savedUpdatedAt);
+      if (!restored.ok) {
+        setHasPersistenceConflict(true);
+        setSaveState("conflict");
+        setHistoryOpen(false);
+        return;
+      }
+      const result = validateEngineV2Document(JSON.parse(restored.source) as unknown);
       if (!result.ok) throw new Error("Stored revision is invalid");
-      commitDocument(result.document);
+      commitDocument(result.document, "restore");
+      setSavedUpdatedAt(restored.updatedAt);
+      setHasPersistenceConflict(false);
       replaceSelection([result.document.children[0]?.id ?? ""]);
       setHistoryOpen(false);
       setSaveState("saved");
@@ -550,7 +588,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       const minHeight = session.axes === "height" || session.axes === "both" ? session.startHeight + moveEvent.clientY - session.startY : null;
       if ((width === null || Math.round(width) === Math.round(session.startWidth)) && (minHeight === null || Math.round(minHeight) === Math.round(session.startHeight))) return;
       session.changed = true;
-      setDocument(resizeSelectedNode(session.original, width, minHeight));
+      setDocument((current) => {
+        const requested = resizeSelectedNode(session.original, width, minHeight);
+        return applyEngineDocumentTransaction(current, createEngineDocumentTransaction(current, requested, "local"));
+      });
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", move);
@@ -719,7 +760,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       });
       const body = await response.json() as { document?: EngineDocument; error?: string };
       if (!response.ok || !body.document) throw new Error(body.error || "Generation failed");
-      commitDocument(body.document);
+      commitDocument(body.document, "ai");
       replaceSelection([body.document.children[0]?.id ?? ""]);
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Generation failed");
@@ -770,6 +811,12 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           </div>
           {generationError ? <p role="alert" className="px-3 pb-1 pt-2 text-xs text-[#B93815]">{generationError}</p> : null}
         </form>
+        {hasPersistenceConflict ? (
+          <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#E6A23C] bg-[#FFF8E8] px-4 py-3 text-xs text-[#6E4A00]">
+            <span className="flex items-center gap-2"><AlertTriangle size={15} />This project changed elsewhere. Your local edits were not overwritten.</span>
+            <button type="button" onClick={() => window.location.reload()} className="shrink-0 rounded-md border border-[#D39A38] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFF1CE]">Load latest version</button>
+          </div>
+        ) : null}
         <div className="mx-auto mb-3 flex max-w-[1080px] items-center justify-between text-[#596159]">
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em]"><MousePointer2 size={13} /> Select any element to edit its real node</div>
           <div className="flex items-center gap-1">
@@ -779,7 +826,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => importDocument(event.target.files?.[0])} />
             <button type="button" onClick={() => importRef.current?.click()} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Import Engine v2 JSON"><Upload size={14} /></button>
             <button type="button" onClick={() => setHistoryOpen(true)} disabled={!projectId} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Version history"><History size={14} /></button>
-            <button type="button" onClick={saveDocument} disabled={saveState === "saving"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Save size={13} />{saveState === "saving" ? "Saving" : saveState === "saved" ? "Saved" : saveState === "error" ? "Save failed" : projectId ? "Save" : "Save project"}</button>
+            <button type="button" onClick={saveDocument} disabled={saveState === "saving" || hasPersistenceConflict} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Save size={13} />{saveState === "saving" ? "Saving" : saveState === "saved" ? "Saved" : saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : projectId ? "Save" : "Save project"}</button>
             <button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Share2 size={13} />{shareState === "sharing" ? "Sharing" : shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}</button>
             <button type="button" onClick={exportPng} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]"><Download size={13} /> Export PNG</button>
             <button type="button" onClick={() => downloadPayload(createEngineV2SvgExport(document))} className="rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9]">SVG</button>
