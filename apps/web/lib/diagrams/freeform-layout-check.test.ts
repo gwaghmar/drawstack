@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { checkLayoutIssues } from "./freeform-layout-check.ts";
+import { checkLayoutIssues, repairOverlaps } from "./freeform-layout-check.ts";
 import type { CanvasDocument, RectShape, FrameShape, ArrowShape } from "./freeform-canvas.ts";
 
 describe("checkLayoutIssues", () => {
@@ -45,5 +45,26 @@ describe("checkLayoutIssues", () => {
 
     const issues = checkLayoutIssues(doc);
     assert.ok(issues.some((i) => i.kind === "outside-frame" && i.shapeIds.includes("s_o")));
+  });
+
+  it("separates overlapping top-level shapes without mutating the input", () => {
+    const a: RectShape = { id: "s_a", name: "a", type: "rectangle", x: 0, y: 0, width: 100, height: 100 };
+    const b: RectShape = { id: "s_b", name: "b", type: "rectangle", x: 30, y: 30, width: 100, height: 100 };
+    const doc: CanvasDocument = { version: 1, shapes: [a, b] };
+
+    const repaired = repairOverlaps(doc);
+
+    assert.notEqual(repaired, doc);
+    assert.deepEqual(doc.shapes, [a, b]);
+    assert.equal(checkLayoutIssues(repaired).some((issue) => issue.kind === "overlap"), false);
+  });
+
+  it("does not move shapes assigned to a frame", () => {
+    const frame: FrameShape = { id: "f_1", name: "frame", type: "frame", x: 0, y: 0, width: 400, height: 300 };
+    const a: RectShape = { id: "s_a", name: "a", type: "rectangle", x: 40, y: 40, width: 100, height: 100, frameId: "f_1" };
+    const b: RectShape = { id: "s_b", name: "b", type: "rectangle", x: 60, y: 60, width: 100, height: 100, frameId: "f_1" };
+    const doc: CanvasDocument = { version: 1, shapes: [frame, a, b] };
+
+    assert.equal(repairOverlaps(doc), doc);
   });
 });

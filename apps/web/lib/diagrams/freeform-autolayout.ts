@@ -1,3 +1,4 @@
+import dagre from "@dagrejs/dagre";
 import {
   type CanvasDocument,
   type CanvasShape,
@@ -38,17 +39,21 @@ export function autoLayoutFreeformDocument(
     shapeMap.set(s.id, s);
   }
 
-  // Connections come from arrows AND lines — UML/ERD notation edges are lines,
-  // and a layout that ignores them lays those diagrams out as disconnected islands.
   const connectors = doc.shapes.filter((s) => s.type === "arrow" || s.type === "line") as ArrowShape[];
-  const adjacency = new Map<string, Set<string>>();
-  const incoming = new Map<string, Set<string>>();
-  const inDegree = new Map<string, number>();
 
-  for (const s of layoutableShapes) {
-    adjacency.set(s.id, new Set());
-    incoming.set(s.id, new Set());
-    inDegree.set(s.id, 0);
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({
+    rankdir: direction,
+    nodesep: nodeGap,
+    ranksep: layerGap,
+    marginx: startX,
+    marginy: startY
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  for (const shape of layoutableShapes) {
+    const b = getShapeBounds(doc, shape);
+    g.setNode(shape.id, { width: b.width, height: b.height });
   }
 
   for (const connector of connectors) {
@@ -56,123 +61,24 @@ export function autoLayoutFreeformDocument(
       const fromId = connector.start.shapeId;
       const toId = connector.end.shapeId;
       if (shapeMap.has(fromId) && shapeMap.has(toId) && fromId !== toId) {
-        if (!adjacency.get(fromId)!.has(toId)) {
-          adjacency.get(fromId)!.add(toId);
-          incoming.get(toId)!.add(fromId);
-          inDegree.set(toId, (inDegree.get(toId) ?? 0) + 1);
-        }
+        g.setEdge(fromId, toId);
       }
     }
   }
 
-  // Assign layers via topological traversal
-  const layers: string[][] = [];
-  const assigned = new Set<string>();
-  const currentLayer: string[] = [];
+  dagre.layout(g);
 
-  // Roots: in-degree === 0
-  for (const [id, deg] of inDegree.entries()) {
-    if (deg === 0) {
-      currentLayer.push(id);
-      assigned.add(id);
-    }
-  }
-
-  // If no root found (cycle), pick the first shape
-  if (currentLayer.length === 0 && layoutableShapes.length > 0) {
-    currentLayer.push(layoutableShapes[0].id);
-    assigned.add(layoutableShapes[0].id);
-  }
-
-  layers.push(currentLayer);
-
-  let unvisited = layoutableShapes.filter((s) => !assigned.has(s.id));
-  while (unvisited.length > 0) {
-    const prevLayer = layers[layers.length - 1];
-    const nextLayer: string[] = [];
-
-    for (const fromId of prevLayer) {
-      for (const toId of adjacency.get(fromId) ?? []) {
-        if (!assigned.has(toId)) {
-          nextLayer.push(toId);
-          assigned.add(toId);
-        }
-      }
-    }
-
-    if (nextLayer.length === 0) {
-      // Pick any remaining unvisited node as a new island root
-      const nextRoot = unvisited[0];
-      nextLayer.push(nextRoot.id);
-      assigned.add(nextRoot.id);
-    }
-
-    layers.push(nextLayer);
-    unvisited = layoutableShapes.filter((s) => !assigned.has(s.id));
-  }
-
-  // Order each layer by the average position of its neighbours in the adjacent
-  // layer (barycenter), swept both ways. Without this, layer membership is
-  // whatever order the traversal happened to visit in, and edges cross wildly.
-  const neighborsOf = (id: string) => [...(adjacency.get(id) ?? []), ...(incoming.get(id) ?? [])];
-
-  const sweep = (referenceLayer: string[], target: string[]) => {
-    const index = new Map(referenceLayer.map((id, i) => [id, i]));
-    const barycenter = new Map<string, number>();
-    target.forEach((id, fallback) => {
-      const positions = neighborsOf(id)
-        .map((n) => index.get(n))
-        .filter((v): v is number => v !== undefined);
-      barycenter.set(id, positions.length ? positions.reduce((a, b) => a + b, 0) / positions.length : fallback);
-    });
-    target.sort((a, b) => barycenter.get(a)! - barycenter.get(b)!);
-  };
-
-  for (let pass = 0; pass < 4; pass++) {
-    for (let i = 1; i < layers.length; i++) sweep(layers[i - 1], layers[i]);
-    for (let i = layers.length - 2; i >= 0; i--) sweep(layers[i + 1], layers[i]);
-  }
-
-  // Compute positions
   const newPositions = new Map<string, { x: number; y: number }>();
-  let layerOffset = direction === "LR" ? startX : startY;
-
-  // getShapeBounds falls through to computeDynamicShapeDimensions for any shape
-  // missing width/height (the common case for AI-authored shapes) — reading the
-  // field directly reads undefined and poisons every downstream position with NaN.
-  const boundsOf = (id: string) => getShapeBounds(doc, shapeMap.get(id)! as CanvasShape);
-
-  const breadthOf = (layer: string[]) =>
-    layer.reduce((sum, id) => {
-      const b = boundsOf(id);
-      return sum + (direction === "LR" ? b.height : b.width);
-    }, 0) + Math.max(0, (layer.length - 1) * nodeGap);
-
-  // Center every layer on one axis so a wide layer doesn't drag narrow ones
-  // to one side; the old code started each layer flush at the same edge.
-  const widestBreadth = Math.max(...layers.map(breadthOf));
-
-  for (const layer of layers) {
-    let maxLayerThickness = 0;
-    for (const id of layer) {
-      const b = boundsOf(id);
-      maxLayerThickness = Math.max(maxLayerThickness, direction === "LR" ? b.width : b.height);
+  for (const shape of layoutableShapes) {
+    const node = g.node(shape.id);
+    if (node) {
+      const b = getShapeBounds(doc, shape);
+      // Dagre returns the center point of the node; we need top-left.
+      newPositions.set(shape.id, {
+        x: Math.round(node.x - b.width / 2),
+        y: Math.round(node.y - b.height / 2),
+      });
     }
-
-    let breadthCursor = (direction === "LR" ? startY : startX) + (widestBreadth - breadthOf(layer)) / 2;
-
-    for (const id of layer) {
-      const b = boundsOf(id);
-      if (direction === "LR") {
-        newPositions.set(id, { x: layerOffset, y: Math.round(breadthCursor) });
-        breadthCursor += b.height + nodeGap;
-      } else {
-        newPositions.set(id, { x: Math.round(breadthCursor), y: layerOffset });
-        breadthCursor += b.width + nodeGap;
-      }
-    }
-
-    layerOffset += maxLayerThickness + layerGap;
   }
 
   // Update doc shapes. Connectors between laid-out nodes switch to orthogonal

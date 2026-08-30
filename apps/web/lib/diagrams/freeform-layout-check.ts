@@ -99,3 +99,78 @@ export function checkLayoutIssues(doc: CanvasDocument): LayoutIssue[] {
 
   return issues;
 }
+
+export function repairOverlaps(doc: CanvasDocument): CanvasDocument {
+  const MARGIN = 12;
+  const MAX_ITERATIONS = 10;
+
+  let shapes = [...doc.shapes];
+  let moved = false;
+
+  const overlapCandidateIds = new Set(
+    shapes.filter(s => s.type !== "arrow" && s.type !== "line" && s.type !== "path" && s.type !== "frame" && !s.parentId && !s.frameId).map(s => s.id)
+  );
+
+  for (let iter = 0; iter < MAX_ITERATIONS; iter++) {
+    const displacements = new Map<string, { dx: number, dy: number }>();
+    let overlapsFound = 0;
+
+    for (let i = 0; i < shapes.length; i++) {
+      for (let j = i + 1; j < shapes.length; j++) {
+        const a = shapes[i];
+        const b = shapes[j];
+
+        if (!overlapCandidateIds.has(a.id) || !overlapCandidateIds.has(b.id)) continue;
+
+        const currentDoc = { ...doc, shapes };
+        const aBounds = getShapeBounds(currentDoc, a);
+        const bBounds = getShapeBounds(currentDoc, b);
+
+        const expandedA = { x: aBounds.x - MARGIN/2, y: aBounds.y - MARGIN/2, width: aBounds.width + MARGIN, height: aBounds.height + MARGIN };
+        const expandedB = { x: bBounds.x - MARGIN/2, y: bBounds.y - MARGIN/2, width: bBounds.width + MARGIN, height: bBounds.height + MARGIN };
+
+        const overlapW = Math.max(0, Math.min(expandedA.x + expandedA.width, expandedB.x + expandedB.width) - Math.max(expandedA.x, expandedB.x));
+        const overlapH = Math.max(0, Math.min(expandedA.y + expandedA.height, expandedB.y + expandedB.height) - Math.max(expandedA.y, expandedB.y));
+
+        if (overlapW > 0 && overlapH > 0) {
+          overlapsFound++;
+          moved = true;
+
+          const centerA = { x: expandedA.x + expandedA.width / 2, y: expandedA.y + expandedA.height / 2 };
+          const centerB = { x: expandedB.x + expandedB.width / 2, y: expandedB.y + expandedB.height / 2 };
+
+          const dispA = displacements.get(a.id) ?? { dx: 0, dy: 0 };
+          const dispB = displacements.get(b.id) ?? { dx: 0, dy: 0 };
+
+          if (overlapW < overlapH) {
+            const push = (overlapW / 2) + 1;
+            const dir = centerA.x < centerB.x ? -1 : 1;
+            dispA.dx += dir * push;
+            dispB.dx -= dir * push;
+          } else {
+            const push = (overlapH / 2) + 1;
+            const dir = centerA.y < centerB.y ? -1 : 1;
+            dispA.dy += dir * push;
+            dispB.dy -= dir * push;
+          }
+
+          displacements.set(a.id, dispA);
+          displacements.set(b.id, dispB);
+        }
+      }
+    }
+
+    if (overlapsFound === 0) break;
+
+    shapes = shapes.map(s => {
+      const disp = displacements.get(s.id);
+      if (disp) {
+        return { ...s, x: Math.round(s.x + disp.dx), y: Math.round(s.y + disp.dy) } as CanvasShape;
+      }
+      return s;
+    });
+  }
+
+  if (!moved) return doc;
+  return { ...doc, shapes };
+}

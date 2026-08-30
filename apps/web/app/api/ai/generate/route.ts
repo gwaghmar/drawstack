@@ -16,6 +16,7 @@ import { buildBrandDirective } from "@/lib/brand-directive";
 import { recordAiEvent } from "@/lib/ai-events";
 import { validateAndRepairOutput, parsePossiblyBrokenJson } from "@/lib/diagrams/validate-output";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
+import { repairOverlaps } from "@/lib/diagrams/freeform-layout-check";
 
 export const maxDuration = 60;
 
@@ -545,14 +546,21 @@ ${ANTI_GENERIC_DIRECTIVE}`;
           if (
             validation.ok &&
             generationMode === "create" &&
-            effectiveDiagramType === "freeform" &&
-            intentPlan.layoutHint === "graph"
+            effectiveDiagramType === "freeform"
           ) {
             try {
               const parsedDoc = JSON.parse(validation.source);
-              const laidOut = autoLayoutFreeformDocument(parsedDoc);
-              layoutedSource = JSON.stringify(laidOut);
-              layoutApplied = true;
+              if (intentPlan.layoutHint === "graph") {
+                const laidOut = autoLayoutFreeformDocument(parsedDoc);
+                layoutedSource = JSON.stringify(laidOut);
+                layoutApplied = true;
+              } else {
+                const repaired = repairOverlaps(parsedDoc);
+                if (repaired !== parsedDoc) {
+                  layoutedSource = JSON.stringify(repaired);
+                  layoutApplied = true;
+                }
+              }
             } catch (err) {
               console.warn(`[AI generate] auto-layout skipped: ${err instanceof Error ? err.message : String(err)}`);
             }

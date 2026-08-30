@@ -132,11 +132,13 @@ import {
   type CardShape,
   type TableShape,
   type ImageShape,
+  isBoundEndpoint,
 } from "@/lib/diagrams/freeform-canvas";
 
 import { freeformToSvg, getSvgIcon } from "@/lib/diagrams/freeform-svg";
 import { SHAPE_CATEGORIES, catalogByCategory, type ShapeCatalogEntry } from "@/lib/diagrams/freeform-shape-catalog";
 import { autoLayoutFreeformDocument } from "@/lib/diagrams/freeform-autolayout";
+import { repairOverlaps } from "@/lib/diagrams/freeform-layout-check";
 import { YjsCanvasStore, type PeerInfo } from "@/lib/diagrams/yjs-store";
 import {
   hasRichTextMarkers,
@@ -1933,6 +1935,8 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
   const [snapGuides, setSnapGuides] = useState<{ v: number | null; h: number | null }>({ v: null, h: null });
   const [placeKind, setPlaceKind] = useState<ShapeKind | null>(null);
   const [shapePickerOpen, setShapePickerOpen] = useState(false);
+  const [showLayoutTweaks, setShowLayoutTweaks] = useState(false);
+  const [layoutOptions, setLayoutOptions] = useState<import("@/lib/diagrams/freeform-autolayout").AutoLayoutOptions>({ direction: "LR", nodeGap: 50, layerGap: 140 });
   const [shapePickerQuery, setShapePickerQuery] = useState("");
   // Shape currently under the pointer in select mode, for draw.io-style hover
   // connection dots — lets a user start an arrow straight from a shape's edge
@@ -3669,10 +3673,22 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     URL.revokeObjectURL(url);
   };
 
-  const handleAutoLayout = (dir: "LR" | "TB" = "LR") => {
-    const laidOut = autoLayoutFreeformDocument(doc, { direction: dir });
-    setDoc(laidOut);
-    commitChanges(laidOut);
+  const handleAutoLayout = (options = layoutOptions) => {
+    const boundArrowsCount = doc.shapes.filter(
+      (s) => (s.type === "arrow" || s.type === "line") &&
+      isBoundEndpoint((s as ArrowShape).start) &&
+      isBoundEndpoint((s as ArrowShape).end)
+    ).length;
+
+    if (boundArrowsCount > 0) {
+      const laidOut = autoLayoutFreeformDocument(doc, options);
+      setDoc(laidOut);
+      commitChanges(laidOut);
+    } else {
+      const repaired = repairOverlaps(doc);
+      setDoc(repaired);
+      commitChanges(repaired);
+    }
   };
 
   const marqueeRect = marquee
@@ -3883,15 +3899,59 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
 
           {toolbarDivider}
 
-          <button
-            type="button"
-            onClick={() => handleAutoLayout("LR")}
-            className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"
-            title="Auto-organize diagram hierarchy"
-          >
-            <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
-            Tidy Up
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowLayoutTweaks(!showLayoutTweaks)}
+              className={`flex h-8 items-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-all ${showLayoutTweaks ? "bg-slate-100 dark:bg-slate-800" : "text-slate-700 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800"}`}
+              title="Layout Tweaks"
+            >
+              <Sparkles className="h-3.5 w-3.5 text-indigo-500" />
+              Layout
+            </button>
+            {showLayoutTweaks && (
+              <div className="absolute top-full left-0 mt-2 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl dark:border-slate-700 dark:bg-slate-800 z-50 text-slate-800 dark:text-slate-200">
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-slate-100 dark:border-slate-700">
+                  <span className="text-xs font-semibold">Layout Tweaks</span>
+                  <button onClick={() => setShowLayoutTweaks(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"><X className="w-3.5 h-3.5" /></button>
+                </div>
+                <div className="space-y-4 text-xs font-medium">
+                  <div className="flex items-center justify-between">
+                    <span>Direction</span>
+                    <select
+                      className="border border-slate-200 rounded px-1.5 py-1 bg-slate-50 dark:bg-slate-900 dark:border-slate-600"
+                      value={layoutOptions.direction}
+                      onChange={(e) => {
+                        const newOpts = { ...layoutOptions, direction: e.target.value as "LR" | "TB" };
+                        setLayoutOptions(newOpts);
+                        handleAutoLayout(newOpts);
+                      }}
+                    >
+                      <option value="LR">Left to Right</option>
+                      <option value="TB">Top to Bottom</option>
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="flex justify-between text-slate-500 dark:text-slate-400"><span>Node Gap</span> <span>{layoutOptions.nodeGap}px</span></span>
+                    <input type="range" min="10" max="200" value={layoutOptions.nodeGap} onChange={(e) => {
+                      const newOpts = { ...layoutOptions, nodeGap: parseInt(e.target.value) };
+                      setLayoutOptions(newOpts);
+                      handleAutoLayout(newOpts);
+                    }} className="w-full accent-indigo-500" />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <span className="flex justify-between text-slate-500 dark:text-slate-400"><span>Layer Gap</span> <span>{layoutOptions.layerGap}px</span></span>
+                    <input type="range" min="50" max="300" value={layoutOptions.layerGap} onChange={(e) => {
+                      const newOpts = { ...layoutOptions, layerGap: parseInt(e.target.value) };
+                      setLayoutOptions(newOpts);
+                      handleAutoLayout(newOpts);
+                    }} className="w-full accent-indigo-500" />
+                  </div>
+                  <button onClick={() => handleAutoLayout(layoutOptions)} className="w-full mt-2 rounded-md bg-indigo-50 dark:bg-indigo-500/10 py-1.5 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-100 dark:hover:bg-indigo-500/20 transition-colors">Apply Tidy Up</button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"
