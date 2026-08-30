@@ -10,7 +10,7 @@ const spec = {
   paths: {
     "/api/v1/validate": {
       post: {
-        summary: "Validate diagram text source (length + optional parse)",
+        summary: "Validate a freeform canvas JSON document",
         requestBody: {
           content: {
             "application/json": {
@@ -23,8 +23,8 @@ const spec = {
           },
         },
         responses: {
-          "200": { description: "OK" },
-          "400": { description: "Validation error" },
+          "200": { description: "Valid freeform canvas document" },
+          "400": { description: "Invalid JSON, document shape, or references" },
         },
       },
     },

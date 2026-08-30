@@ -1,7 +1,10 @@
 import { NextResponse } from "next/server";
-import { MermaidSourceSchema, type ApiError } from "@flowchart/core";
+import { type ApiError } from "@flowchart/core";
 import { rateLimit } from "@/lib/rate-limit";
 import { getPrincipalFromRequest } from "@/lib/api-auth";
+import { parseFreeformSource, validateFreeformRefs } from "@/lib/diagrams/freeform-canvas";
+
+const MAX_SOURCE_LENGTH = 500_000;
 
 export async function POST(req: Request) {
   const ip = req.headers.get("x-forwarded-for") ?? "local";
@@ -22,9 +25,16 @@ export async function POST(req: Request) {
   }
 
   try {
-    const json = await req.json();
-    const source = MermaidSourceSchema.parse(json.source);
-    return NextResponse.json({ ok: true, length: source.length });
+    const json = await req.json() as { source?: unknown };
+    if (typeof json.source !== "string" || json.source.length === 0 || json.source.length > MAX_SOURCE_LENGTH) {
+      throw new Error("Diagram source must be a non-empty string no larger than 500 KB");
+    }
+    const parsed = parseFreeformSource(json.source);
+    const issues = [...parsed.errors, ...validateFreeformRefs(parsed.doc)];
+    if (issues.length > 0) {
+      return NextResponse.json({ ok: false, issues }, { status: 400 });
+    }
+    return NextResponse.json({ ok: true, length: json.source.length, shapeCount: parsed.doc.shapes.length });
   } catch (e) {
     const body: ApiError = {
       error: e instanceof Error ? e.message : "Invalid body",
