@@ -32,6 +32,7 @@ for (const viewport of [
 
     await expect(page.locator("[data-engine-toolbar]")).toBeVisible();
     await expect(page.getByText("Export", { exact: true })).toBeVisible();
+    if (viewport.name === "phone") await expect(page.getByText("Swipe tools sideways for more", { exact: false })).toBeVisible();
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }

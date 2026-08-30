@@ -155,6 +155,12 @@ type ResizeSession = {
   changed: boolean;
 };
 
+type EditSession = {
+  element: HTMLElement;
+  original: EngineDocument;
+  timer: number | null;
+};
+
 type TreeProps = {
   nodes: EngineNode[];
   selectedId: string;
@@ -260,6 +266,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const [aiComposerOpen, setAiComposerOpen] = useState(autoGenerate);
   const [generationError, setGenerationError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [hasPersistenceConflict, setHasPersistenceConflict] = useState(false);
   const [collaborationError, setCollaborationError] = useState<string | null>(null);
   const [openDrawer, setOpenDrawer] = useState<"layers" | "inspect" | null>(null);
@@ -275,6 +282,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const importRef = useRef<HTMLInputElement>(null);
   const treeRef = useRef<HTMLDivElement>(null);
   const resizeSessionRef = useRef<ResizeSession | null>(null);
+  const editSessionRef = useRef<EditSession | null>(null);
   const resizeCleanupRef = useRef<(() => void) | null>(null);
   const clipboardNodesRef = useRef<EngineNode[]>([]);
   const documentRef = useRef(document);
@@ -367,12 +375,40 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     },
   });
 
+  const flushEditSession = () => {
+    const session = editSessionRef.current;
+    if (!session) return;
+    if (session.timer) window.clearTimeout(session.timer);
+    editSessionRef.current = null;
+    const current = documentRef.current;
+    const transaction = createEngineDocumentTransaction(session.original, current, "local");
+    if (!transaction.operations.length) return;
+    setPast((items) => [...items.slice(-49), session.original]);
+    setFuture([]);
+    collaboration.publish(transaction);
+  };
+
   const commitDocument = (update: EngineDocument | ((current: EngineDocument) => EngineDocument), origin: EngineTransactionOrigin = "local") => {
     const current = documentRef.current;
     const requested = typeof update === "function" ? update(current) : update;
     const transaction = createEngineDocumentTransaction(current, requested, origin);
     if (!transaction.operations.length) return;
     const next = applyEngineDocumentTransaction(current, transaction);
+    const activeElement = window.document.activeElement;
+    const batchesFieldEdit = origin === "local" && (activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement) && Boolean(activeElement.closest('[data-engine-drawer="inspect"]'));
+    if (batchesFieldEdit) {
+      const existing = editSessionRef.current;
+      if (existing && existing.element !== activeElement) flushEditSession();
+      if (!editSessionRef.current) editSessionRef.current = { element: activeElement, original: current, timer: null };
+      const session = editSessionRef.current;
+      if (session.timer) window.clearTimeout(session.timer);
+      session.timer = window.setTimeout(flushEditSession, 500);
+      documentRef.current = next;
+      setDocument(next);
+      setSaveState("idle");
+      return;
+    }
+    flushEditSession();
     documentRef.current = next;
     setDocument(next);
     setPast((items) => [...items.slice(-49), current]);
@@ -411,7 +447,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     };
   }, [selectedId, selectedIds.length]);
 
-  useEffect(() => () => resizeCleanupRef.current?.(), []);
+  useEffect(() => () => {
+    resizeCleanupRef.current?.();
+    flushEditSession();
+  }, []);
 
   const updateSelected = (update: (node: EngineNode) => EngineNode) => {
     commitDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
@@ -477,8 +516,11 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   const saveDocument = async () => {
     if (hasPersistenceConflict) return;
     setSaveState("saving");
+    setSaveError(null);
     try {
       const currentDocument = documentRef.current;
+      const validated = validateEngineV2Document(currentDocument);
+      if (!validated.ok) throw new Error(validated.issues[0]?.message ?? "The document is invalid");
       if (projectId) {
         if (!savedUpdatedAt) throw new Error("Missing project version");
         const result = await saveEngineV2Project(projectId, currentDocument.name, JSON.stringify(currentDocument), savedUpdatedAt, "Engine v2 save");
@@ -496,8 +538,9 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
       }
       setHasPersistenceConflict(false);
       setSaveState("saved");
-    } catch {
+    } catch (error) {
       setSaveState("error");
+      setSaveError(error instanceof Error ? error.message : "Save failed");
     }
   };
 
@@ -709,6 +752,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     updateSelected((node) => {
       const style = { ...node.style };
       if (!rawValue) delete style[property];
+      else if (property === "width" && /^(?:100|[1-9]?\d)%$/.test(rawValue)) style.width = rawValue;
       else style[property] = Math.min(property === "width" ? document.artboard.width : Number.POSITIVE_INFINITY, Math.max(property === "width" ? 80 : 40, Math.round(Number(rawValue))));
       if (property === "width" && rawValue) delete style.flex;
       return { ...node, style };
@@ -929,9 +973,21 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             <button type="button" onClick={() => setCollaborationError(null)} className="shrink-0 rounded-md border border-[#D98A76] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFE4DC]">Dismiss</button>
           </div>
         ) : null}
+        {generationError && !aiComposerOpen ? (
+          <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#D98A76] bg-[#FFF0EC] px-4 py-3 text-xs text-[#7A2E1D]">
+            <span className="flex items-center gap-2"><AlertTriangle size={15} />{generationError}</span>
+            <button type="button" onClick={() => setGenerationError(null)} className="shrink-0 rounded-md border border-[#D98A76] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFE4DC]">Dismiss</button>
+          </div>
+        ) : null}
+        {saveError ? (
+          <div role="alert" className="mx-auto mb-4 flex max-w-[1080px] items-center justify-between gap-4 rounded-lg border border-[#D98A76] bg-[#FFF0EC] px-4 py-3 text-xs text-[#7A2E1D]">
+            <span className="flex items-center gap-2"><AlertTriangle size={15} />Save failed: {saveError}</span>
+            <button type="button" onClick={() => setSaveError(null)} className="shrink-0 rounded-md border border-[#D98A76] bg-white px-3 py-1.5 font-semibold hover:bg-[#FFE4DC]">Dismiss</button>
+          </div>
+        ) : null}
         <div className="mx-auto mb-3 flex max-w-[1080px] min-w-0 flex-col gap-2 text-[#596159] 2xl:flex-row 2xl:items-center 2xl:justify-between" data-engine-toolbar>
           <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.12em] md:flex"><MousePointer2 size={13} /> Select any element to edit its real node</div>
-          <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto pb-1 2xl:w-auto 2xl:pb-0">
+          <div className="flex w-full min-w-0 items-center gap-1 overflow-x-auto pb-1 [scrollbar-width:thin] 2xl:w-auto 2xl:pb-0" aria-label="Editor tools. Scroll horizontally for more actions on small screens">
             <div className="flex shrink-0 items-center gap-1 rounded-lg border border-[#CED3CA] bg-[#F7F8F4] p-1">
               <button type="button" onClick={() => setAiComposerOpen(true)} aria-label="Open AI composer" className="flex items-center gap-1.5 rounded-md bg-[#15171A] px-3 py-2 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] text-white hover:bg-[#2B2E33]"><Sparkles size={13} />AI</button>
               <button ref={layersButtonRef} type="button" onClick={() => setOpenDrawer("layers")} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[9px] font-semibold uppercase tracking-[0.08em] hover:bg-[#E4E7E1] lg:hidden" aria-label="Open layers"><Layers3 size={13} />Layers</button>
@@ -948,14 +1004,14 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               </button>
             ) : null}
             <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[#CED3CA] bg-[#F7F8F4] p-1">
-              <button type="button" onClick={undo} disabled={!past.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Undo"><Undo2 size={14} /></button>
-              <button type="button" onClick={redo} disabled={!future.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Redo"><Redo2 size={14} /></button>
-              <button type="button" onClick={resetDocument} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Reset sample"><RotateCcw size={14} /></button>
+              <button type="button" onClick={undo} disabled={!past.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Undo" aria-label="Undo"><Undo2 size={14} /></button>
+              <button type="button" onClick={redo} disabled={!future.length} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Redo" aria-label="Redo"><Redo2 size={14} /></button>
+              <button type="button" onClick={resetDocument} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Reset sample" aria-label="Reset sample document"><RotateCcw size={14} /></button>
             </div>
             <input ref={importRef} type="file" accept="application/json,.json" className="hidden" onChange={(event) => importDocument(event.target.files?.[0])} />
             <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-[#CED3CA] bg-[#F7F8F4] p-1">
-              <button type="button" onClick={() => importRef.current?.click()} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Import Engine v2 JSON"><Upload size={14} /></button>
-              <button type="button" onClick={() => setHistoryOpen(true)} disabled={!projectId} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Version history"><History size={14} /></button>
+              <button type="button" onClick={() => importRef.current?.click()} className="rounded-md p-2 hover:bg-[#DDE1D9]" title="Import Engine v2 JSON" aria-label="Import Engine v2 JSON"><Upload size={14} /></button>
+              <button type="button" onClick={() => setHistoryOpen(true)} disabled={!projectId} className="rounded-md p-2 hover:bg-[#DDE1D9] disabled:opacity-30" title="Version history" aria-label="Open version history"><History size={14} /></button>
               <button type="button" onClick={saveDocument} disabled={saveState === "saving" || hasPersistenceConflict} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Save size={13} />{saveState === "saving" ? "Saving" : saveState === "saved" ? "Saved" : saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : projectId ? "Save" : "Save project"}</button>
               <button type="button" onClick={() => shareDocument("link")} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Share2 size={13} />{shareState === "sharing" ? "Sharing" : shareState === "link-copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}</button>
               <button type="button" onClick={() => shareDocument("embed")} disabled={shareState === "sharing"} className="flex items-center gap-1.5 rounded-md px-2 py-1.5 font-mono text-[10px] hover:bg-[#DDE1D9] disabled:opacity-50"><Code2 size={13} />{shareState === "sharing" ? "Preparing" : shareState === "embed-copied" ? "Embed copied" : shareState === "error" ? "Embed failed" : "Embed"}</button>
@@ -977,8 +1033,9 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
                 <button type="button" onClick={() => downloadPayload(createEngineV2ReactTsxExport(document))} className="rounded-md px-3 py-2 text-left text-xs hover:bg-[#E4E7E1]">React TSX</button>
               </div>
             </details>
-            <span className="shrink-0 px-2 font-mono text-[10px]">1080 × auto</span>
+            <span className="shrink-0 px-2 font-mono text-[10px]">{document.artboard.width} × auto</span>
           </div>
+          <div className="font-mono text-[9px] uppercase tracking-[0.1em] text-[#667067] md:hidden" aria-hidden="true">Swipe tools sideways for more →</div>
         </div>
         <div
           ref={artboardRef}
@@ -1005,6 +1062,17 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           <div className="flex items-center gap-2"><Code2 size={15} /><h2 className="text-sm font-semibold">{selectedIds.length > 1 ? `${selectedIds.length} selected nodes` : "Computed node"}</h2></div>
           <button type="button" data-drawer-close onClick={closeDrawer} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Close inspector"><X size={16} /></button>
         </div>
+        <fieldset className="mb-5 rounded-lg border border-[#D7DBD2] bg-white p-3">
+          <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Document</legend>
+          <div className="space-y-3">
+            <label className="block"><span className="mb-1 block text-xs text-[#667067]">Name</span><input aria-label="Document name" value={document.name} onChange={(event) => commitDocument((current) => ({ ...current, name: event.target.value }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" /></label>
+            <div className="grid grid-cols-2 gap-2">
+              <label><span className="mb-1 block text-xs text-[#667067]">Width</span><input aria-label="Artboard width" type="number" min="320" max="4096" value={document.artboard.width} onChange={(event) => commitDocument((current) => ({ ...current, artboard: { ...current.artboard, width: Math.max(320, Math.min(4096, Number(event.target.value) || 320)) } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" /></label>
+              <label><span className="mb-1 block text-xs text-[#667067]">Minimum height</span><input aria-label="Artboard minimum height" type="number" min="240" max="10000" value={document.artboard.minHeight} onChange={(event) => commitDocument((current) => ({ ...current, artboard: { ...current.artboard, minHeight: Math.max(240, Math.min(10000, Number(event.target.value) || 240)) } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" /></label>
+            </div>
+            <label className="block"><span className="mb-1 block text-xs text-[#667067]">Background</span><input aria-label="Artboard background" value={document.artboard.background} onChange={(event) => commitDocument((current) => ({ ...current, artboard: { ...current.artboard, background: event.target.value } }))} placeholder="#ffffff or $token" className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" /></label>
+          </div>
+        </fieldset>
         {selected ? (
           <div className="space-y-5">
             <div className="rounded-lg border border-[#D7DBD2] bg-white p-3 font-mono text-[10px] leading-5 text-[#566057]">
@@ -1047,14 +1115,14 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
               <div className="grid grid-cols-2 gap-3">
                 <label>
                   <span className="mb-2 block text-xs text-[#667067]">Width</span>
-                  <input aria-label="Node width" type="number" min="80" max={document.artboard.width} placeholder="Auto" value={typeof selected.style?.width === "number" ? selected.style.width : ""} onChange={(event) => updateSelectedDimension("width", event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
+                  <input aria-label="Node width" inputMode="numeric" placeholder="Auto, px, or %" value={selected.style?.width ?? ""} onChange={(event) => updateSelectedDimension("width", event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
                 </label>
                 <label>
                   <span className="mb-2 block text-xs text-[#667067]">Min height</span>
                   <input aria-label="Node minimum height" type="number" min="40" placeholder="Auto" value={selected.style?.minHeight ?? ""} onChange={(event) => updateSelectedDimension("minHeight", event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" />
                 </label>
               </div>
-              <p className="mt-2 text-[10px] leading-4 text-[#667067]">Auto keeps the node fluid. A width stays inside layout flow.</p>
+              <p className="mt-2 text-[10px] leading-4 text-[#667067]">Auto keeps the node fluid. Width accepts pixels or a percentage such as 50%.</p>
             </fieldset>
 
             <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
@@ -1114,7 +1182,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             {selected.type === "chart" ? (
               <div className="space-y-3"><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart title</span><input aria-label="Chart title" value={selected.title} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, title: event.target.value } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label><label className="block">
                 <span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart family</span>
-                <select value={selected.chartType} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, chartType: event.target.value as EngineChartNode["chartType"] } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
+                <select aria-label="Chart family" value={selected.chartType} onChange={(event) => { const chartType = event.target.value as EngineChartNode["chartType"]; const candidate = { ...documentRef.current, children: mapNode(documentRef.current.children, selected.id, (node) => node.type === "chart" ? { ...node, chartType } : node) }; const validated = validateEngineV2Document(candidate); if (!validated.ok) { setGenerationError(`This data cannot be used for a ${chartType} chart: ${validated.issues[0]?.message ?? "incompatible data"}`); return; } commitDocument(validated.document); setGenerationError(null); }} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]">
                   {CHART_FAMILY_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
                 </select>
               </label><div className="grid grid-cols-2 gap-3"><label><span className="mb-2 block text-xs text-[#667067]">Value prefix</span><input aria-label="Chart value prefix" value={selected.valuePrefix ?? ""} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, valuePrefix: event.target.value || undefined } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label><label><span className="mb-2 block text-xs text-[#667067]">Value suffix</span><input aria-label="Chart value suffix" value={selected.valueSuffix ?? ""} onChange={(event) => updateSelected((node) => node.type === "chart" ? { ...node, valueSuffix: event.target.value || undefined } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label></div><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Chart data JSON</span><textarea key={`${selected.id}-data`} aria-label="Chart data JSON" defaultValue={JSON.stringify(selected.data, null, 2)} onBlur={(event) => { try { const data = JSON.parse(event.target.value); if (!Array.isArray(data)) throw new Error(); updateSelected((node) => node.type === "chart" ? { ...node, data } : node); setGenerationError(null); } catch { setGenerationError("Chart data must be a valid JSON array."); } }} rows={8} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-3 font-mono text-[11px] outline-none focus:border-[#3157F6]" /></label></div>
@@ -1127,7 +1195,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
                   <option value="TB">Top to bottom</option>
                   <option value="LR">Left to right</option>
                 </select>
-              </label><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Graph nodes and edges JSON</span><textarea key={`${selected.id}-graph`} aria-label="Graph data JSON" defaultValue={JSON.stringify(selected.graph, null, 2)} onBlur={(event) => { try { const graph = JSON.parse(event.target.value); if (!graph || !Array.isArray(graph.nodes) || !Array.isArray(graph.edges)) throw new Error(); updateSelected((node) => node.type === "graph" ? { ...node, graph } : node); setGenerationError(null); } catch { setGenerationError("Graph data must contain valid nodes and edges arrays."); } }} rows={10} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-3 font-mono text-[11px] outline-none focus:border-[#3157F6]" /></label></div>
+              </label><label className="block"><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Graph nodes and edges JSON</span><textarea key={`${selected.id}-graph`} aria-label="Graph data JSON" defaultValue={JSON.stringify(selected.graph, null, 2)} onBlur={(event) => { try { const graph = JSON.parse(event.target.value); const candidate = { ...documentRef.current, children: mapNode(documentRef.current.children, selected.id, (node) => node.type === "graph" ? { ...node, graph } : node) }; const validated = validateEngineV2Document(candidate); if (!validated.ok) throw new Error(validated.issues[0]?.message); commitDocument(validated.document); setGenerationError(null); } catch (error) { setGenerationError(error instanceof Error && error.message ? `Graph data is invalid: ${error.message}` : "Graph data must contain valid nodes and edges."); } }} rows={10} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-3 font-mono text-[11px] outline-none focus:border-[#3157F6]" /></label></div>
             ) : null}
 
             {selected.type === "frame" ? (
@@ -1166,8 +1234,8 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
                   )}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  <label><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Align</span><select aria-label="Frame alignment" value={selected.layout.align ?? "stretch"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, align: event.target.value as EngineFrameNode["layout"]["align"] } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="stretch">Stretch</option></select></label>
-                  <label><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Justify</span><select aria-label="Frame justification" value={selected.layout.justify ?? "flex-start"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, justify: event.target.value as EngineFrameNode["layout"]["justify"] } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="space-between">Space between</option><option value="space-around">Space around</option><option value="space-evenly">Space evenly</option></select></label>
+                  <label><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Align</span><select aria-label="Frame alignment" value={selected.layout.align ?? "stretch"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, align: event.target.value as EngineFrameNode["layout"]["align"] } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="normal">Normal</option><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="stretch">Stretch</option><option value="baseline">Baseline</option></select></label>
+                  <label><span className="mb-2 block font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Justify</span><select aria-label="Frame justification" value={selected.layout.justify ?? "flex-start"} onChange={(event) => updateSelected((node) => node.type === "frame" ? { ...node, layout: { ...node.layout, justify: event.target.value as EngineFrameNode["layout"]["justify"] } } : node)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]"><option value="normal">Normal</option><option value="flex-start">Start</option><option value="center">Center</option><option value="flex-end">End</option><option value="space-between">Space between</option><option value="space-around">Space around</option><option value="space-evenly">Space evenly</option></select></label>
                 </div>
               </>
             ) : null}

@@ -54,6 +54,17 @@ test("engine v2 supports focus-safe keyboard editing", async ({ page }) => {
   await expect(page.locator('[data-tree-node-id="metrics-copy"]')).toHaveCount(0);
 });
 
+test("engine v2 groups a field editing burst into one undo step", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+
+  const content = page.getByLabel("Text content", { exact: true });
+  await content.fill("");
+  await content.pressSequentially("One grouped edit", { delay: 20 });
+  await page.waitForTimeout(600);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator('[data-node-id="title"]')).toHaveText("Growth without the noise.");
+});
+
 test("engine v2 resizes selected nodes without leaving document flow", async ({ page }) => {
   await page.goto("/app/engine-v2");
 
@@ -66,7 +77,7 @@ test("engine v2 resizes selected nodes without leaving document flow", async ({ 
   await page.mouse.move(handleBounds!.x + handleBounds!.width / 2 + 70, handleBounds!.y + handleBounds!.height / 2);
   await page.mouse.up();
 
-  const widthInput = page.getByRole("spinbutton", { name: "Node width", exact: true });
+  const widthInput = page.getByRole("textbox", { name: "Node width", exact: true });
   await expect(widthInput).not.toHaveValue("");
   await page.getByTitle("Undo").click();
   await expect(widthInput).toHaveValue("");
@@ -77,6 +88,9 @@ test("engine v2 resizes selected nodes without leaving document flow", async ({ 
   await expect(selectedNode).toHaveCSS("width", "420px");
   await expect(selectedNode).toHaveCSS("min-height", "180px");
   await expect(selectedNode).toHaveCSS("position", "static");
+
+  await widthInput.fill("50%");
+  await expect(selectedNode).toHaveAttribute("style", /width: 50%/);
 });
 
 test("engine v2 multi-selects and edits sibling nodes in layout flow", async ({ page }) => {
@@ -167,4 +181,37 @@ test("engine v2 exposes and applies every current node field", async ({ page }) 
   await page.getByLabel("Frame justification").selectOption("space-between");
   await expect(page.locator('[data-node-id="analysis"]')).toHaveCSS("align-items", "center");
   await expect(page.locator('[data-node-id="analysis"]')).toHaveCSS("justify-content", "space-between");
+});
+
+test("engine v2 exposes document controls and persistent validation errors", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+
+  await page.getByLabel("Document name").fill("Editable systems brief");
+  await page.getByLabel("Artboard width").fill("960");
+  await page.getByLabel("Artboard minimum height").fill("840");
+  await expect(page.getByText("960 × auto", { exact: true })).toBeVisible();
+  await expect(page.locator("[data-engine-document='v2'], [data-node-id='root']").first()).toBeVisible();
+
+  await page.locator('[data-tree-node-id="revenue-chart"]').click();
+  const chartJson = page.getByLabel("Chart data JSON");
+  await chartJson.fill("not json");
+  await chartJson.blur();
+  await expect(page.getByRole("alert").filter({ hasText: "Chart data must be a valid JSON array" })).toBeVisible();
+
+  await page.locator('[data-tree-node-id="growth-system"]').click();
+  const graphJson = page.getByLabel("Graph data JSON");
+  await graphJson.fill(JSON.stringify({ nodes: [{ id: "broken" }], edges: [] }));
+  await graphJson.blur();
+  await expect(page.getByRole("alert").filter({ hasText: "Graph data is invalid" })).toBeVisible();
+});
+
+test("engine v2 rejects chart families that do not match existing data", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+  await page.locator('[data-tree-node-id="revenue-chart"]').click();
+
+  const family = page.getByLabel("Chart family");
+  await expect(family).toHaveValue("line");
+  await family.selectOption("sankey");
+  await expect(family).toHaveValue("line");
+  await expect(page.getByRole("alert").filter({ hasText: "cannot be used for a sankey chart" })).toBeVisible();
 });
