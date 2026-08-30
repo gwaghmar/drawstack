@@ -2,8 +2,33 @@ import { NextResponse } from "next/server";
 import { generateText } from "ai";
 import { buildLanguageModel } from "@/lib/ai-providers";
 import { validateAndRepairOutput } from "@/lib/diagrams/validate-output";
+import { auth } from "@/auth";
+import { rateLimit } from "@/lib/rate-limit";
+import { ensureUserAndWorkspace } from "@/lib/user-sync";
+import { and, eq, gt, sql } from "drizzle-orm";
+import { db } from "@/lib/db";
+import { users } from "@/lib/db/schema";
+import sharp from "sharp";
 
 export const maxDuration = 60;
+const MAX_IMAGE_DATA_LENGTH = 8_000_000;
+const MAX_PROMPT_LENGTH = 2_000;
+const MAX_IMAGE_BYTES = 6_000_000;
+const MAX_IMAGE_PIXELS = 40_000_000;
+
+async function takeCredit(userId: string): Promise<boolean> {
+  const result = await db.update(users)
+    .set({ creditsBalance: sql`${users.creditsBalance} - 1` })
+    .where(and(eq(users.id, userId), gt(users.creditsBalance, 0)))
+    .returning({ id: users.id });
+  return result.length > 0;
+}
+
+async function refundCredit(userId: string): Promise<void> {
+  await db.update(users)
+    .set({ creditsBalance: sql`${users.creditsBalance} + 1` })
+    .where(eq(users.id, userId));
+}
 
 const VISION_SYSTEM_PROMPT = `You are an expert system architect and visual diagram engineer.
 Analyze the provided image (whiteboard photo, architecture diagram, flowchart, mindmap, UI sketch, or process chart) and reconstruct it with high fidelity as a Freeform Canvas JSON document.
@@ -46,12 +71,40 @@ Rules:
 4. Output raw JSON only with no markdown fences.`;
 
 export async function POST(req: Request) {
+  let reservedCreditFor: string | null = null;
   try {
-    const body = await req.json();
+    const session = await auth();
+    const email = session?.user?.email;
+    if (!email) return NextResponse.json({ error: "Sign in required" }, { status: 401 });
+
+    const { user } = await ensureUserAndWorkspace(email);
+    const limit = await rateLimit(`vision:${user.id}`, 10, 60_000);
+    if (!limit.ok) return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+
+    const body = await req.json() as { image?: unknown; prompt?: unknown };
     const { image, prompt: userPrompt } = body;
 
-    if (!image || typeof image !== "string") {
+    if (!image || typeof image !== "string" || image.length > MAX_IMAGE_DATA_LENGTH) {
       return NextResponse.json({ error: "Missing image data" }, { status: 400 });
+    }
+    if (userPrompt !== undefined && (typeof userPrompt !== "string" || userPrompt.length > MAX_PROMPT_LENGTH)) {
+      return NextResponse.json({ error: "Prompt is too long" }, { status: 400 });
+    }
+    const imageMatch = image.match(/^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/);
+    if (!imageMatch) {
+      return NextResponse.json({ error: "Use a PNG, JPEG, or WebP data URL" }, { status: 400 });
+    }
+    const imageBytes = Buffer.from(imageMatch[2], "base64");
+    if (imageBytes.length === 0 || imageBytes.length > MAX_IMAGE_BYTES) {
+      return NextResponse.json({ error: "Image is too large" }, { status: 413 });
+    }
+    try {
+      const metadata = await sharp(imageBytes, { limitInputPixels: MAX_IMAGE_PIXELS }).metadata();
+      if (!metadata.width || !metadata.height || !["png", "jpeg", "webp"].includes(metadata.format ?? "")) {
+        return NextResponse.json({ error: "Invalid image data" }, { status: 400 });
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid or oversized image data" }, { status: 400 });
     }
 
     const apiKey =
@@ -63,6 +116,13 @@ export async function POST(req: Request) {
     const modelId = provider === "google" ? "gemini-flash-latest" : "gpt-4o-mini";
 
     const model = buildLanguageModel(provider, modelId, apiKey);
+
+    if (user.plan === "free") {
+      if (!(await takeCredit(user.id))) {
+        return NextResponse.json({ error: "No credits left" }, { status: 402 });
+      }
+      reservedCreditFor = user.id;
+    }
 
     const startTime = Date.now();
     const result = await generateText({
@@ -81,7 +141,7 @@ export async function POST(req: Request) {
             },
             {
               type: "image",
-              image: image.startsWith("data:") ? new URL(image) : image,
+              image: new URL(image),
             },
           ],
         },
@@ -99,6 +159,7 @@ export async function POST(req: Request) {
       latencyMs: Date.now() - startTime,
     });
   } catch (err: any) {
+    if (reservedCreditFor) await refundCredit(reservedCreditFor);
     return NextResponse.json(
       { error: err.message || "Vision extraction failed" },
       { status: 500 }

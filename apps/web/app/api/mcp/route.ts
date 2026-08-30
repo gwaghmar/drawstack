@@ -48,10 +48,6 @@ function buildMcpServer(): Server {
               type: "string",
               description: "What the diagram should show, e.g. 'User authentication flow'",
             },
-            baseUrl: {
-              type: "string",
-              description: "drawxyz server URL. Default: http://localhost:3040",
-            },
           },
           required: ["prompt"],
         },
@@ -136,7 +132,6 @@ function buildMcpServer(): Server {
       const parsed = z
         .object({
           prompt: z.string().min(1),
-          baseUrl: z.string().url().optional(),
         })
         .safeParse(args);
 
@@ -147,7 +142,8 @@ function buildMcpServer(): Server {
         };
       }
 
-      const { prompt, baseUrl = "http://localhost:3040" } = parsed.data;
+      const { prompt } = parsed.data;
+      const baseUrl = (process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3040").replace(/\/$/, "");
       const diagramType: DiagramType = "freeform";
 
       let res: Response;

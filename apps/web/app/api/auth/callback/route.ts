@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
+import { safeLocalRedirect } from "@/lib/safe-redirect";
 
 const WELCOME_PROMPT = "Map the user signup flow for a SaaS app";
 
@@ -27,12 +28,10 @@ export async function GET(request: NextRequest) {
             });
             destination = `${origin}/app/editor?${welcomeParams.toString()}`;
           } else {
-            const forwardSlash = next.startsWith("/") && !next.startsWith("//");
-            destination = forwardSlash ? `${origin}${next}` : `${origin}/app/editor`;
+            destination = `${origin}${safeLocalRedirect(next)}`;
           }
         } else {
-          const forwardSlash = next.startsWith("/") && !next.startsWith("//");
-          destination = forwardSlash ? `${origin}${next}` : `${origin}/app/editor`;
+          destination = `${origin}${safeLocalRedirect(next)}`;
         }
 
         return NextResponse.redirect(destination);

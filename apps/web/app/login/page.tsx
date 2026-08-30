@@ -4,6 +4,7 @@ import { signInWithPassword, signUpWithPassword } from "@/app/actions/login";
 import { isMockAuthEnabled } from "@/lib/auth-mode";
 import { Logo } from "@/components/logo";
 import { PasskeyAuth } from "@/components/passkey-auth";
+import { safeLocalRedirect } from "@/lib/safe-redirect";
 
 const ERROR_MESSAGES: Record<string, string> = {
   invalid_credentials: "Incorrect email or password.",
@@ -19,7 +20,7 @@ export default async function LoginPage({
   searchParams: Promise<{ callbackUrl?: string; error?: string; mode?: string }>;
 }) {
   const sp = await searchParams;
-  const cb = sp.callbackUrl ?? "/app/editor";
+  const cb = safeLocalRedirect(sp.callbackUrl);
   const isSignUp = sp.mode === "signup";
   const errorMsg = sp.error ? (ERROR_MESSAGES[sp.error] ?? "Something went wrong. Please try again.") : null;
   const isMock = isMockAuthEnabled();

@@ -350,6 +350,7 @@ export default function CanvasSandboxPage() {
         {/* Live Canvas Area */}
         <div className="relative flex-1 h-full bg-slate-900 overflow-hidden">
           <FreeformRenderer
+            allowUiNodeExecution
             source={source}
             onChange={handleSourceChange}
           />

@@ -3,6 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
+import { safeLocalRedirect } from "@/lib/safe-redirect";
 
 const defaultAfterLogin = "/app/editor";
 
@@ -84,7 +85,7 @@ export async function signInWithPassword(
     }
     return "sign_in_failed";
   }
-  redirect(callbackUrl ?? defaultAfterLogin);
+  redirect(safeLocalRedirect(callbackUrl, defaultAfterLogin));
 }
 
 /** Sign up with email + password. Returns error string or null. */
@@ -104,5 +105,5 @@ export async function signUpWithPassword(
     return "sign_up_failed";
   }
   // Supabase auto-confirms (mailer_autoconfirm=true) — redirect straight in
-  redirect(callbackUrl ?? defaultAfterLogin);
+  redirect(safeLocalRedirect(callbackUrl, defaultAfterLogin));
 }

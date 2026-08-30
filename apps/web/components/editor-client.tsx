@@ -2098,7 +2098,7 @@ export function EditorClient({
             {typeMeta.label}
           </div>
           <div ref={frameRef} className="w-full h-full rounded-xl overflow-hidden shadow-xl bg-white dark:bg-slate-900" style={{ minHeight: "600px" }}>
-            <FreeformRenderer source={source} onChange={handleFreeformChange} onRemoteChange={handleFreeformRemoteChange} roomId={currentProjectId ?? undefined} presenceIdentity={presenceIdentity} />
+            <FreeformRenderer source={source} onChange={handleFreeformChange} onRemoteChange={handleFreeformRemoteChange} roomId={currentProjectId ?? undefined} presenceIdentity={presenceIdentity} allowUiNodeExecution />
             {showWatermark && <div className="absolute bottom-3 right-4 text-[10px] opacity-30 text-slate-600 font-medium select-none pointer-events-none">Made with drawxyz</div>}
           </div>
         </div>

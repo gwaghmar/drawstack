@@ -9,7 +9,7 @@
  *   { "apiKey": "sk-...", "baseUrl": "http://localhost:3040" }
  */
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DIAGRAM_TYPE_META, type DiagramType } from "@flowchart/core";
@@ -34,8 +34,10 @@ function loadConfig(): Config {
 }
 
 function saveConfig(config: Config): void {
-  mkdirSync(CONFIG_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+  mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+  chmodSync(CONFIG_DIR, 0o700);
+  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2), { mode: 0o600 });
+  chmodSync(CONFIG_FILE, 0o600);
 }
 
 // ─── Arg parser ──────────────────────────────────────────────────────────────
@@ -173,7 +175,7 @@ function cmdConfig(positional: string[], _flags: Record<string, string | boolean
     saveConfig(config);
     log(green("✓") + ` Set ${bold(key)}`);
   } else if (sub === "show") {
-    log(JSON.stringify(config, null, 2));
+    log(JSON.stringify({ ...config, apiKey: config.apiKey ? "********" : undefined }, null, 2));
   } else {
     log(`Config file: ${dim(CONFIG_FILE)}`);
     log("");

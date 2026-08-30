@@ -5,7 +5,7 @@ import { Stage, Layer, Rect, Ellipse, Line, Arrow, Text, Transformer, Shape, Pat
 import Konva from "konva";
 import rough from "roughjs";
 import { getStroke } from "perfect-freehand";
-import { LiveProvider, LiveError, LivePreview, LiveContext } from "react-live";
+import { LiveError, LivePreview, LiveProvider } from "react-live";
 import { Html } from "react-konva-utils";
 import { Form } from "../canvas-ui/Form";
 import { Slider } from "../canvas-ui/Slider";
@@ -157,6 +157,7 @@ type Props = {
   readOnly?: boolean;
   roomId?: string;
   presenceIdentity?: { name: string; color: string };
+  allowUiNodeExecution?: boolean;
 };
 
 // Publishing every pointermove would flood awareness broadcasts; peers only need
@@ -616,13 +617,14 @@ export const UiNodeContext = React.createContext<{
   useDataFetch: (url: string) => { data: any; loading: boolean; error: any };
   useSharedState: (key: string, initialValue: any) => [any, (val: any) => void];
   onHealShape: (id: string, code: string) => void;
+  allowUiNodeExecution: boolean;
 } | null>(null);
 
 function UiNodeRenderer({ shape, draggable, readOnly, onShapeClick, onShapeDblClick, onShapeDragStart, onShapeDragMove, onShapeDragEnd }: any) {
   const ctx = React.useContext(UiNodeContext);
   if (!ctx) return null;
   const s = shape as any;
-  const { useDataFetch, useSharedState, onHealShape } = ctx;
+  const { allowUiNodeExecution, useDataFetch, useSharedState } = ctx;
   return (
     <Group
       key={s.id}
@@ -639,26 +641,38 @@ function UiNodeRenderer({ shape, draggable, readOnly, onShapeClick, onShapeDblCl
       onDragEnd={() => onShapeDragEnd?.(s.id)}
     >
       <Rect width={s.width} height={s.height} cornerRadius={12} fill="#ffffff" shadowColor="rgba(0,0,0,0.1)" shadowBlur={10} shadowOffset={{x:0, y:4}} listening={false} />
-      {s.code ? (
+      {allowUiNodeExecution && s.code ? (
         <Html divProps={{ style: { width: s.width, height: s.height, overflow: "hidden", padding: "16px" } }}>
-          <div style={{ pointerEvents: readOnly ? 'none' : 'auto', width: '100%', height: '100%' }}>
+          <div style={{ width: "100%", height: "100%" }}>
             <ThemeProvider theme="editorial">
-              <LiveProvider 
-                code={s.code} 
-                scope={{ 
+              <LiveProvider
+                code={s.code}
+                scope={{
                   React, useState, useEffect, useDataFetch, useSharedState,
                   Form, Slider, Toggle, Select, Card,
                   DataTable, Input, Button, Badge, Tabs,
-                  Typography, Icon, BarChart, DonutChart, LineChart
+                  Typography, Icon, BarChart, DonutChart, LineChart,
                 }}
               >
                 <LivePreview />
-                <SelfHealingError shapeId={s.id} code={s.code} onHealShape={onHealShape} />
+                <LiveError style={{ color: "#b91c1c", fontSize: 12 }} />
               </LiveProvider>
             </ThemeProvider>
           </div>
         </Html>
-      ) : null}
+      ) : (
+        <Text
+          x={16}
+          y={16}
+          width={Math.max(0, s.width - 32)}
+          height={Math.max(0, s.height - 32)}
+          text={s.name || "Interactive UI"}
+          fontSize={14}
+          fontStyle="bold"
+          fill="#334155"
+          listening={false}
+        />
+      )}
     </Group>
   );
 }
@@ -682,25 +696,6 @@ const MACRO_SHAPE_TYPES = new Set<CanvasShape["type"]>([
   "mesh_connector",
 ]);
 
-
-const SelfHealingError = ({ shapeId, code, onHealShape }: { shapeId: string, code: string, onHealShape: (id: string, code: string) => void }) => {
-  const context = React.useContext(LiveContext);
-  React.useEffect(() => {
-    if (context.error) {
-      console.log("Self healing triggered for error:", context.error);
-      fetch('/api/ai/repair-node', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, error: context.error?.toString() ?? "Unknown error" })
-      }).then(res => res.json()).then(data => {
-        if (data.fixedCode) {
-          onHealShape(shapeId, data.fixedCode);
-        }
-      }).catch(console.error);
-    }
-  }, [context.error, shapeId, code, onHealShape]);
-  return <LiveError style={{ color: "red", background: "#fee2e2", padding: "8px", borderRadius: "4px", fontSize: "12px", fontFamily: "monospace", overflow: "auto", maxHeight: "100%" }} />;
-};
 
 // ─── Table cell editing (Konva-side only) ─────────────────────────────────
 // The "table" shape is a DB-schema table (tableName + columns[{name,type}]),
@@ -1858,7 +1853,7 @@ function renderShape(
   return nodes;
 }
 
-export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, roomId, presenceIdentity }: Props) {
+export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, roomId, presenceIdentity, allowUiNodeExecution = false }: Props) {
   const [doc, setDoc] = useState<CanvasDocument>(() => {
     const { doc: parsed, errors } = parseFreeformSource(source);
     if (errors.length > 0) return parsed;
@@ -1920,7 +1915,10 @@ export function FreeformRenderer({ source, onChange, onRemoteChange, readOnly, r
     return [val, setSharedVal] as [any, (val: any) => void];
   }, []);
 
-  const uiNodeCtx = React.useMemo(() => ({ useDataFetch, useSharedState, onHealShape }), [useDataFetch, useSharedState, onHealShape]);
+  const uiNodeCtx = React.useMemo(
+    () => ({ useDataFetch, useSharedState, onHealShape, allowUiNodeExecution }),
+    [useDataFetch, useSharedState, onHealShape, allowUiNodeExecution],
+  );
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [marquee, setMarquee] = useState<MarqueeState | null>(null);
