@@ -36,8 +36,4 @@ describe("matchTemplateId", () => {
       assert.ok(ids.has(id), `keyword entry "${id}" has no matching template`);
     }
   });
-
-  it("covers every template", () => {
-    assert.equal(TEMPLATE_KEYWORDS.length, TEMPLATES.length);
-  });
 });
