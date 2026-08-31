@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Download, Frame, Image as ImageIcon, Layers3, MousePointer2, PanelRight, Plus, Redo2, Save, Share2, Square, Trash2, Type, Undo2, Upload, X } from "lucide-react";
+import { ArrowUpRight, Circle, Copy, Download, Frame, Image as ImageIcon, Layers3, Minus, MousePointer2, PanelRight, Plus, Redo2, Save, Share2, Square, Trash2, Type, Undo2, Upload, X } from "lucide-react";
 import { createEngineV2Project, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { EngineDocumentView } from "@/components/engine-v2/engine-canvas";
@@ -229,13 +229,15 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     commands.push({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node: { id: nodeId, name: "Image", type: "image", assetRef: asset.sha256, alt: "Uploaded image", style: { width: Math.min(asset.width ?? 420, 720) } } });
     if (runCommand({ kind: "batch", commands })) selectNode(nodeId);
   };
-  const addCanvasNode = (kind: "text" | "card" | "frame") => {
+  const addCanvasNode = (kind: "text" | "card" | "frame" | "circle" | "line" | "arrow") => {
     if (!activePage) return;
     const id = `${kind}-${crypto.randomUUID()}`;
     const offset = 72 + activePage.root.children.length * 12;
     const node: EngineNode = kind === "text"
       ? { id, name: "Text", type: "text", content: "Double-click to edit", variant: "heading", transform: { x: offset, y: offset }, style: { width: 280, color: "$ink" } }
-      : { id, name: kind === "card" ? "Card" : "Frame", type: "frame", transform: { x: offset, y: offset }, layout: { mode: "flex", direction: "column", gap: 12, padding: kind === "card" ? 20 : 12 }, style: { width: kind === "card" ? 280 : 360, minHeight: kind === "card" ? 180 : 240, background: kind === "card" ? "$panel" : "transparent", borderColor: kind === "card" ? "$rule" : "$cobalt", borderWidth: kind === "card" ? 1 : 2, borderRadius: kind === "card" ? 16 : 8 }, children: [] };
+      : kind === "arrow"
+        ? { id, name: "Arrow", type: "text", content: "→", variant: "display", transform: { x: offset, y: offset }, style: { width: 120, color: "$cobalt" } }
+        : { id, name: kind === "card" ? "Card" : kind === "circle" ? "Circle" : kind === "line" ? "Line" : "Frame", type: "frame", transform: { x: offset, y: offset }, layout: { mode: "flex", direction: "column", gap: 12, padding: kind === "card" ? 20 : 0 }, style: { width: kind === "line" ? 280 : kind === "circle" ? 220 : kind === "card" ? 280 : 360, minHeight: kind === "line" ? 4 : kind === "circle" ? 220 : kind === "card" ? 180 : 240, background: kind === "card" ? "$panel" : "transparent", borderColor: kind === "card" ? "$rule" : "$cobalt", borderWidth: kind === "line" ? 3 : kind === "card" ? 1 : 2, borderRadius: kind === "circle" ? 999 : kind === "card" ? 16 : 8 }, children: [] };
     if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node })) selectNode(id);
   };
   const uploadAsset = async (file: File) => {
@@ -416,6 +418,9 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <button type="button" onClick={() => addCanvasNode("text")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add text"><Type size={17} /><span>Text</span></button>
           <button type="button" onClick={() => addCanvasNode("card")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add card"><Square size={17} /><span>Card</span></button>
           <button type="button" onClick={() => addCanvasNode("frame")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add frame"><Frame size={17} /><span>Frame</span></button>
+          <button type="button" onClick={() => addCanvasNode("circle")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add circle"><Circle size={17} /><span>Circle</span></button>
+          <button type="button" onClick={() => addCanvasNode("line")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add line"><Minus size={17} /><span>Line</span></button>
+          <button type="button" onClick={() => addCanvasNode("arrow")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add arrow"><ArrowUpRight size={17} /><span>Arrow</span></button>
           <button type="button" onClick={() => assetInputRef.current?.click()} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add image"><ImageIcon size={17} /><span>Image</span></button>
           <div className="my-2 h-px w-8 bg-[#D7DBD2]" />
           <button type="button" onClick={() => setDrawer(drawer === "pages" ? null : "pages")} className={`flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] ${drawer === "pages" ? "bg-[#DCE3FF] text-[#2448D8]" : "text-[#4F5850] hover:bg-[#EEF0EA]"}`} aria-label="Show pages"><Copy size={16} /><span>Pages</span></button>
