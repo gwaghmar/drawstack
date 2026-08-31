@@ -302,6 +302,19 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           return;
         }
       }
+      if (!modifier && activePage && selectedNodeIds.size > 1 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        event.preventDefault();
+        const step = event.shiftKey ? 10 : 1;
+        const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+        const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+        const commands = [...selectedNodeIds].flatMap((nodeId) => {
+          const location = findEngineV3Node(document, activePage.id, nodeId);
+          if (!location || nodeId === activePage.root.id || location.node.locked) return [];
+          return [{ kind: "node" as const, action: "patch" as const, pageId: activePage.id, nodeId, changes: { transform: { ...(location.node.transform ?? {}), x: (location.node.transform?.x ?? 0) + dx, y: (location.node.transform?.y ?? 0) + dy } } }];
+        });
+        if (commands.length) runCommand({ kind: "batch", commands });
+        return;
+      }
       if (modifier && !event.altKey && activePage && selectedNodeIds.size === 1 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         const nodeId = [...selectedNodeIds][0];
         const location = findEngineV3Node(document, activePage.id, nodeId);

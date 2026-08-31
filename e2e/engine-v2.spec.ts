@@ -446,6 +446,17 @@ test("engine v3 selects all editable objects with Control+A", async ({ page }) =
   await expect(page.locator('[data-node-id].outline')).toHaveCount(allObjects - 1);
 });
 
+test("engine v3 nudges a multi-selection with arrow keys", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  await page.locator('[data-node-id="status"]').click({ modifiers: ["Shift"] });
+  await page.getByText("More settings", { exact: true }).click();
+  const x = page.getByLabel("V3 node X");
+  const before = Number(await x.inputValue());
+  await page.keyboard.press("ArrowRight");
+  await expect(x).toHaveValue(String(before + 1));
+});
+
 test("engine v3 excludes descendants of locked frames from select all", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
