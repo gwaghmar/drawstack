@@ -354,8 +354,15 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   };
   const addPathPoint = () => {
     if (!selectedNode || selectedNode.type !== "path" || selectedNode.points.length < 2 || !activePage) return;
-    const first = selectedNode.points[0]; const second = selectedNode.points[1];
-    const points = [{ x: Math.round((first.x + second.x) / 2), y: Math.round((first.y + second.y) / 2) }, ...selectedNode.points];
+    let segment = 0; let longest = -1;
+    for (let index = 0; index < selectedNode.points.length - 1; index += 1) {
+      const first = selectedNode.points[index]; const second = selectedNode.points[index + 1];
+      const length = (second.x - first.x) ** 2 + (second.y - first.y) ** 2;
+      if (length > longest) { longest = length; segment = index; }
+    }
+    const first = selectedNode.points[segment]; const second = selectedNode.points[segment + 1];
+    const midpoint = { x: Math.round((first.x + second.x) / 2), y: Math.round((first.y + second.y) / 2) };
+    const points = [...selectedNode.points.slice(0, segment + 1), midpoint, ...selectedNode.points.slice(segment + 1)];
     patchSelected({ points });
   };
   const visualNodeTransform = (nodeId: string) => {
