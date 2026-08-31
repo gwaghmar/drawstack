@@ -46,4 +46,14 @@ describe("engine v3 exports", () => {
     assert.match(tsx.contents, /rotate\(18deg\)/);
     assert.match(tsx.contents, /data:image\/png;base64,AAAA/);
   });
+
+  it("keeps image fit and position settings in SVG export", async () => {
+    const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+    const assetId = "b".repeat(64);
+    document.assets[assetId] = { sha256: assetId, mime: "image/png", source: "/api/engine-v3/assets?sha256=" + assetId };
+    document.pages[0].root.children.push({ id: "framed-image", name: "Framed image", type: "image", assetRef: assetId, alt: "Framed", style: { width: 240, minHeight: 140, objectFit: "cover", objectPosition: "right bottom" } });
+    const portable = await inlineEngineV3Assets(document, async () => "data:image/png;base64,BBBB");
+    const svg = createEngineV3PageExports(portable, "svg")[0];
+    assert.match(svg.contents, /preserveAspectRatio="xMaxYMax slice"/);
+  });
 });

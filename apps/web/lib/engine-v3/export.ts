@@ -39,6 +39,14 @@ function pageWarning(document: EngineDocumentV3, page: Page): string[] {
   return warnings;
 }
 
+function imagePreserveAspectRatio(style: Record<string, unknown>): string {
+  const position = String(style.objectPosition ?? "50% 50%").toLowerCase();
+  const horizontal = position.includes("left") || position.startsWith("0%") ? "xMin" : position.includes("right") || position.startsWith("100%") ? "xMax" : "xMid";
+  const vertical = position.includes("top") || position.endsWith("0%") ? "YMin" : position.includes("bottom") || position.endsWith("100%") ? "YMax" : "YMid";
+  const fit = String(style.objectFit ?? "contain");
+  return fit === "cover" ? `${horizontal}${vertical} slice` : fit === "contain" ? `${horizontal}${vertical} meet` : "none";
+}
+
 function standaloneSvg(document: EngineDocumentV3, page: Page): string {
   const plan = createEngineV3RenderPlan(document);
   const planned = plan.pages.find((candidate) => candidate.id === page.id)!;
@@ -96,7 +104,7 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
       return `<g data-node-id="${record.id}" transform="${transform}"${opacity}>${text(String(source.content ?? ""), 0, size, size, textColor(record), variant === "body" ? 400 : 650)}</g>`;
     }
     if (record.type === "metric") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><rect width="${width}" height="${height}" rx="${Number(record.style?.borderRadius ?? 14)}" fill="${fill(record)}" stroke="${stroke(record)}" stroke-width="${Number(record.style?.borderWidth ?? 1)}"/>${text(String(source.label ?? ""), 20, 28, 10, "#667067", 600)}${text(String(source.value ?? ""), 20, 70, 32, source.tone === "warning" ? "#FF5D2E" : "#3157F6", 650)}${text(String(source.detail ?? ""), 20, 102, 12, "#667067")}</g>`;
-    if (record.type === "image") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><image href="${record.asset?.ref.source ?? String(source.src ?? "")}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet"/></g>`;
+    if (record.type === "image") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><image href="${record.asset?.ref.source ?? String(source.src ?? "")}" width="${width}" height="${height}" preserveAspectRatio="${imagePreserveAspectRatio(record.style)}"/></g>`;
     if (record.type === "path") {
       const points = Array.isArray(source.points) ? source.points.filter((point): point is { x: number; y: number } => Boolean(point && typeof point === "object" && Number.isFinite((point as { x?: unknown }).x) && Number.isFinite((point as { y?: unknown }).y))).map((point) => `${point.x},${point.y}`).join(" ") : "";
       const rawPoints = Array.isArray(source.points) ? source.points.filter((point): point is { x: number; y: number } => Boolean(point && typeof point === "object" && Number.isFinite((point as { x?: unknown }).x) && Number.isFinite((point as { y?: unknown }).y))) : [];
