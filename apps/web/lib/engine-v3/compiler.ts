@@ -8,6 +8,7 @@ export type EngineV3ValidationResult =
 const idPattern = /^[A-Za-z][A-Za-z0-9_-]{0,79}$/;
 const sha256Pattern = /^[a-f0-9]{64}$/;
 const mimePattern = /^[a-z][a-z0-9.+-]*\/[a-z0-9.+-]+$/;
+const nodeTypes = new Set(["frame", "text", "metric", "chart", "graph"]);
 const safeString = (value: unknown, max = 240): value is string => typeof value === "string" && value.length > 0 && value.length <= max && !/[<>`]/.test(value);
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
@@ -55,9 +56,13 @@ export function validateEngineV3Document(input: unknown): EngineV3ValidationResu
   }
   if (!Array.isArray(input.pages) || input.pages.length === 0) add("pages", "Expected at least one page");
   const walk = (node: unknown, path: string, seenIds: Set<string>, dependencies?: Set<string>) => {
-    if (!record(node) || !idPattern.test(String(node.id)) || !safeString(node.name) || !safeString(node.type)) { add(path, "Invalid node identity"); return; }
+    if (!record(node) || !idPattern.test(String(node.id)) || !safeString(node.name) || !safeString(node.type) || !nodeTypes.has(String(node.type))) { add(path, "Invalid node identity"); return; }
     if (seenIds.has(String(node.id))) add(`${path}.id`, "Duplicate node id"); else seenIds.add(String(node.id));
     if (node.opacity !== undefined && (!finite(node.opacity) || node.opacity < 0 || node.opacity > 1)) add(`${path}.opacity`, "Opacity must be 0..1");
+    if (node.transform !== undefined) {
+      if (!record(node.transform)) add(`${path}.transform`, "Expected a transform object");
+      else for (const key of ["x", "y", "rotation", "scaleX", "scaleY"]) if (node.transform[key] !== undefined && !finite(node.transform[key])) add(`${path}.transform.${key}`, "Expected a finite number");
+    }
     for (const ref of ["styleRef", "assetRef", "componentRef"]) if (node[ref] !== undefined && !safeString(node[ref])) add(`${path}.${ref}`, "Invalid reference");
     if (node.assetRef !== undefined && (!record(input.assets) || !Object.hasOwn(input.assets, String(node.assetRef)))) add(`${path}.assetRef`, "Unknown asset");
     if (node.componentRef !== undefined) {

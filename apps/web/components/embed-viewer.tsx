@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { parseSharedEngineV2Document } from "@/lib/engine-v2/shared-document";
+import { parseSharedEngineV3Document } from "@/lib/engine-v3/shared-document";
 
 const FreeformRenderer = dynamic(
   () => import("./diagrams/freeform-renderer").then((m) => m.FreeformRenderer),
@@ -10,6 +11,10 @@ const FreeformRenderer = dynamic(
 );
 const EngineDocumentView = dynamic(
   () => import("./engine-v2/engine-canvas").then((module) => module.EngineDocumentView),
+  { ssr: false },
+);
+const EngineV3DocumentView = dynamic(
+  () => import("./engine-v3/engine-v3-document-view").then((module) => module.EngineV3DocumentView),
   { ssr: false },
 );
 
@@ -27,6 +32,7 @@ export function EmbedViewer({ token }: { token: string }) {
   const engineDocument = useMemo(() => {
     return data ? parseSharedEngineV2Document(data.diagramType, data.source) : null;
   }, [data]);
+  const engineV3Document = useMemo(() => parseSharedEngineV3Document(data?.diagramType ?? "", data?.source ?? ""), [data]);
 
   useEffect(() => {
     let cancelled = false;
@@ -78,7 +84,9 @@ export function EmbedViewer({ token }: { token: string }) {
         {sourceCopied ? "Copied!" : "</> source"}
       </button>
       {data.diagramType === "engine-v2" ? (
-        engineDocument
+        engineV3Document
+          ? <EngineV3DocumentView document={engineV3Document} />
+          : engineDocument
           ? <EngineDocumentView document={engineDocument} className="mx-auto" />
           : <div className="flex h-screen items-center justify-center px-4 text-center text-sm text-red-600">This Engine v2 document is invalid.</div>
       ) : <FreeformRenderer source={data.source} readOnly onChange={() => {}} />}

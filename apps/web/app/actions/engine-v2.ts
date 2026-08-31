@@ -3,7 +3,7 @@
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { projectCollaborators, projects, revisions } from "@/lib/db/schema";
-import { validateEngineV2Document } from "@/lib/engine-v2/compiler";
+import { parseEngineSource } from "@/lib/engine-document-source";
 import { hasEngineV2VersionConflict, nextEngineV2UpdatedAt, type EngineV2RestoreResult, type EngineV2SaveResult } from "@/lib/engine-v2/persistence";
 import { revisionIdsBeyondLimit } from "@/lib/engine-v2/revision-retention";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
@@ -12,15 +12,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 function validSource(source: string): string {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(source);
-  } catch {
-    throw new Error("Document is not valid JSON");
-  }
-  const result = validateEngineV2Document(parsed);
-  if (!result.ok) throw new Error(result.issues[0]?.message || "Invalid Engine v2 document");
-  return JSON.stringify(result.document);
+  return parseEngineSource(source).source;
 }
 
 async function engineContext() {

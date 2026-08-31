@@ -7,6 +7,7 @@ import Link from "next/link";
 import type { DiagramType } from "@flowchart/core";
 import { downloadSource, sourceFileExtension } from "@/lib/diagrams/source-export";
 import { parseSharedEngineV2Document } from "@/lib/engine-v2/shared-document";
+import { parseSharedEngineV3Document } from "@/lib/engine-v3/shared-document";
 
 // Lazy-load heavy renderer so it doesn't bloat the share page bundle
 const FreeformRenderer = dynamic(
@@ -15,6 +16,10 @@ const FreeformRenderer = dynamic(
 );
 const EngineDocumentView = dynamic(
   () => import("./engine-v2/engine-canvas").then((module) => module.EngineDocumentView),
+  { ssr: false },
+);
+const EngineV3DocumentView = dynamic(
+  () => import("./engine-v3/engine-v3-document-view").then((module) => module.EngineV3DocumentView),
   { ssr: false },
 );
 
@@ -33,6 +38,7 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
   const engineDocument = useMemo(() => {
     return data ? parseSharedEngineV2Document(data.diagramType, data.source) : null;
   }, [data]);
+  const engineV3Document = useMemo(() => data ? parseSharedEngineV3Document(data.diagramType, data.source) : null, [data]);
 
   // Fetch share data
   useEffect(() => {
@@ -133,7 +139,9 @@ export function ShareViewer({ token, authorHandle }: { token: string; authorHand
               className="mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white"
               style={{ minHeight: "400px" }}
             >
-              {engineDocument ? (
+              {engineV3Document ? (
+                <EngineV3DocumentView document={engineV3Document} />
+              ) : engineDocument ? (
                 <EngineDocumentView document={engineDocument} className="mx-auto" />
               ) : data.diagramType === "engine-v2" ? (
                 <div className="flex h-[400px] items-center justify-center text-sm text-red-600">This Engine v2 document is invalid.</div>

@@ -304,3 +304,23 @@ test("engine v2 rejects chart families that do not match existing data", async (
   await expect(family).toHaveValue("line");
   await expect(page.getByRole("alert").filter({ hasText: "cannot be used for a sankey chart" })).toBeVisible();
 });
+
+test("engine v3 upgrade preview manages pages and committed color tokens", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await expect(page.getByText("Engine v3", { exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Revenue operating brief" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Duplicate page", exact: true }).click();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await page.getByRole("button", { name: "Add page", exact: true }).click();
+  await expect(page.getByRole("tab")).toHaveCount(3);
+  await page.getByLabel("Page name").fill("Social launch");
+  await expect(page.getByRole("tab", { name: "Social launch" })).toBeVisible();
+  await page.getByRole("button", { name: "Delete page", exact: true }).click();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+
+  const paper = page.getByLabel("Color token paper");
+  await paper.fill("#fff000");
+  await paper.press("Enter");
+  await expect(page.locator("[data-engine-document='v2']")).toHaveCSS("background-color", "rgb(255, 240, 0)");
+});
