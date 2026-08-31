@@ -256,10 +256,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         if (ids.length) { setSelectedNodeIds(new Set(ids)); setSelectedNodeId(ids[0]); }
         return;
       }
-      if (modifier && key === "d" && activePage && selectedNodeIds.size === 1) {
+      if (modifier && key === "d" && activePage && selectedNodeIds.size) {
         event.preventDefault();
-        const nodeId = [...selectedNodeIds][0];
-        if (nodeId !== activePage.root.id) runCommand({ kind: "node", action: "duplicate", pageId: activePage.id, nodeId, precondition: { exists: true } });
+        const nodeIds = [...selectedNodeIds].filter((nodeId) => nodeId !== activePage.root.id);
+        if (nodeIds.length) runCommand({ kind: "batch", commands: nodeIds.map((nodeId) => ({ kind: "node" as const, action: "duplicate" as const, pageId: activePage.id, nodeId, precondition: { exists: true } })) });
         return;
       }
       if (modifier && key === "c" && selectedNodeIds.size === 1) { event.preventDefault(); copySelected(); return; }
@@ -674,7 +674,11 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     }
   };
   const detachComponent = () => patchSelected({ componentRef: undefined, instanceOverrides: undefined });
-  const duplicateSelected = () => { if (activePage && selectedNode && selectedNode.id !== activePage.root.id) runCommand({ kind: "node", action: "duplicate", pageId: activePage.id, nodeId: selectedNode.id, precondition: { exists: true } }); };
+  const duplicateSelected = () => {
+    if (!activePage) return;
+    const nodeIds = [...selectedNodeIds].filter((nodeId) => nodeId !== activePage.root.id);
+    if (nodeIds.length) runCommand({ kind: "batch", commands: nodeIds.map((nodeId) => ({ kind: "node" as const, action: "duplicate" as const, pageId: activePage.id, nodeId, precondition: { exists: true } })) });
+  };
   const copySelected = () => { if (selectedNode && selectedNode.id !== activePage?.root.id) { clipboardNodeRef.current = cloneForClipboard(selectedNode); setClipboardAvailable(true); } };
   const pasteSelected = () => {
     if (!activePage || !selectedLocation || !clipboardNodeRef.current) return;

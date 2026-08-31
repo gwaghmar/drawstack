@@ -507,6 +507,22 @@ test("engine v3 copies and pastes a selected node with a fresh identity", async 
   await expect(page.locator('[data-node-type="text"]')).toHaveCount(before);
 });
 
+test("engine v3 duplicates a multi-selection as one undoable batch", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  await page.getByRole("button", { name: "Show layers", exact: true }).click();
+  await page.getByLabel("Include Monthly revenue in group selection").check();
+  await page.getByRole("button", { name: "Close layers", exact: true }).click();
+  const titlesBefore = await page.locator('[data-node-type="text"]').count();
+  const metricsBefore = await page.locator('[data-node-type="metric"]').count();
+  await page.keyboard.press("Control+d");
+  await expect(page.locator('[data-node-type="text"]')).toHaveCount(titlesBefore + 1);
+  await expect(page.locator('[data-node-type="metric"]')).toHaveCount(metricsBefore + 1);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator('[data-node-type="text"]')).toHaveCount(titlesBefore);
+  await expect(page.locator('[data-node-type="metric"]')).toHaveCount(metricsBefore);
+});
+
 test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
