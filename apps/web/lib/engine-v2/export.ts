@@ -462,7 +462,7 @@ function advancedChartSvg(node: EngineChartNode, tokens: EngineTokens, open: str
   return `${open}${axes}${polygons}</svg>`;
 }
 
-function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
+export function chartSvg(node: EngineChartNode, tokens: EngineTokens): string {
   const foreground = color(tokens, "ink");
   const surface = color(tokens, "panel");
   const cartesian = finiteCartesianData(node.data);
@@ -573,7 +573,7 @@ function graphNodeMarkup(node: LayoutGraphNode, tokens: EngineTokens): string {
   return `<rect x="${node.x}" y="${node.y}" width="${node.width}" height="${node.height}" rx="${number(radius)}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>${divider}<text x="${number(node.x + node.width / 2)}" y="${number(labelY)}" text-anchor="middle" font-size="14" font-weight="650" fill="${ink}">${label}</text>${fields}`;
 }
 
-function graphSvg(node: EngineGraphNode, tokens: EngineTokens): string {
+export function graphSvg(node: EngineGraphNode, tokens: EngineTokens): string {
   const graph = layoutGraph(node.graph);
   const markerId = `arrow-${node.id.replace(/[^a-zA-Z0-9_-]/g, "") || "graph"}`;
   const rule = escapeMarkup(color(tokens, "rule"));

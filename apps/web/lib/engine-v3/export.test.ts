@@ -39,7 +39,9 @@ describe("engine v3 exports", () => {
     const svg = createEngineV3PageExports(portable, "svg")[0];
     const tsx = createEngineV3PageExports(portable, "tsx")[0];
     assert.deepEqual(svg.warnings, []);
-    assert.match(svg.contents, /rotate\(18deg\)/);
+    assert.equal(svg.contents.includes("foreignObject"), false);
+    assert.match(svg.contents, /<rect width="100%" height="100%"/);
+    assert.match(svg.contents, /rotate\(18 /);
     assert.match(svg.contents, /data:image\/png;base64,AAAA/);
     assert.match(tsx.contents, /rotate\(18deg\)/);
     assert.match(tsx.contents, /data:image\/png;base64,AAAA/);
