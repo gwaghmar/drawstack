@@ -55,6 +55,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [drawer, setDrawer] = useState<"pages" | "layers" | "inspector" | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
   const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
   const [editorError, setEditorError] = useState<string | null>(null);
   const [aiPrompt, setAiPrompt] = useState("");
@@ -526,15 +527,24 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         id = created.id;
         setProjectId(id);
         setUpdatedAt(created.updatedAt);
-        router.replace(`/app/engine-v2?id=${id}&mode=v3`);
       }
-      const token = await createShareLink(id);
-      await navigator.clipboard.writeText(`${window.location.origin}/s/${token}`);
-      setShareState("copied");
+      const url = `${window.location.origin}/s/${await createShareLink(id)}`;
+      setShareUrl(url);
+      try {
+        if (!navigator.clipboard) throw new Error("Clipboard unavailable");
+        await navigator.clipboard.writeText(url);
+        setShareState("copied");
+      } catch {
+        setShareState("idle");
+      }
       window.setTimeout(() => setShareState("idle"), 1600);
     } catch {
       setShareState("error");
     }
+  };
+  const copyShareUrl = async () => {
+    if (!shareUrl || !navigator.clipboard) return;
+    try { await navigator.clipboard.writeText(shareUrl); setShareState("copied"); window.setTimeout(() => setShareState("idle"), 1600); } catch { setShareState("error"); }
   };
   const download = (payload: Pick<EngineV3ExportPayload, "filename" | "mimeType"> & { contents: string | Blob }) => {
     const url = URL.createObjectURL(new Blob([payload.contents], { type: payload.mimeType }));
@@ -607,6 +617,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         <div className="flex items-center gap-1"><button type="button" onClick={undo} disabled={!historyState.canUndo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Undo" title="Undo"><Undo2 size={15} /></button><button type="button" onClick={redo} disabled={!historyState.canRedo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Redo" title="Redo"><Redo2 size={15} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={15} /></button><button type="button" onClick={saveDocument} disabled={saveState === "saving" || saveState === "conflict"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Save document" title={saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : saveState === "saved" ? "Saved" : "Save"}><Save size={15} /></button><button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Share document" title={shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}><Share2 size={15} /></button><button type="button" onClick={() => void exportActivePage("svg")} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Export active page as SVG" title="Export active page as SVG"><Download size={15} /></button><button type="button" onClick={() => void exportActivePage("png")} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1]" aria-label="Export active page as PNG">PNG</button>{(["html", "tsx"] as const).map((kind) => <button key={kind} type="button" onClick={() => void exportActivePage(kind)} className="hidden rounded-md px-2 py-2 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1] sm:block" aria-label={`Export active page as ${kind.toUpperCase()}`}>{kind}</button>)}<button type="button" onClick={() => download(createEngineV3JsonExport(document))} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold hover:bg-[#E4E7E1]" aria-label="Export document JSON">JSON</button></div>
       </header>
       <div className="flex justify-end border-b border-[#D7DBD2] bg-[#F7F8F4] px-3 py-1 sm:px-5"><button type="button" onClick={() => void exportActivePage("pdf")} className="rounded-md px-2 py-1 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1]" aria-label="Export active page as PDF">PDF</button></div>
+      {shareUrl ? <div className="flex flex-wrap items-center gap-2 border-b border-[#D7DBD2] bg-[#EEF0EA] px-3 py-2 sm:px-5" role="status" aria-label="Share link ready"><span className="text-[10px] font-semibold uppercase tracking-wide text-[#566057]">Share link</span><input readOnly value={shareUrl} aria-label="Share link URL" className="min-w-0 flex-1 rounded border border-[#C8CEC4] bg-white px-2 py-1 text-xs text-[#566057]" /><button type="button" onClick={() => void copyShareUrl()} className="rounded border border-[#C8CEC4] bg-white px-2 py-1 text-xs font-semibold hover:border-[#3157F6]" aria-label="Copy share link">{shareState === "copied" ? "Copied" : "Copy"}</button></div> : null}
       {collaborationConflicts.length ? <div role="alert" className="flex items-center justify-between border-b border-[#D98A76] bg-[#FFF0EB] px-4 py-2 text-xs text-[#8B2D13]"><span>Concurrent edits touched the same item. Review the current result before saving.</span><button type="button" className="rounded border border-[#D98A76] bg-white px-2 py-1 font-semibold" onClick={() => setCollaborationConflicts([])}>Dismiss</button></div> : null}
       <section className="border-b border-[#D7DBD2] bg-[#15171A] px-4 py-3 text-white" aria-label="AI proposal editor"><form className="mx-auto flex max-w-[1080px] flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); void requestAiProposal(); }}><input aria-label="AI edit prompt" value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder={selectedNodeIds.size ? "Describe an edit to the selected nodes" : "Describe what to create"} disabled={Boolean(aiProposal)} className="min-w-[220px] flex-1 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/50 focus:border-[#B7FF4A] disabled:opacity-50" /><label className="flex items-center gap-2 px-1 text-xs"><input type="checkbox" checked={aiSafeMode} onChange={(event) => setAiSafeMode(event.target.checked)} disabled={Boolean(aiProposal)} /> Safe mode</label><button type="submit" disabled={!aiPrompt.trim() || aiState === "loading" || Boolean(aiProposal)} className="rounded-md bg-[#B7FF4A] px-3 py-2 text-xs font-semibold text-[#15171A] disabled:opacity-40">{aiState === "loading" ? "Thinking…" : "Propose"}</button></form>{aiProposal ? <div className="mx-auto mt-3 flex max-w-[1080px] flex-wrap items-center justify-between gap-3 rounded-md border border-[#B7FF4A]/40 bg-white/10 px-3 py-2 text-xs" role="status" aria-label="AI change proposal"><span><strong>Preview:</strong> {aiProposal.explanation || "Review proposed changes"} ({aiProposal.affectedIds.length} affected)</span><span className="flex gap-2"><button type="button" onClick={applyAiProposal} className="rounded bg-[#B7FF4A] px-3 py-1.5 font-semibold text-[#15171A]">Apply</button><button type="button" onClick={rejectAiProposal} className="rounded border border-white/30 px-3 py-1.5">Reject</button></span></div> : null}</section>
       <div className="flex min-h-0 flex-1">

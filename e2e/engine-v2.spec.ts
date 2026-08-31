@@ -419,6 +419,13 @@ test("engine v3 creates a bound connector from two selected objects", async ({ p
   await expect(page.getByLabel("Connector end node")).toHaveValue("status");
 });
 
+test("engine v3 keeps a visible share link when clipboard access is unavailable", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "Share document", exact: true }).click();
+  await expect(page.getByRole("status", { name: "Share link ready" })).toBeVisible();
+  await expect(page.getByLabel("Share link URL")).toHaveValue(/\/s\//);
+});
+
 test("engine v3 previews, rejects, applies, and undoes an AI proposal", async ({ page }) => {
   await page.route("**/api/ai/engine-v3", async (route) => {
     const request = route.request().postDataJSON() as { document: Record<string, unknown>; revision: number };
