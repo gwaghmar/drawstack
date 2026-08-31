@@ -446,6 +446,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); penPointsRef.current = []; };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
   };
+  const handleCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (penMode) { beginPen(event); return; }
+    if (event.button === 0 && event.target === event.currentTarget && activePage) selectNode(activePage.root.id);
+  };
   const makeComponent = () => {
     if (!selectedNode || selectedNode.componentRef || !activePage) return;
     let id = `${selectedNode.id}-component`;
@@ -627,6 +631,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[68px] shrink-0 flex-col items-center gap-1 border-r border-[#D7DBD2] bg-white px-2 py-3" aria-label="Create tools">
           <button type="button" className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[#15171A] text-white" aria-label="Select tool" title="Select"><MousePointer2 size={17} /></button>
+          <button type="button" onClick={() => activePage && selectNode(activePage.root.id)} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Clear selection" title="Clear selection"><MousePointer2 size={15} /><span>Clear</span></button>
           <button type="button" onClick={() => setPenMode((value) => !value)} className={`flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] ${penMode ? "bg-[#B7FF4A] text-[#15171A]" : "text-[#4F5850] hover:bg-[#EEF0EA]"}`} aria-label="Draw with pen" aria-pressed={penMode}><Pen size={17} /><span>Pen</span></button>
           <button type="button" onClick={() => addCanvasNode("text")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add text"><Type size={17} /><span>Text</span></button>
           <button type="button" onClick={() => addCanvasNode("card")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add card"><Square size={17} /><span>Card</span></button>
@@ -650,7 +655,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             <button type="button" onClick={() => setZoom(1)} className="min-w-12 rounded-full px-2 py-1 font-mono text-[10px] font-semibold text-[#566057] hover:bg-[#EEF0EA]" aria-label="Reset zoom">{Math.round(zoom * 100)}%</button>
             <button type="button" onClick={() => setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom in" title="Zoom in"><Plus size={13} /></button>
           </div>
-          <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={beginPen} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
+          <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={handleCanvasPointerDown} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
           <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} />
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
