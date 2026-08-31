@@ -375,6 +375,7 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
 
 test("engine v3 exposes quick actions beside a selected object", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
+  await expect(page.getByRole("button", { name: "Select all" })).toBeVisible();
   await page.locator('[data-node-id="title"]').click();
   await expect(page.getByRole("toolbar", { name: "Quick object actions" })).toBeVisible();
   await expect(page.getByLabel("Quick fill color")).toBeVisible();
