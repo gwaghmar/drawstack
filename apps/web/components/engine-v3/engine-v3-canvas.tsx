@@ -281,6 +281,21 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
   };
+  const beginPathPointDrag = (event: React.PointerEvent<HTMLButtonElement>, index: number) => {
+    if (!activePage || !selectedNode || selectedNode.type !== "path" || selectedNode.locked || !selectedBounds || !canvasRef.current) return;
+    event.preventDefault(); event.stopPropagation();
+    const base = historyRef.current!.snapshot().document; const pageId = activePage.id; const nodeId = selectedNode.id; let finalPoints = selectedNode.points;
+    const maxX = Math.max(...selectedNode.points.map((point) => point.x), 1); const maxY = Math.max(...selectedNode.points.map((point) => point.y), 1);
+    const move = (pointer: PointerEvent) => {
+      const x = Math.max(0, Math.min(maxX, Math.round((pointer.clientX - (canvasRef.current!.getBoundingClientRect().left + selectedBounds.left)) / selectedBounds.width * maxX)));
+      const y = Math.max(0, Math.min(maxY, Math.round((pointer.clientY - (canvasRef.current!.getBoundingClientRect().top + selectedBounds.top)) / selectedBounds.height * maxY)));
+      finalPoints = selectedNode.points.map((point, pointIndex) => pointIndex === index ? { x, y } : point);
+      try { setDocument(patchEngineV3Node(base, pageId, nodeId, { points: finalPoints } as Partial<EngineNode>)); } catch { /* Commit below reports failures. */ }
+    };
+    const finish = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); runCommand({ kind: "node", action: "patch", pageId, nodeId, changes: { points: finalPoints } }); };
+    const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
+  };
   const placeAsset = (asset: StoredAsset) => {
     if (!activePage) return;
     const nodeId = `image-${crypto.randomUUID()}`;
@@ -548,6 +563,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             ["sw", selectedBounds.left - 6, selectedBounds.top + selectedBounds.height - 6, "nesw-resize"],
             ["w", selectedBounds.left - 5, selectedBounds.top + selectedBounds.height / 2 - 10, "ew-resize"],
           ] as const).map(([handle, left, top, cursor]) => <button key={handle} type="button" aria-label={`Resize selected node ${handle}`} onPointerDown={(event) => beginNodeResize(event, handle)} className={`absolute z-30 border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6] ${handle.length === 1 ? handle === "n" || handle === "s" ? "h-3 w-5 rounded-full" : "h-5 w-3 rounded-full" : "h-3 w-3 rounded-sm"}`} style={{ left, top, cursor }} />) : null}
+          {selectedBounds && selectedNode?.type === "path" ? selectedNode.points.map((point, index) => { const maxX = Math.max(...selectedNode.points.map((item) => item.x), 1); const maxY = Math.max(...selectedNode.points.map((item) => item.y), 1); return <button key={`point-${index}`} type="button" aria-label={`Edit pen point ${index + 1}`} onPointerDown={(event) => beginPathPointDrag(event, index)} className="absolute z-40 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + point.x / maxX * selectedBounds.width, top: selectedBounds.top + point.y / maxY * selectedBounds.height, cursor: "move" }} />; }) : null}
           {gestureGuides.map((guide, index) => guide.axis === "x" ? <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[#3157F6]" style={{ left: `${guide.position / activePage.width * 100}%` }} /> : activePage.height === "auto" ? null : <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[#3157F6]" style={{ top: `${guide.position / activePage.height * 100}%` }} />)}
           </div></div>
         </section>
