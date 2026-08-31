@@ -160,6 +160,13 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
+      if (!modifier && !event.altKey && (event.key === "+" || event.key === "=" || event.key === "-" || event.key === "0")) {
+        event.preventDefault();
+        if (event.key === "+" || event.key === "=") setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10));
+        else if (event.key === "-") setZoom((value) => Math.max(0.5, Math.round((value - 0.1) * 10) / 10));
+        else setZoom(1);
+        return;
+      }
       if (!modifier && !event.altKey && activePage && !aiProposal) {
         const shortcutKind = key === "t" ? "text" : key === "r" ? "card" : key === "f" ? "frame" : null;
         if (shortcutKind) { event.preventDefault(); addCanvasNode(shortcutKind); return; }
