@@ -311,8 +311,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           const width = typeof location.node.style?.width === "number" ? location.node.style.width : 240;
           const height = typeof location.node.style?.minHeight === "number" ? location.node.style.minHeight : 120;
           const changes = event.key === "ArrowLeft" || event.key === "ArrowRight"
-            ? { style: { ...location.node.style, width: Math.max(24, width + (event.key === "ArrowRight" ? step : -step)) } }
-            : { style: { ...location.node.style, minHeight: Math.max(24, height + (event.key === "ArrowDown" ? step : -step)) } };
+            ? { style: { ...location.node.style, width: Math.max(4, width + (event.key === "ArrowRight" ? step : -step)) } }
+            : { style: { ...location.node.style, minHeight: Math.max(4, height + (event.key === "ArrowDown" ? step : -step)) } };
           runCommand({ kind: "node", action: "patch", pageId: activePage.id, nodeId, changes });
           return;
         }
@@ -475,10 +475,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const pageId = activePage.id; const nodeId = selectedNode.id; const base = historyRef.current!.snapshot().document; const parentOffset = engineV3NodeParentOffset(base, pageId, nodeId); let width = startWidth; let height = startHeight; let x = startX; let y = startY; let changed = false;
     const move = (pointer: PointerEvent) => {
       const dx = pointer.clientX - event.clientX; const dy = pointer.clientY - event.clientY;
-      if (handle.includes("e")) width = Math.max(24, startWidth + dx);
-      if (handle.includes("w")) { width = Math.max(24, startWidth - dx); x = startX + startWidth - width; }
-      if (handle.includes("s")) height = Math.max(24, startHeight + dy);
-      if (handle.includes("n")) { height = Math.max(24, startHeight - dy); y = startY + startHeight - height; }
+      if (handle.includes("e")) width = Math.max(4, startWidth + dx);
+      if (handle.includes("w")) { width = Math.max(4, startWidth - dx); x = startX + startWidth - width; }
+      if (handle.includes("s")) height = Math.max(4, startHeight + dy);
+      if (handle.includes("n")) { height = Math.max(4, startHeight - dy); y = startY + startHeight - height; }
       changed = true;
       const changes: Partial<EngineNode> = { style: { ...selectedNode.style, width: Math.round(width), minHeight: Math.round(height) } };
       if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x - parentOffset.x), y: Math.round(y - parentOffset.y) };
@@ -523,8 +523,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       let preview = base;
       try {
         for (const session of sessions) {
-          const width = Math.max(24, Math.round(session.width * sx));
-          const height = Math.max(24, Math.round(session.height * sy));
+          const width = Math.max(4, Math.round(session.width * sx));
+          const height = Math.max(4, Math.round(session.height * sy));
           const globalX = nextLeft + (session.globalX - startLeft) * sx;
           const globalY = nextTop + (session.globalY - startTop) * sy;
           preview = patchEngineV3Node(preview, pageId, session.id, {
@@ -543,7 +543,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         kind: "node", action: "patch", pageId, nodeId: session.id,
         changes: {
           transform: { ...(session.node.transform ?? {}), x: Math.round(nextLeft + (session.globalX - startLeft) * sx - session.parent.x), y: Math.round(nextTop + (session.globalY - startTop) * sy - session.parent.y) },
-          style: { ...session.node.style, width: Math.max(24, Math.round(session.width * sx)), minHeight: Math.max(24, Math.round(session.height * sy)) },
+          style: { ...session.node.style, width: Math.max(4, Math.round(session.width * sx)), minHeight: Math.max(4, Math.round(session.height * sy)) },
         },
       }));
       runCommand({ kind: "batch", commands });
