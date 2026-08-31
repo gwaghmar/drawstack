@@ -195,7 +195,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
-      if (event.key === " ") { spacePressedRef.current = true; return; }
+      if (event.key === " " && !target?.closest("button, a, select")) { event.preventDefault(); spacePressedRef.current = true; return; }
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       if (!modifier && !event.altKey && event.key === "Tab" && activePage && selectedNode && selectedNodeIds.size === 1) {
