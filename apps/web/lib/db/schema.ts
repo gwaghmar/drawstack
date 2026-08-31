@@ -24,11 +24,6 @@ export const users = pgTable("user", {
   plan: text("plan").notNull().default("free"),
   role: text("role").notNull().default("user"),
   creditsBalance: integer("credits_balance").notNull().default(5),
-  aiApiKeyCipher: text("ai_api_key_cipher"),
-  aiKeyLast4: text("ai_key_last4"),
-  aiBaseUrl: text("ai_base_url"),
-  aiModel: text("ai_model"),
-  aiProvider: text("ai_provider").default("openai"),
   handle: text("handle").unique(),
 }, () => [
   check("user_plan_chk", sql`plan IN ('free', 'pro')`),

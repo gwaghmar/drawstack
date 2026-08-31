@@ -187,12 +187,12 @@ A web-based diagram platform where users describe what they want in plain text a
 - Used by: Rendered by Next.js on request
 - Purpose: Authenticated database mutations invoked directly from Server or Client Components
 - Location: `apps/web/app/actions/`
-- Contains: `project.ts`, `share.ts`, `login.ts`, `ai-settings.ts`, `api-keys.ts`
+- Contains: `project.ts`, `share.ts`, `login.ts`, `api-keys.ts`
 - Pattern: Each action calls `auth()`, resolves workspace, then queries `db`
 - Depends on: `auth.ts`, `lib/db`, `lib/user-sync.ts`
 - Purpose: External HTTP endpoints (AI generation, v1 REST, billing webhooks, MCP, share tokens)
 - Location: `apps/web/app/api/`
-- Contains: `ai/generate/`, `ai/list-models/`, `v1/export/`, `v1/validate/`, `api/mcp/`, `billing/checkout/`, `billing/portal/`, `webhooks/stripe/`, `share/[token]/`, `auth/`
+- Contains: `ai/generate/`, `ai/agent/`, `ai/engine-v2/`, `ai/demo/`, `v1/validate/`, `api/mcp/`, `billing/checkout/`, `billing/portal/`, `webhooks/stripe/`, `share/[token]/`, `auth/`
 - Auth: `lib/api-auth.ts` (`getPrincipalFromRequest`) for v1 endpoints; `auth()` for session-only endpoints
 - Depends on: `lib/db`, `@flowchart/core`, Stripe SDK, Vercel AI SDK
 - Purpose: Reusable server-side utilities — database client, auth helpers, business logic
@@ -200,7 +200,7 @@ A web-based diagram platform where users describe what they want in plain text a
 - Contains:
 - Purpose: Interactive editor (code editor, live preview, export controls, AI assistant)
 - Location: `apps/web/components/`
-- Contains: `editor-client.tsx` (main editor shell), `diagrams/` (per-type renderers), `settings/ai-settings-panel.tsx`, `diagram-icon.tsx`, `share-viewer.tsx`
+- Contains: `editor-client.tsx` (main editor shell), `diagrams/`, `engine-v2/`, `diagram-icon.tsx`, `share-viewer.tsx`
 - Pattern: Heavy use of `dynamic()` with `ssr: false` for diagram renderers that require browser APIs
 - Depends on: `@flowchart/core`, Server Actions (called via import)
 - Purpose: MCP stdio transport for AI IDEs (Cursor, Claude Code) — runs as a separate process

@@ -11,7 +11,7 @@ describe("getDeploymentReadiness", () => {
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
       AUTH_SECRET: "secret",
-      AI_KEY_ENCRYPTION_SECRET: "1234567890123456",
+      OPENAI_API_KEY: "hosted-key",
       MOCK_AUTH: "false",
       MOCK_DB: "false",
     });
@@ -35,7 +35,7 @@ describe("getDeploymentReadiness", () => {
         "supabase-url",
         "supabase-anon-key",
         "auth-secret",
-        "ai-key-encryption-secret",
+        "hosted-ai",
       ],
     );
   });
@@ -47,7 +47,7 @@ describe("getDeploymentReadiness", () => {
       NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
       NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
       AUTH_SECRET: "secret",
-      AI_KEY_ENCRYPTION_SECRET: "1234567890123456",
+      OPENAI_API_KEY: "hosted-key",
       MOCK_AUTH: "true",
       MOCK_DB: "true",
     });
@@ -59,5 +59,35 @@ describe("getDeploymentReadiness", () => {
         .map((item) => item.id),
       ["mock-auth", "mock-db"],
     );
+  });
+
+  it("requires complete Stripe configuration only when billing is enabled", () => {
+    const base = {
+      DATABASE_URL: "postgresql://example",
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: "anon",
+      AUTH_SECRET: "secret",
+      OPENAI_API_KEY: "hosted-key",
+      MOCK_AUTH: "false",
+      MOCK_DB: "false",
+    };
+    assert.equal(getDeploymentReadiness(base).ready, true);
+
+    const incomplete = getDeploymentReadiness({ ...base, STRIPE_ENABLED: "true" });
+    assert.equal(incomplete.ready, false);
+    assert.deepEqual(
+      incomplete.items.filter((item) => item.status === "missing").map((item) => item.id),
+      ["stripe-secret", "stripe-webhook", "stripe-prices"],
+    );
+
+    const complete = getDeploymentReadiness({
+      ...base,
+      STRIPE_ENABLED: "true",
+      STRIPE_SECRET_KEY: "secret",
+      STRIPE_WEBHOOK_SECRET: "webhook",
+      STRIPE_PRICE_PRO_MONTHLY: "monthly",
+      STRIPE_PRICE_PRO_ANNUAL: "annual",
+    });
+    assert.equal(complete.ready, true);
   });
 });

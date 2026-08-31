@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import type { ApiError } from "@flowchart/core";
+import { isStripeBillingEnabled } from "@/lib/billing-config";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -16,6 +17,10 @@ export async function POST(req: Request) {
   if (!email) {
     const body: ApiError = { error: "Unauthorized", code: "UNAUTHORIZED" };
     return NextResponse.json(body, { status: 401 });
+  }
+  if (!isStripeBillingEnabled()) {
+    const body: ApiError = { error: "Paid plans are not available yet", code: "INTERNAL_ERROR" };
+    return NextResponse.json(body, { status: 503 });
   }
   if (!stripe) {
     const body: ApiError = { error: "Stripe not configured", code: "INTERNAL_ERROR" };

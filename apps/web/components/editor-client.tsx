@@ -122,11 +122,6 @@ function summarizeDiagramSource(diagramType: DiagramType, source: string): strin
   }
 }
 
-export type AiAssistantHint =
-  | { kind: "byok"; providerLabel: string }
-  | { kind: "server" }
-  | { kind: "none" };
-
 export type EditorClientProps = {
   initialSource: string;
   initialThemeId: string;
@@ -134,7 +129,6 @@ export type EditorClientProps = {
   initialDiagramType: DiagramType;
   projectId: string | null;
   showWatermark: boolean;
-  aiAssistantHint?: AiAssistantHint;
   isExample?: boolean;
   creditsBalance?: number;
   initialPrompt?: string | null;
@@ -176,7 +170,6 @@ export function EditorClient({
   initialDiagramType,
   projectId,
   showWatermark,
-  aiAssistantHint = { kind: "none" },
   isExample = false,
   creditsBalance,
   initialPrompt,
@@ -355,7 +348,7 @@ export function EditorClient({
       if (forceCreateNext) setForceCreateNext(false);
       const msg = err instanceof Error ? err.message : String(err);
       setAiError(msg.includes("API") || msg.includes("key") || msg.includes("auth")
-        ? "AI unavailable — check your API key in Settings"
+        ? "Hosted AI is unavailable. Try again or contact support."
         : "AI request failed — please try again");
       showToast("AI request failed — please try again");
     },

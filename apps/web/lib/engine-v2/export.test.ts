@@ -93,6 +93,27 @@ describe("serializeEngineV2Svg", () => {
     assert.deepEqual(createEngineV2SvgExport(exportDocument()).filename, "quarterly-revenue-flow.svg");
   });
 
+  it("preserves direct-editing state in preview-equivalent exports", () => {
+    const document = exportDocument();
+    const root = document.children[0];
+    assert.equal(root.type, "frame");
+    if (root.type !== "frame") return;
+    root.children[0] = {
+      ...root.children[0],
+      visible: false,
+      rotation: 12,
+      style: { position: "absolute", x: 20, y: 30, opacity: 0.4 },
+    };
+    const svg = serializeEngineV2Svg(document);
+    const react = serializeEngineV2ReactTsx(document);
+    for (const output of [svg, react]) {
+      assert.match(output, /visibility/);
+      assert.match(output, /rotate\(12deg\)/);
+      assert.match(output, /absolute/);
+      assert.match(output, /opacity/);
+    }
+  });
+
   it("supports every deterministic chart family", () => {
     const document = exportDocument();
     const root = document.children[0];

@@ -98,13 +98,13 @@ export function insertNode(
 
 export function removeNode(nodes: EngineNode[], id: string): EngineNode[] {
   const location = findParent(nodes, id);
-  if (!location) return nodes;
+  if (!location || location.node.locked) return nodes;
   return updateChildrenAtParent(nodes, location.parentId, (children) => children.filter((node) => node.id !== id));
 }
 
 export function replaceNode(nodes: EngineNode[], id: string, replacement: EngineNode): EngineNode[] {
   const location = findParent(nodes, id);
-  if (!location) return nodes;
+  if (!location || location.node.locked) return nodes;
   return updateChildrenAtParent(nodes, location.parentId, (children) => {
     const next = [...children];
     next[location.index] = replacement;
@@ -114,7 +114,7 @@ export function replaceNode(nodes: EngineNode[], id: string, replacement: Engine
 
 export function reorderNode(nodes: EngineNode[], id: string, toIndex: number): EngineNode[] {
   const location = findParent(nodes, id);
-  if (!location) return nodes;
+  if (!location || location.node.locked) return nodes;
   return updateChildrenAtParent(nodes, location.parentId, (children) => {
     const target = Math.max(0, Math.min(Math.trunc(toIndex), children.length - 1));
     if (target === location.index) return children;
@@ -151,9 +151,9 @@ export function moveNodeToParent(
   insertionIndex?: number,
 ): EngineNode[] {
   const source = findParent(nodes, id);
-  if (!source || id === parentId) return nodes;
+  if (!source || source.node.locked || id === parentId) return nodes;
   const destination = parentId === null ? null : findParent(nodes, parentId)?.node;
-  if (parentId !== null && (!destination || destination.type !== "frame")) return nodes;
+  if (parentId !== null && (!destination || destination.type !== "frame" || destination.locked)) return nodes;
   if (source.node.type === "frame" && parentId !== null && containsNode(source.node, parentId)) return nodes;
 
   const destinationChildren = destination?.type === "frame" ? destination.children : nodes;
@@ -227,7 +227,7 @@ function cloneWithNewIds(node: EngineNode, usedIds: Set<string>, isRoot: boolean
 
 export function duplicateNode(nodes: EngineNode[], id: string): DuplicateNodeResult {
   const location = findParent(nodes, id);
-  if (!location) return { nodes, duplicatedId: id };
+  if (!location || location.node.locked) return { nodes, duplicatedId: id };
   const duplicate = cloneWithNewIds(location.node, collectIds(nodes), true);
   return {
     nodes: insertNode(nodes, duplicate, location.parentId, location.index + 1),
@@ -274,7 +274,7 @@ export function pasteNodes(
 ): PasteNodesResult {
   if (!clipboardNodes.length) return { nodes, pastedIds: [] };
   const parent = parentId === null ? null : findParent(nodes, parentId)?.node;
-  if (parentId !== null && parent?.type !== "frame") return { nodes, pastedIds: [] };
+  if (parentId !== null && (parent?.type !== "frame" || parent.locked)) return { nodes, pastedIds: [] };
   const usedIds = collectIds(nodes);
   let next = nodes;
   const pastedIds: string[] = [];
@@ -298,7 +298,7 @@ export function removeNodes(nodes: EngineNode[], ids: Iterable<string>): EngineN
     let changed = false;
     const next: EngineNode[] = [];
     for (const node of items) {
-      if (roots.has(node.id)) {
+      if (roots.has(node.id) && !node.locked) {
         changed = true;
         continue;
       }
@@ -332,7 +332,7 @@ export function alignNodes(
   ids: string[],
   alignment: "start" | "center" | "end" | "stretch",
 ): EngineNode[] {
-  if (!sharedFrameParent(nodes, ids)) return nodes;
+  if (!sharedFrameParent(nodes, ids) || ids.some((id) => findParent(nodes, id)?.node.locked)) return nodes;
   const selected = new Set(ids);
   const alignSelf = alignment === "start" ? "flex-start" : alignment === "end" ? "flex-end" : alignment;
   const update = (items: EngineNode[]): EngineNode[] => items.map((node) => {

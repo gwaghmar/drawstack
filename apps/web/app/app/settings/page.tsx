@@ -2,17 +2,14 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import { createApiKey, deleteApiKey, listApiKeys } from "@/app/actions/api-keys";
 import { setPlan } from "@/app/actions/admin";
-import { getAiSettingsForUser } from "@/app/actions/ai-settings";
 import { getBrandKit } from "@/app/actions/brand-kit";
 import { updateHandle, getMyHandle } from "@/app/actions/profile";
-import { AiSettingsPanel } from "@/components/settings/ai-settings-panel";
 import { BrandKitPanel } from "@/components/settings/brand-kit-panel";
-import type { AiProvider } from "@/lib/ai-providers";
 
 export default async function SettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ newKey?: string; ai?: string; handleSaved?: string; handleError?: string }>;
+  searchParams: Promise<{ newKey?: string; handleSaved?: string; handleError?: string }>;
 }) {
   const sp = await searchParams;
   const session = await auth();
@@ -22,11 +19,8 @@ export default async function SettingsPage({
   }
   const emailStr: string = email;
   const keys = await listApiKeys();
-  const aiSettings = await getAiSettingsForUser();
   const brandKit = await getBrandKit();
   const currentHandle = await getMyHandle();
-
-  const currentProvider = (aiSettings?.provider ?? "openai") as AiProvider;
 
   async function create(formData: FormData) {
     "use server";
@@ -51,44 +45,23 @@ export default async function SettingsPage({
     <main className="mx-auto min-h-0 w-full max-w-3xl flex-1 overflow-y-auto px-6 py-10">
       <h1 className="text-2xl font-semibold text-slate-900">Settings</h1>
       <p className="mt-2 text-sm text-slate-600">
-        Configure your AI provider, billing, and REST API keys.
+        Manage your plan, brand, profile, and REST API keys.
       </p>
 
-      {sp.ai === "saved" ? (
-        <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-          AI settings saved. Keys are stored encrypted and never shown again in full.
-        </p>
-      ) : null}
-      {sp.ai === "cleared" ? (
-        <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
-          Saved AI key removed.
-        </p>
-      ) : null}
-
       <div className="mt-8 grid gap-8">
-
-        <AiSettingsPanel
-          encryptionReady={Boolean(aiSettings?.encryptionReady)}
-          hasKey={Boolean(aiSettings?.hasKey)}
-          keyLast4={aiSettings?.keyLast4 ?? null}
-          defaultProvider={currentProvider}
-          defaultBaseUrl={aiSettings?.baseUrl ?? ""}
-          defaultModel={aiSettings?.model ?? ""}
-        />
-
         {/* Billing */}
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-medium">Billing</h2>
           <p className="mt-2 text-sm text-slate-600">
             Pro removes the editor watermark and includes unlimited hosted AI generations.
-            Free tier includes hosted AI credits, or you can use your own provider key above.
+            Free tier includes hosted AI credits.
           </p>
           <div className="mt-4">
             <a
               href="/app/billing"
               className="inline-flex rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 transition-colors"
             >
-              Manage billing
+              View plan
             </a>
           </div>
         </section>
@@ -153,7 +126,7 @@ export default async function SettingsPage({
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-medium">REST API keys</h2>
           <p className="mt-2 text-sm text-slate-600">
-            For authenticating server export and validation endpoints. Not the same as your AI provider key.
+            For authenticating server export and validation endpoints.
           </p>
           <form action={create} className="mt-4 flex gap-2">
             <input

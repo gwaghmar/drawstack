@@ -4,6 +4,7 @@ import { DIAGRAM_SYSTEM_PROMPTS } from "@flowchart/core";
 import { buildLanguageModel } from "@/lib/ai-providers";
 import { validateAndRepairOutput } from "@/lib/diagrams/validate-output";
 import { rateLimit } from "@/lib/rate-limit";
+import { getHostedAiConfig } from "@/lib/hosted-ai";
 
 const MAX_DEMO_USES = 3;
 const COOKIE_NAME = "fs_demo_uses";
@@ -19,22 +20,6 @@ function getDemoUses(cookieHeader: string | null): number {
   if (!cookieHeader) return 0;
   const match = cookieHeader.match(new RegExp(`(?:^|;\\s*)${COOKIE_NAME}=(\\d+)`));
   return match ? Math.min(parseInt(match[1], 10), MAX_DEMO_USES) : 0;
-}
-
-function buildDemoApiKey(): { apiKey: string; provider: "openai" | "google"; baseUrl: string | null } | null {
-  if (process.env.OPENROUTER_API_KEY) {
-    return { apiKey: process.env.OPENROUTER_API_KEY, provider: "openai", baseUrl: "https://openrouter.ai/api/v1" };
-  }
-  if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-    return { apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY, provider: "google", baseUrl: null };
-  }
-  if (process.env.OPENAI_API_KEY) {
-    return { apiKey: process.env.OPENAI_API_KEY, provider: "openai", baseUrl: process.env.OPENAI_BASE_URL?.replace(/\/$/, "") ?? null };
-  }
-  if (process.env.AI_GATEWAY_KEY) {
-    return { apiKey: process.env.AI_GATEWAY_KEY, provider: "openai", baseUrl: process.env.OPENAI_BASE_URL?.replace(/\/$/, "") ?? null };
-  }
-  return null;
 }
 
 export async function POST(req: Request) {
@@ -63,7 +48,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "prompt required" }, { status: 400 });
   }
 
-  const credentials = buildDemoApiKey();
+  const credentials = getHostedAiConfig();
   if (!credentials) {
     return NextResponse.json({ error: "no_api_key" }, { status: 503 });
   }
@@ -75,18 +60,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "limit" }, { status: 429 });
   }
 
-  const googleModelFromEnv = process.env.GOOGLE_MODEL?.trim();
-  const openAiModelFromEnv = process.env.OPENAI_MODEL?.trim();
-  const openRouterModelFromEnv = process.env.OPENROUTER_MODEL?.trim();
-  const usingOpenRouter = credentials.provider === "openai" && credentials.baseUrl === "https://openrouter.ai/api/v1";
-  const model =
-    credentials.provider === "google"
-      ? (googleModelFromEnv || "gemini-flash-latest")
-      : usingOpenRouter
-      ? (openRouterModelFromEnv || "google/gemini-2.5-flash-lite")
-      : (openAiModelFromEnv || "gpt-4o-mini");
-
-  const languageModel = buildLanguageModel(credentials.provider, model, credentials.apiKey, credentials.baseUrl);
+  const languageModel = buildLanguageModel(credentials.provider, credentials.model, credentials.apiKey, credentials.baseUrl);
   const systemPrompt = DIAGRAM_SYSTEM_PROMPTS["freeform"];
 
   let raw: string;

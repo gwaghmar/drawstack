@@ -77,19 +77,12 @@ test("templates use one shared app header", async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test("billing checkout failure is visible and retryable", async ({ page }) => {
+test("billing clearly shows checkout is unavailable", async ({ page }) => {
   const errors = collectPageErrors(page);
-  await page.route("**/api/billing/checkout", (route) => route.fulfill({
-    status: 503,
-    contentType: "application/json",
-    body: JSON.stringify({ error: "Billing is temporarily unavailable" }),
-  }));
   await page.goto("/app/billing");
-
-  const checkout = page.getByRole("button", { name: "Go to Stripe Checkout" });
-  await checkout.click();
-  await expect(page.getByText("Billing is temporarily unavailable", { exact: true })).toBeVisible();
-  await expect(checkout).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "Paid plans are coming soon" })).toBeVisible();
+  await expect(page.getByText("Not available", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Go to Stripe Checkout" })).toHaveCount(0);
   expect(errors).toEqual([]);
 });
 
@@ -97,12 +90,11 @@ test("no-credit generation error exposes recovery actions", async ({ page }) => 
   await page.route("**/api/ai/engine-v2", (route) => route.fulfill({
     status: 402,
     contentType: "application/json",
-    body: JSON.stringify({ error: "No credits left. Add your own AI key or upgrade." }),
+    body: JSON.stringify({ error: "No credits left. Upgrade or contact support." }),
   }));
   await page.goto("/app/engine-v2");
   await page.getByRole("button", { name: "Open AI composer" }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
-  await expect(page.getByText("No credits left. Add your own AI key or upgrade.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Add AI key" })).toHaveAttribute("href", "/app/settings");
-  await expect(page.getByRole("link", { name: "Upgrade" })).toHaveAttribute("href", "/app/billing");
+  await expect(page.getByText("No credits left. Upgrade or contact support.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "View plan" })).toHaveAttribute("href", "/app/billing");
 });

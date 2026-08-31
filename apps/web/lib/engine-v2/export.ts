@@ -66,7 +66,7 @@ const EXPORT_CSS = `
 html,body{margin:0;padding:0}
 body{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:var(--ink);background:var(--paper);-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .engine-artboard{width:100%;min-height:100%;overflow:hidden}
-.engine-frame{min-width:0}
+.engine-frame{min-width:0;position:relative}
 .engine-text-eyebrow{font:600 11px/1.3 ui-monospace,SFMono-Regular,monospace;letter-spacing:.18em;text-transform:uppercase}
 .engine-text-display{max-width:720px;font-size:58px;font-weight:650;line-height:.94;letter-spacing:-.055em}
 .engine-text-heading{font-size:24px;font-weight:650;line-height:1.15;letter-spacing:-.03em}
@@ -123,7 +123,20 @@ function styleCss(style: EngineStyle | undefined, tokens: EngineTokens): string 
   if (typeof style.width === "string" && /^(?:100|[1-9]?\d)%$/.test(style.width)) declarations.push(`width:${style.width}`);
   if (Number.isFinite(style.flex)) declarations.push(`flex:${number(style.flex!)}`);
   if (style.alignSelf) declarations.push(`align-self:${cssValue(style.alignSelf)}`);
+  if (style.position === "absolute") {
+    declarations.push("position:absolute");
+    if (Number.isFinite(style.x)) declarations.push(`left:${number(style.x!)}px`);
+    if (Number.isFinite(style.y)) declarations.push(`top:${number(style.y!)}px`);
+  }
+  if (Number.isFinite(style.opacity)) declarations.push(`opacity:${number(style.opacity!)}`);
   return declarations.join(";");
+}
+
+function nodeStateCss(node: EngineNode): string {
+  const values: string[] = [];
+  if (node.visible === false) values.push("visibility:hidden");
+  if (Number.isFinite(node.rotation) && node.rotation !== 0) values.push(`transform:rotate(${number(node.rotation!)}deg)`);
+  return values.join(";");
 }
 
 function frameStyle(node: EngineFrameNode, tokens: EngineTokens): string {
@@ -136,6 +149,8 @@ function frameStyle(node: EngineFrameNode, tokens: EngineTokens): string {
   if (layout.justify) values.push(`justify-content:${cssValue(layout.justify)}`);
   const extra = styleCss(node.style, tokens);
   if (extra) values.push(extra);
+  const state = nodeStateCss(node);
+  if (state) values.push(state);
   return values.join(";");
 }
 
@@ -574,7 +589,7 @@ function graphSvg(node: EngineGraphNode, tokens: EngineTokens): string {
 }
 
 function nodeHtml(node: EngineNode, tokens: EngineTokens): string {
-  const style = styleCss(node.style, tokens);
+  const style = [styleCss(node.style, tokens), nodeStateCss(node)].filter(Boolean).join(";");
   const styleAttribute = style ? ` style="${escapeMarkup(style)}"` : "";
   if (node.type === "frame") {
     return `<div class="engine-frame" data-node-id="${escapeMarkup(node.id)}" data-layout="${node.layout.mode}" data-direction="${node.layout.direction ?? ""}" style="${escapeMarkup(frameStyle(node, tokens))}">${node.children.map((child) => nodeHtml(child, tokens)).join("")}</div>`;
@@ -616,6 +631,19 @@ function reactStyle(style: EngineStyle | undefined, tokens: EngineTokens): Recor
   if (typeof style.width === "string" && /^(?:100|[1-9]?\d)%$/.test(style.width)) output.width = style.width;
   if (Number.isFinite(style.flex)) output.flex = style.flex!;
   if (style.alignSelf) output.alignSelf = cssValue(style.alignSelf);
+  if (style.position === "absolute") {
+    output.position = "absolute";
+    if (Number.isFinite(style.x)) output.left = style.x!;
+    if (Number.isFinite(style.y)) output.top = style.y!;
+  }
+  if (Number.isFinite(style.opacity)) output.opacity = style.opacity!;
+  return output;
+}
+
+function reactNodeState(node: EngineNode): Record<string, string | number> {
+  const output: Record<string, string | number> = {};
+  if (node.visible === false) output.visibility = "hidden";
+  if (Number.isFinite(node.rotation) && node.rotation !== 0) output.transform = `rotate(${node.rotation}deg)`;
   return output;
 }
 
@@ -627,7 +655,7 @@ function frameReactStyle(node: EngineFrameNode, tokens: EngineTokens): Record<st
   style.padding = node.layout.padding;
   if (node.layout.align) style.alignItems = cssValue(node.layout.align);
   if (node.layout.justify) style.justifyContent = cssValue(node.layout.justify);
-  return { ...style, ...reactStyle(node.style, tokens) };
+  return { ...style, ...reactStyle(node.style, tokens), ...reactNodeState(node) };
 }
 
 function svgMarkupToJsx(markup: string): string {
@@ -663,7 +691,7 @@ function reactNode(node: EngineNode, tokens: EngineTokens, depth: number): strin
     const children = node.children.map((child) => reactNode(child, tokens, depth + 1)).join("\n");
     return `${padding}<div className="engine-frame" data-node-id={${id}} data-layout="${node.layout.mode}" data-direction="${node.layout.direction ?? ""}" style={${JSON.stringify(frameReactStyle(node, tokens))}}>\n${children}\n${padding}</div>`;
   }
-  const style = JSON.stringify(reactStyle(node.style, tokens));
+  const style = JSON.stringify({ ...reactStyle(node.style, tokens), ...reactNodeState(node) });
   if (node.type === "text") {
     return `${padding}<div className="engine-text-${node.variant}" data-node-id={${id}} style={${style}}>{${JSON.stringify(node.content)}}</div>`;
   }

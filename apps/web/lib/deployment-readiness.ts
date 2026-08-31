@@ -48,29 +48,43 @@ function blockedMockFlag(
     : { id, label, status: "ready", detail: "Disabled" };
 }
 
+function hostedAiReady(env: Env): DeploymentReadinessItem {
+  const configured = [
+    env.OPENROUTER_API_KEY,
+    env.GOOGLE_GENERATIVE_AI_API_KEY,
+    env.OPENAI_API_KEY,
+    env.AI_GATEWAY_KEY,
+  ].some(hasValue);
+  return configured
+    ? { id: "hosted-ai", label: "Hosted AI provider", status: "ready", detail: "Configured" }
+    : { id: "hosted-ai", label: "Hosted AI provider", status: "missing", detail: "Required for generation." };
+}
+
+function stripeReadiness(env: Env): DeploymentReadinessItem[] {
+  if (!flagEnabled(env.STRIPE_ENABLED)) {
+    return [{ id: "stripe-billing", label: "Stripe billing", status: "ready", detail: "Disabled" }];
+  }
+  return [
+    required("stripe-secret", "Stripe secret", env.STRIPE_SECRET_KEY, "Required when Stripe billing is enabled."),
+    required("stripe-webhook", "Stripe webhook secret", env.STRIPE_WEBHOOK_SECRET, "Required when Stripe billing is enabled."),
+    hasValue(env.STRIPE_PRICE_PRO) || (hasValue(env.STRIPE_PRICE_PRO_MONTHLY) && hasValue(env.STRIPE_PRICE_PRO_ANNUAL))
+      ? { id: "stripe-prices", label: "Stripe prices", status: "ready", detail: "Configured" }
+      : { id: "stripe-prices", label: "Stripe prices", status: "missing", detail: "Configure a legacy Pro price or both monthly and annual prices." },
+  ];
+}
+
 export function getDeploymentReadiness(
   env: Env = process.env,
 ): DeploymentReadinessReport {
   const items: DeploymentReadinessItem[] = [
-    required("database-url", "Postgres DATABASE_URL", env.DATABASE_URL, "Required for projects, users, revisions, and API keys."),
+    required("database-url", "Postgres DATABASE_URL", env.DATABASE_URL, "Required for projects, users, revisions, and REST API keys."),
     required("supabase-url", "Supabase URL", env.NEXT_PUBLIC_SUPABASE_URL, "Required for Supabase auth."),
     required("supabase-anon-key", "Supabase anon key", env.NEXT_PUBLIC_SUPABASE_ANON_KEY, "Required for Supabase browser/server clients."),
     required("auth-secret", "Auth secret", env.AUTH_SECRET, "Required for production auth/session safety."),
-    hasValue(env.AI_KEY_ENCRYPTION_SECRET) && env.AI_KEY_ENCRYPTION_SECRET!.length >= 16
-      ? {
-          id: "ai-key-encryption-secret",
-          label: "AI key encryption secret",
-          status: "ready",
-          detail: "Configured",
-        }
-      : {
-          id: "ai-key-encryption-secret",
-          label: "AI key encryption secret",
-          status: "missing",
-          detail: "Required for saved BYOK provider keys; minimum 16 characters.",
-        },
+    hostedAiReady(env),
     blockedMockFlag("mock-auth", "MOCK_AUTH", env.MOCK_AUTH),
     blockedMockFlag("mock-db", "MOCK_DB", env.MOCK_DB),
+    ...stripeReadiness(env),
   ];
 
   return {

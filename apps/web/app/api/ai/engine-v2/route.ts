@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { generateText } from "ai";
 import { and, eq, gt, sql } from "drizzle-orm";
 import { auth } from "@/auth";
-import { buildLanguageModel, getProviderMeta, type AiProvider } from "@/lib/ai-providers";
-import { decryptAiApiKey, isAiKeyEncryptionConfigured } from "@/lib/ai-key-crypto";
+import { buildLanguageModel } from "@/lib/ai-providers";
+import { getHostedAiConfig } from "@/lib/hosted-ai";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import {
@@ -14,6 +14,7 @@ import {
 } from "@/lib/engine-v2/compiler";
 import { rateLimit } from "@/lib/rate-limit";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
+import { applyAiScope, type EngineAiScope } from "@/lib/engine-v2/ai-scope";
 
 export const maxDuration = 60;
 
@@ -40,8 +41,13 @@ export async function POST(request: Request) {
   const limit = await rateLimit(`engine-v2:${user.id}`, 20, 60_000);
   if (!limit.ok) return NextResponse.json({ error: "Too many requests. Try again shortly." }, { status: 429 });
 
-  const body = await request.json() as { prompt?: unknown; currentDocument?: unknown };
+  const body = await request.json() as { prompt?: unknown; currentDocument?: unknown; scope?: unknown; selectedNodeIds?: unknown };
   if (typeof body.prompt !== "string") return NextResponse.json({ error: "Prompt required" }, { status: 400 });
+  const scope: EngineAiScope = body.scope === "edit" ? "edit" : "create";
+  const selectedNodeIds = Array.isArray(body.selectedNodeIds) && body.selectedNodeIds.every((id) => typeof id === "string")
+    ? [...new Set(body.selectedNodeIds)] as string[]
+    : [];
+  if (scope === "edit" && selectedNodeIds.length === 0) return NextResponse.json({ error: "Select at least one node to edit." }, { status: 400 });
 
   let intent;
   try {
@@ -50,56 +56,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid prompt" }, { status: 400 });
   }
 
-  const headerKey = request.headers.get("x-openai-key")?.trim() || null;
-  let apiKey = headerKey;
-  let provider = (user.aiProvider ?? "google") as AiProvider;
-  let model = user.aiModel?.trim() || getProviderMeta(provider).defaultModel;
-  let baseUrl = user.aiBaseUrl?.replace(/\/$/, "") ?? null;
-  let usesOwnKey = Boolean(headerKey);
+  const hostedAi = getHostedAiConfig();
+  if (!hostedAi) return NextResponse.json({ error: "Hosted AI is temporarily unavailable." }, { status: 503 });
 
-  if (!apiKey && user.aiApiKeyCipher) {
-    if (!isAiKeyEncryptionConfigured()) {
-      return NextResponse.json({ error: "The saved AI key cannot be opened because server encryption is not configured." }, { status: 500 });
-    }
-    try {
-      apiKey = decryptAiApiKey(user.aiApiKeyCipher);
-      usesOwnKey = true;
-    } catch {
-      return NextResponse.json({ error: "The saved AI key could not be opened. Save it again in Settings." }, { status: 400 });
-    }
-  }
-
-  if (!apiKey) {
-    if (process.env.OPENROUTER_API_KEY) {
-      apiKey = process.env.OPENROUTER_API_KEY;
-      provider = "openai";
-      model = process.env.OPENROUTER_MODEL?.trim() || "google/gemini-2.5-flash-lite";
-      baseUrl = "https://openrouter.ai/api/v1";
-    } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      provider = "google";
-      model = process.env.GOOGLE_MODEL?.trim() || "gemini-flash-latest";
-      baseUrl = null;
-    } else if (process.env.OPENAI_API_KEY) {
-      apiKey = process.env.OPENAI_API_KEY;
-      provider = "openai";
-      model = process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini";
-      baseUrl = process.env.OPENAI_BASE_URL?.replace(/\/$/, "") ?? null;
-    }
-  }
-
-  if (!apiKey) return NextResponse.json({ error: "No AI key is configured. Add one in Settings." }, { status: 400 });
-
-  const shouldCharge = user.plan === "free" && !usesOwnKey;
+  const shouldCharge = user.plan === "free";
   if (shouldCharge && !(await takeCredit(user.id))) {
-    return NextResponse.json({ error: "No credits left. Add your own AI key or upgrade." }, { status: 402 });
+    return NextResponse.json({ error: "No credits left. Upgrade or contact support." }, { status: 402 });
   }
 
   try {
-    const languageModel = buildLanguageModel(provider, model, apiKey, baseUrl);
+    const languageModel = buildLanguageModel(hostedAi.provider, hostedAi.model, hostedAi.apiKey, hostedAi.baseUrl);
     const current = body.currentDocument === undefined ? null : validateEngineV2Document(body.currentDocument);
+    if (scope === "edit" && (!current || !current.ok)) {
+      if (shouldCharge) await refundCredit(user.id);
+      return NextResponse.json({ error: "The current document is invalid and cannot be edited safely." }, { status: 400 });
+    }
     const currentContext = current?.ok
-      ? `\nRevise this existing EngineDocument when the request implies an edit. Preserve unrelated nodes and IDs:\n${JSON.stringify(current.document)}`
+      ? `\nOperation scope: ${scope}. Selected node ids: ${JSON.stringify(selectedNodeIds)}. For edit, change only those selected nodes, preserve every unrelated node and its id, and include the selected ids in the returned document. Existing document:\n${JSON.stringify(current.document)}`
       : "";
     const system = buildEngineV2GenerationPrompt(intent);
     const first = await generateText({
@@ -129,7 +102,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "The model returned an invalid document.", issues: compiled.issues.slice(0, 20) }, { status: 422 });
     }
 
-    return NextResponse.json({ document: compiled.document, intent: compiled.intent });
+    const scoped = applyAiScope(current?.ok ? current.document : null, compiled.document, scope, selectedNodeIds);
+    return NextResponse.json({ document: scoped.document, intent: compiled.intent, transaction: scoped.transaction, changeSummary: scoped.summary });
   } catch (error) {
     if (shouldCharge) await refundCredit(user.id);
     return NextResponse.json({ error: error instanceof Error ? error.message : "Generation failed" }, { status: 500 });

@@ -3,6 +3,7 @@ import Stripe from "stripe";
 import { auth } from "@/auth";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
 import type { ApiError } from "@flowchart/core";
+import { isStripeBillingEnabled } from "@/lib/billing-config";
 
 const stripe = process.env.STRIPE_SECRET_KEY
   ? new Stripe(process.env.STRIPE_SECRET_KEY)
@@ -26,6 +27,11 @@ export async function POST(req: Request) {
   if (!email) {
     const body: ApiError = { error: "Unauthorized", code: "UNAUTHORIZED" };
     return NextResponse.json(body, { status: 401 });
+  }
+
+  if (!isStripeBillingEnabled()) {
+    const body: ApiError = { error: "Paid plans are not available yet", code: "INTERNAL_ERROR" };
+    return NextResponse.json(body, { status: 503 });
   }
 
   try {

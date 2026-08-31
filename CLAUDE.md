@@ -321,7 +321,8 @@ what Konva/SVG actually need," never the reverse.
 
 ### Full API surface
 - `ai/vision-to-canvas` — image → freeform canvas (above)
-- `ai/list-models` — provider/model discovery for the editor's model picker
+- All generation routes use server-owned hosted AI credentials from `lib/hosted-ai.ts`.
+  Users cannot supply provider keys or choose provider models.
 - `ai/demo` — unauthenticated landing-page demo generation (IP rate-limited, 3/day, secure cookie)
 - `yjs-signaling` — self-hosted WebSocket signaling for canvas multiplayer (see Stack above)
 - `mcp/route.ts` — **HTTP MCP endpoint** (Streamable HTTP transport), single

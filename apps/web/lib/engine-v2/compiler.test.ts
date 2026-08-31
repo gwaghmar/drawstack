@@ -108,6 +108,44 @@ describe("validateEngineV2Document", () => {
     assert.equal(result.document.children[0].name, "Main frame");
   });
 
+  it("validates direct-editing state and absolute positioning", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const title = (root.children as Array<Record<string, unknown>>)[0];
+    title.visible = false;
+    title.locked = true;
+    title.rotation = 15;
+    title.style = { position: "absolute", x: 24, y: -12, opacity: 0.55 };
+    const result = validateEngineV2Document(document);
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    const frame = result.document.children[0];
+    assert.equal(frame.type, "frame");
+    if (frame.type !== "frame") return;
+    assert.deepEqual(frame.children[0], {
+      id: "title",
+      name: "Title",
+      type: "text",
+      content: "Revenue",
+      variant: "heading",
+      visible: false,
+      locked: true,
+      rotation: 15,
+      style: { position: "absolute", x: 24, y: -12, opacity: 0.55 },
+    });
+  });
+
+  it("rejects absolute coordinates without absolute positioning", () => {
+    const document = validDocument();
+    const root = (document.children as Array<Record<string, unknown>>)[0];
+    const title = (root.children as Array<Record<string, unknown>>)[0];
+    title.style = { x: 24 };
+    const result = validateEngineV2Document(document);
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    assert.ok(result.issues.some((issue) => issue.message === "x and y require position absolute"));
+  });
+
   it("rejects unknown fields and duplicate ids", () => {
     const document = validDocument();
     document.secret = "ignored";

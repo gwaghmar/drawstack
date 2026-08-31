@@ -5,8 +5,6 @@ import { EditorWithCollaboration } from "@/components/editor-with-collaboration"
 import { getProject } from "@/app/actions/project";
 import { getPlanForEmail } from "@/lib/entitlements";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
-import { getAiSettingsForUser } from "@/app/actions/ai-settings";
-import { getProviderMeta } from "@/lib/ai-providers";
 import { TEMPLATES, ALL_TEMPLATES, DIAGRAM_TYPE_DEFAULTS, getDiagramTypeMeta, getTemplateSource } from "@flowchart/core";
 import type { DiagramType } from "@flowchart/core";
 import { db } from "@/lib/db";
@@ -17,22 +15,6 @@ import { randomUUID } from "crypto";
 export const dynamic = "force-dynamic";
 
 const VALID_TYPES: DiagramType[] = ["freeform"];
-
-function buildAiAssistantHint(ai: Awaited<ReturnType<typeof getAiSettingsForUser>>) {
-  const serverOpenAiFallback = Boolean(
-    process.env.OPENAI_API_KEY?.trim() || process.env.AI_GATEWAY_KEY?.trim(),
-  );
-  if (ai?.hasKey) {
-    return {
-      kind: "byok" as const,
-      providerLabel: getProviderMeta(ai.provider).label,
-    };
-  }
-  if (serverOpenAiFallback) {
-    return { kind: "server" as const };
-  }
-  return { kind: "none" as const };
-}
 
 export default async function EditorPage({
   searchParams,
@@ -53,8 +35,6 @@ export default async function EditorPage({
   }
 
   await ensureUserAndWorkspace(email);
-  const aiSettings = await getAiSettingsForUser();
-  const aiAssistantHint = buildAiAssistantHint(aiSettings);
   const projectId = sp.id ?? null;
   const templateId = sp.template ?? null;
   const typeParam = sp.type as DiagramType | undefined;
@@ -68,10 +48,12 @@ export default async function EditorPage({
   // Generate unique session ID for this editor session (for collaboration)
   const sessionId = randomUUID();
 
-  // Fetch credits balance for upgrade nudge
-  // const [userData] = await db.select({ creditsBalance: users.creditsBalance }).from(users).where(eq(users.email, email)).limit(1);
-  // const creditsBalance = userData?.creditsBalance ?? 5;
-  const creditsBalance = 100;
+  const [userData] = await db
+    .select({ creditsBalance: users.creditsBalance })
+    .from(users)
+    .where(eq(users.email, email))
+    .limit(1);
+  const creditsBalance = userData?.creditsBalance ?? 0;
 
   if (projectId) {
     const p = await getProject(projectId);
@@ -89,7 +71,6 @@ export default async function EditorPage({
         initialDiagramType={diagramType}
         showWatermark={showWatermark}
         creditsBalance={creditsBalance}
-        aiAssistantHint={aiAssistantHint}
         initialPrompt={initialPrompt}
         initialWelcome={initialWelcome}
         userEmail={email}
@@ -109,7 +90,6 @@ export default async function EditorPage({
         initialDiagramType={typeParam}
         showWatermark={showWatermark}
         creditsBalance={creditsBalance}
-        aiAssistantHint={aiAssistantHint}
         initialPrompt={initialPrompt}
         initialWelcome={initialWelcome}
         userEmail={email}
@@ -130,7 +110,6 @@ export default async function EditorPage({
         initialDiagramType="freeform"
         showWatermark={showWatermark}
         creditsBalance={creditsBalance}
-        aiAssistantHint={aiAssistantHint}
         isExample={true}
         initialPrompt={initialPrompt}
         initialWelcome={initialWelcome}
@@ -153,7 +132,6 @@ export default async function EditorPage({
       initialDiagramType={templateDiagramType}
       showWatermark={showWatermark}
       creditsBalance={creditsBalance}
-      aiAssistantHint={aiAssistantHint}
       initialPrompt={initialPrompt}
       initialWelcome={initialWelcome}
       userEmail={email}

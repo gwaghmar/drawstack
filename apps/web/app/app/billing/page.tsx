@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { BadgeCheck, CheckCircle2 } from "lucide-react";
+import { isStripeBillingEnabled } from "@/lib/billing-config";
 
 export default async function BillingPage({
   searchParams,
@@ -23,12 +24,13 @@ export default async function BillingPage({
   const [user] = await db.select({ stripeCustomerId: users.stripeCustomerId })
     .from(users).where(eq(users.email, email)).limit(1);
   const hasStripeCustomer = Boolean(user?.stripeCustomerId);
+  const billingEnabled = isStripeBillingEnabled();
 
   return (
     <main className="mx-auto min-h-0 w-full max-w-2xl flex-1 overflow-y-auto px-6 py-10">
       <h1 className="text-2xl font-semibold text-slate-900">Billing</h1>
 
-      {sp.billing === "success" && (
+      {sp.billing === "success" && plan === "pro" && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <BadgeCheck className="h-4 w-4" />
           <span>Welcome to Pro. Your plan has been updated.</span>
@@ -58,7 +60,7 @@ export default async function BillingPage({
             Upgrade to Pro for unlimited hosted AI generations and watermark-free diagrams.
           </p>
         )}
-        {plan === "pro" && hasStripeCustomer && (
+        {billingEnabled && plan === "pro" && hasStripeCustomer && (
           <div className="mt-4">
             <ManageSubscriptionClient />
           </div>
@@ -66,10 +68,26 @@ export default async function BillingPage({
       </div>
 
       {plan === "free" && (
-        <div className="mt-6 space-y-4">
-          <h2 className="text-base font-medium text-slate-900">Upgrade to Pro</h2>
-          <BillingClient />
-        </div>
+        billingEnabled ? (
+          <div className="mt-6 space-y-4">
+            <h2 className="text-base font-medium text-slate-900">Upgrade to Pro</h2>
+            <BillingClient />
+          </div>
+        ) : (
+          <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-5">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-medium text-slate-900">Paid plans are coming soon</h2>
+                <p className="mt-1 text-sm text-slate-600">
+                  Checkout is disabled while we test the full product experience.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-semibold text-slate-600">
+                Not available
+              </span>
+            </div>
+          </div>
+        )
       )}
 
       {plan === "pro" && (
@@ -91,4 +109,3 @@ export default async function BillingPage({
     </main>
   );
 }
-

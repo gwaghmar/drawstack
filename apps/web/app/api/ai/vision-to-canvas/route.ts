@@ -9,6 +9,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import sharp from "sharp";
+import { getHostedAiConfig } from "@/lib/hosted-ai";
 
 export const maxDuration = 60;
 const MAX_IMAGE_DATA_LENGTH = 8_000_000;
@@ -107,15 +108,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid or oversized image data" }, { status: 400 });
     }
 
-    const apiKey =
-      process.env.GOOGLE_GENERATIVE_AI_API_KEY ||
-      process.env.OPENAI_API_KEY ||
-      process.env.ANTHROPIC_API_KEY ||
-      "";
-    const provider = process.env.GOOGLE_GENERATIVE_AI_API_KEY ? "google" : "openai";
-    const modelId = provider === "google" ? "gemini-flash-latest" : "gpt-4o-mini";
-
-    const model = buildLanguageModel(provider, modelId, apiKey);
+    const hostedAi = getHostedAiConfig();
+    if (!hostedAi) {
+      return NextResponse.json({ error: "Hosted AI is temporarily unavailable" }, { status: 503 });
+    }
+    const model = buildLanguageModel(hostedAi.provider, hostedAi.model, hostedAi.apiKey, hostedAi.baseUrl);
 
     if (user.plan === "free") {
       if (!(await takeCredit(user.id))) {

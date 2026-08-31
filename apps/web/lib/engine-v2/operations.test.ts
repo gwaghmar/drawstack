@@ -86,6 +86,21 @@ describe("engine-v2 tree operations", () => {
     assert.equal(replaceNode(nodes, "missing", replacement), nodes);
   });
 
+  it("does not mutate locked nodes or locked frame contents", () => {
+    const nodes = tree();
+    const lockedNodes = replaceNode(nodes, "b", { ...text("b"), locked: true });
+    assert.equal(removeNode(lockedNodes, "b"), lockedNodes);
+    assert.equal(reorderNode(lockedNodes, "b", 1), lockedNodes);
+    assert.equal(duplicateNode(lockedNodes, "b").nodes, lockedNodes);
+
+    const lockedFrame = replaceNode(nodes, "nested", {
+      ...(findParent(nodes, "nested")!.node as Extract<EngineNode, { type: "frame" }>),
+      locked: true,
+    });
+    assert.equal(moveNodeToParent(lockedFrame, "c", "nested"), lockedFrame);
+    assert.deepEqual(pasteNodes(lockedFrame, [text("pasted")], "nested").pastedIds, []);
+  });
+
   it("reorders and moves nodes only among their siblings", () => {
     const nodes = tree();
     const reordered = reorderNode(nodes, "b", 1);

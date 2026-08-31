@@ -18,6 +18,16 @@ export type EngineStyle = {
   width?: number | string;
   flex?: number;
   alignSelf?: CSSProperties["alignSelf"];
+  position?: "absolute";
+  x?: number;
+  y?: number;
+  opacity?: number;
+};
+
+export type EngineNodeState = {
+  visible?: boolean;
+  locked?: boolean;
+  rotation?: number;
 };
 
 export type FrameLayout = {
@@ -30,7 +40,7 @@ export type FrameLayout = {
   justify?: CSSProperties["justifyContent"];
 };
 
-export type EngineTextNode = {
+export type EngineTextNode = EngineNodeState & {
   id: string;
   name: string;
   type: "text";
@@ -39,7 +49,7 @@ export type EngineTextNode = {
   style?: EngineStyle;
 };
 
-export type EngineMetricNode = {
+export type EngineMetricNode = EngineNodeState & {
   id: string;
   name: string;
   type: "metric";
@@ -52,7 +62,7 @@ export type EngineMetricNode = {
 
 export type EngineChartDatum = DeterministicChartDatum;
 
-export type EngineChartNode = {
+export type EngineChartNode = EngineNodeState & {
   id: string;
   name: string;
   type: "chart";
@@ -64,7 +74,7 @@ export type EngineChartNode = {
   style?: EngineStyle;
 };
 
-export type EngineGraphNode = {
+export type EngineGraphNode = EngineNodeState & {
   id: string;
   name: string;
   type: "graph";
@@ -73,7 +83,7 @@ export type EngineGraphNode = {
   style?: EngineStyle;
 };
 
-export type EngineFrameNode = {
+export type EngineFrameNode = EngineNodeState & {
   id: string;
   name: string;
   type: "frame";
@@ -143,6 +153,11 @@ export function nodeStyle(style: EngineStyle | undefined, tokens: EngineTokens):
     width: style.width,
     flex: style.flex,
     alignSelf: style.alignSelf,
+    position: style.position,
+    left: style.position === "absolute" ? style.x : undefined,
+    top: style.position === "absolute" ? style.y : undefined,
+    opacity: style.opacity,
+    transform: undefined,
   };
 }
 

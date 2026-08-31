@@ -9,8 +9,8 @@ import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { ensureUserAndWorkspace, getUserAndWorkspaceById } from "@/lib/user-sync";
 import { getPrincipalFromRequest } from "@/lib/api-auth";
-import { decryptAiApiKey, isAiKeyEncryptionConfigured } from "@/lib/ai-key-crypto";
-import { buildLanguageModel, getProviderMeta, type AiProvider } from "@/lib/ai-providers";
+import { buildLanguageModel } from "@/lib/ai-providers";
+import { getHostedAiConfig } from "@/lib/hosted-ai";
 import { rateLimit } from "@/lib/rate-limit";
 import { lastUserText, toChatTurns, type ChatTurn } from "@/lib/ai-messages";
 import { buildBrandDirective } from "@/lib/brand-directive";
@@ -178,68 +178,18 @@ export async function POST(req: Request) {
     return NextResponse.json(body, { status: 429 });
   }
 
-  const headerKey = req.headers.get("x-openai-key");
-  let apiKey: string | null = headerKey?.trim() || null;
-  let skipCredits = user.plan === "pro" || Boolean(headerKey?.trim());
-  /** Where the key came from — env keys are always used with the OpenAI-compatible SDK path. */
-  type KeySource = "header" | "byok" | "env";
-  let keySource: KeySource = "header";
-
-  if (!apiKey) {
-    const cipher = user.aiApiKeyCipher ?? null;
-    if (cipher) {
-      if (!isAiKeyEncryptionConfigured()) {
-        const body: ApiError = {
-          error:
-            "A key is saved but the server is missing AI_KEY_ENCRYPTION_SECRET (min 16 chars). Add it to .env, restart, then re-save your API key in Settings.",
-          code: "VALIDATION_ERROR",
-        };
-        return NextResponse.json(body, { status: 500 });
-      }
-      try {
-        apiKey = decryptAiApiKey(cipher);
-        skipCredits = true;
-        keySource = "byok";
-      } catch {
-        const body: ApiError = {
-          error:
-            "Could not decrypt your saved API key (encryption secret may have changed). Open Settings, paste your API key again, and click Save AI settings.",
-          code: "VALIDATION_ERROR",
-        };
-        return NextResponse.json(body, { status: 400 });
-      }
-    }
-  }
-
-  let detectedProvider: AiProvider | null = null;
-  if (!apiKey) {
-    if (process.env.OPENROUTER_API_KEY) {
-      apiKey = process.env.OPENROUTER_API_KEY;
-      detectedProvider = "openai";
-    } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      detectedProvider = "google";
-    } else if (process.env.OPENAI_API_KEY) {
-      apiKey = process.env.OPENAI_API_KEY;
-      detectedProvider = "openai";
-    } else if (process.env.AI_GATEWAY_KEY) {
-      apiKey = process.env.AI_GATEWAY_KEY;
-      detectedProvider = "openai";
-    }
-    if (apiKey) keySource = "env";
-  }
-
-  if (!apiKey) {
+  const hostedAi = getHostedAiConfig();
+  if (!hostedAi) {
     const body: ApiError = {
-      error: "No API key configured. Add one in Settings (OpenAI, Gemini, Claude, Groq, etc.), or set OPENAI_API_KEY on the server.",
-      code: "VALIDATION_ERROR",
+      error: "Hosted AI is temporarily unavailable.",
+      code: "INTERNAL_ERROR",
     };
-    return NextResponse.json(body, { status: 400 });
+    return NextResponse.json(body, { status: 503 });
   }
 
-  if (user.plan === "free" && !skipCredits && user.creditsBalance <= 0) {
+  if (user.plan === "free" && user.creditsBalance <= 0) {
     const body: ApiError = {
-      error: "No credits left. Add an AI key in Settings, upgrade to Pro, or wait for an admin grant.",
+      error: "No credits left. Upgrade or contact support.",
       code: "INSUFFICIENT_CREDITS",
     };
     return NextResponse.json(body, { status: 402 });
@@ -283,34 +233,9 @@ export async function POST(req: Request) {
 
   console.log(`[AI generate] diagramType=${diagramType} mode=${generationMode} useCase=${useCaseId} promptLen=${promptText.length}`);
 
-  const userProvider = (user.aiProvider ?? "google") as AiProvider;
-  const provider: AiProvider = (keySource === "env" && detectedProvider) ? detectedProvider : userProvider;
-  
-  const googleModelFromEnv = process.env.GOOGLE_MODEL?.trim();
-  const openAiModelFromEnv = process.env.OPENAI_MODEL?.trim();
-  const usingOpenRouterEnvKey =
-    keySource === "env" && detectedProvider === "openai" && apiKey === process.env.OPENROUTER_API_KEY;
-  const openRouterModelFromEnv = process.env.OPENROUTER_MODEL?.trim();
-
-  const model = (keySource === "env" && detectedProvider === "google")
-    ? (googleModelFromEnv || "gemini-flash-latest")
-    : usingOpenRouterEnvKey
-    ? (openRouterModelFromEnv || "google/gemini-2.5-flash-lite")
-    : (keySource === "env" && detectedProvider === "openai")
-    ? (openAiModelFromEnv || "gpt-4o-mini")
-    : user.aiModel?.trim() ||
-      (provider === "google" ? googleModelFromEnv : undefined) ||
-      (provider === "openai" ? openAiModelFromEnv : undefined) ||
-      getProviderMeta(provider).defaultModel;
-  const baseUrl = usingOpenRouterEnvKey
-    ? "https://openrouter.ai/api/v1"
-    : (keySource === "env" && detectedProvider === "openai")
-    ? (process.env.OPENAI_BASE_URL?.replace(/\/$/, "") ?? null)
-    : (user.aiBaseUrl?.replace(/\/$/, "") ?? null);
-
   let languageModel;
   try {
-    languageModel = buildLanguageModel(provider, model, apiKey, baseUrl);
+    languageModel = buildLanguageModel(hostedAi.provider, hostedAi.model, hostedAi.apiKey, hostedAi.baseUrl);
   } catch (e) {
     const errBody: ApiError = { error: "Failed to initialize AI provider", code: "INTERNAL_ERROR", details: String(e) };
     return NextResponse.json(errBody, { status: 500 });
@@ -492,14 +417,14 @@ ${ANTI_GENERIC_DIRECTIVE}`;
         // once collectively. tryDecrementCredit only succeeds if balance > 0, so
         // losing the race here means there genuinely was no credit left.
         let creditReserved = false;
-        if (user.plan === "free" && !skipCredits) {
+        if (user.plan === "free") {
           creditReserved = await tryDecrementCredit(user.id);
           if (!creditReserved) {
             writeProgress("generate", "No credits left", "error");
             writer.write({
               type: "data-meta",
               data: {
-                error: "No credits left. Add an AI key in Settings, upgrade to Pro, or wait for an admin grant.",
+                error: "No credits left. Upgrade or contact support.",
                 code: "INSUFFICIENT_CREDITS",
               },
             });
@@ -663,8 +588,8 @@ Return ONLY the corrected ${effectiveDiagramType} source. No prose, no explanati
           effectiveDiagramType,
           typeSwitched,
           mode: generationMode,
-          provider,
-          model,
+          provider: hostedAi.provider,
+          model: hostedAi.model,
           promptLength: promptText.length,
           sourceLength: sourceSnippet.length,
           intentLatencyMs,

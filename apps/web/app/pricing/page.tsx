@@ -3,16 +3,6 @@
 import Link from "next/link";
 import { useState } from "react";
 
-// Pricing config — update here to change displayed prices site-wide
-const PRICING = {
-  pro: {
-    monthly: "$15",
-    annual: "$144",
-    annualMonthly: "$12", // annual / 12, shown as "per month billed annually"
-    currency: "USD",
-  },
-} as const;
-
 const editorSignInHref =
   "/login?callbackUrl=" + encodeURIComponent("/app/editor");
 
@@ -20,7 +10,6 @@ const focusRing =
   "focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2";
 
 export default function PricingPage() {
-  const [annual, setAnnual] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   return (
     <div className="min-h-screen dot-grid-bg">
@@ -78,29 +67,10 @@ export default function PricingPage() {
           Pricing
         </h1>
         <p className="mt-4 max-w-2xl text-lg leading-relaxed text-slate-600">
-          Free to start. Upgrade to Pro when you need to export without
-          watermarks, download as PDF, or batch-export diagrams for client work.
+          Free to test while we finish the hosted plan experience. Paid checkout is not open yet.
         </p>
 
-        {/* Billing toggle */}
-        <div className="mt-8 flex items-center gap-3">
-          <span className={`text-sm font-medium ${!annual ? "text-slate-900" : "text-slate-400"}`}>Monthly</span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={annual}
-            onClick={() => setAnnual((a) => !a)}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 ${annual ? "bg-indigo-600" : "bg-slate-300"}`}
-          >
-            <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform ${annual ? "translate-x-6" : "translate-x-1"}`} />
-          </button>
-          <span className={`text-sm font-medium ${annual ? "text-slate-900" : "text-slate-400"}`}>
-            Annual
-            <span className="ml-1.5 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Save 20%</span>
-          </span>
-        </div>
-
-        <div className="mt-12 grid gap-8 lg:grid-cols-2 lg:gap-10">
+        <div className="mt-10 grid gap-8 lg:grid-cols-2 lg:gap-10">
           <section
             aria-labelledby="plan-free"
             className="flex flex-col rounded-2xl border border-slate-200 bg-white p-8 shadow-xs"
@@ -132,15 +102,13 @@ export default function PricingPage() {
             className="flex flex-col rounded-2xl border-2 border-indigo-500 bg-white p-8 shadow-md ring-1 ring-indigo-500/10"
           >
             <h2 id="plan-pro" className="text-lg font-semibold text-indigo-950">
-              Pro
+              Pro <span className="ml-2 rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700">Coming soon</span>
             </h2>
             <p className="mt-2 text-4xl font-semibold tracking-tight text-indigo-950">
-              {annual ? PRICING.pro.annualMonthly : PRICING.pro.monthly}<span className="text-lg font-normal text-indigo-800/90">/mo</span>
+              Not available yet
             </p>
             <p className="mt-1 text-sm text-indigo-900/80">
-              {annual
-                ? <>Billed annually — {PRICING.pro.annual}/yr · <span className="font-medium text-emerald-700">saves 20%</span></>
-                : "Billed monthly — switch to annual to save 20%"}
+              We are validating the complete product before opening paid plans.
             </p>
             <ul className="mt-6 flex flex-1 flex-col gap-3 text-sm leading-relaxed text-indigo-950/85">
               <li>No watermark on exports</li>
@@ -150,13 +118,13 @@ export default function PricingPage() {
               <li>Brand kit and logo frame</li>
             </ul>
             <Link
-              href="/app/billing"
+              href={editorSignInHref}
               className={`mt-8 inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-500 ${focusRing} ring-offset-white`}
             >
-              Upgrade to Pro — {annual ? "Annual" : "Monthly"}
+              Test the editor
             </Link>
             <p className="mt-3 text-center text-xs text-slate-500">
-              Signed-out? You&apos;ll be asked to sign in, then complete checkout.
+              No payment details required.
             </p>
           </section>
         </div>

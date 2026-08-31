@@ -183,6 +183,37 @@ test("engine v2 exposes and applies every current node field", async ({ page }) 
   await expect(page.locator('[data-node-id="analysis"]')).toHaveCSS("justify-content", "space-between");
 });
 
+test("engine v2 applies direct-editing state without breaking responsive flow", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+  await page.locator('[data-tree-node-id="title"]').click();
+  const node = page.locator('[data-node-id="title"]');
+
+  await page.getByLabel("Node opacity").fill("0.5");
+  await page.getByLabel("Node rotation").fill("12");
+  await expect(node).toHaveCSS("opacity", "0.5");
+  await expect(node).toHaveCSS("transform", /matrix/);
+  await expect(node).toHaveCSS("position", "static");
+
+  await page.getByLabel("Node position mode").selectOption("absolute");
+  await page.getByLabel("Node X position").fill("24");
+  await page.getByLabel("Node Y position").fill("36");
+  await expect(node).toHaveCSS("position", "absolute");
+  await expect(node).toHaveCSS("left", "24px");
+  await expect(node).toHaveCSS("top", "36px");
+
+  await page.getByLabel("Locked").check();
+  await page.getByLabel("Text content", { exact: true }).fill("Ignored while locked");
+  await expect(node).toHaveText("Growth without the noise.");
+  await page.getByLabel("Locked").uncheck();
+  await page.getByLabel("Text content", { exact: true }).fill("Unlocked edit");
+  await expect(node).toHaveText("Unlocked edit");
+
+  await page.getByLabel("Visible").uncheck();
+  await expect(node).toHaveCSS("visibility", "hidden");
+  await page.getByLabel("Visible").check();
+  await expect(node).toHaveCSS("visibility", "visible");
+});
+
 test("engine v2 exposes document controls and persistent validation errors", async ({ page }) => {
   await page.goto("/app/engine-v2");
 

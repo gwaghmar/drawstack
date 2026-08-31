@@ -31,7 +31,7 @@ const CSS_COLOR_NAME = /^[a-zA-Z]{1,24}$/;
 const DOCUMENT_KEYS = new Set(["version", "engine", "name", "artboard", "tokens", "children"]);
 const ARTBOARD_KEYS = new Set(["width", "minHeight", "background"]);
 const TOKENS_KEYS = new Set(["colors", "spacing", "radii"]);
-const BASE_NODE_KEYS = ["id", "name", "type", "style"] as const;
+const BASE_NODE_KEYS = ["id", "name", "type", "style", "visible", "locked", "rotation"] as const;
 const TEXT_KEYS = new Set([...BASE_NODE_KEYS, "content", "variant"]);
 const METRIC_KEYS = new Set([...BASE_NODE_KEYS, "label", "value", "detail", "tone"]);
 const CHART_KEYS = new Set([...BASE_NODE_KEYS, "title", "chartType", "data", "valuePrefix", "valueSuffix"]);
@@ -47,6 +47,10 @@ const STYLE_KEYS = new Set([
   "width",
   "flex",
   "alignSelf",
+  "position",
+  "x",
+  "y",
+  "opacity",
 ]);
 const LAYOUT_KEYS = new Set(["mode", "direction", "gap", "padding", "columns", "align", "justify"]);
 const DATUM_KEYS = new Set(["label", "value", "series", "x", "y", "size", "row", "column", "open", "high", "low", "close", "source", "target", "min", "q1", "median", "q3", "max", "display", "axis", "start", "end", "path", "latitude", "longitude", "sourceLatitude", "sourceLongitude", "targetLatitude", "targetLongitude", "errorLow", "errorHigh"]);
@@ -148,6 +152,19 @@ function readNumber(
   if (integer && !Number.isInteger(value)) {
     addIssue(context, path, "Expected an integer");
     return null;
+  }
+  return value;
+}
+
+function readOptionalBoolean(
+  value: unknown,
+  context: ValidationContext,
+  path: string,
+): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    addIssue(context, path, "Expected a boolean");
+    return undefined;
   }
   return value;
 }
@@ -315,6 +332,20 @@ function validateStyle(
     );
     if (alignSelf !== null) output.alignSelf = alignSelf;
   }
+  if (value.position !== undefined) {
+    const position = readEnum(value.position, ["absolute"], context, `${path}.position`);
+    if (position !== null) output.position = position;
+  }
+  const x = readOptionalNumber(value.x, context, `${path}.x`, -100_000, 100_000);
+  const y = readOptionalNumber(value.y, context, `${path}.y`, -100_000, 100_000);
+  const opacity = readOptionalNumber(value.opacity, context, `${path}.opacity`, 0, 1);
+  if ((x !== undefined || y !== undefined) && output.position !== "absolute") {
+    addIssue(context, path, "x and y require position absolute");
+  } else {
+    if (x !== undefined) output.x = x;
+    if (y !== undefined) output.y = y;
+  }
+  if (opacity !== undefined) output.opacity = opacity;
   return output;
 }
 
@@ -364,15 +395,25 @@ function validateBaseNode(
   value: Record<string, unknown>,
   context: ValidationContext,
   path: string,
-): { id: string; name: string; style?: EngineStyle } | null {
+): { id: string; name: string; style?: EngineStyle; visible?: boolean; locked?: boolean; rotation?: number } | null {
   const id = readString(value.id, context, `${path}.id`, 1, 80);
   const name = readString(value.name, context, `${path}.name`, 1, 120);
   if (id && !NODE_ID.test(id)) addIssue(context, `${path}.id`, "Invalid node id");
   if (id && context.ids.has(id)) addIssue(context, `${path}.id`, "Node ids must be unique");
   if (id) context.ids.add(id);
   const style = validateStyle(value.style, context, `${path}.style`);
+  const visible = readOptionalBoolean(value.visible, context, `${path}.visible`);
+  const locked = readOptionalBoolean(value.locked, context, `${path}.locked`);
+  const rotation = readOptionalNumber(value.rotation, context, `${path}.rotation`, -360, 360);
   if (!id || !NODE_ID.test(id) || !name) return null;
-  return style ? { id, name, style } : { id, name };
+  return {
+    id,
+    name,
+    ...(style ? { style } : {}),
+    ...(visible !== undefined ? { visible } : {}),
+    ...(locked !== undefined ? { locked } : {}),
+    ...(rotation !== undefined ? { rotation } : {}),
+  };
 }
 
 function validateDatum(

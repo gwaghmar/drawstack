@@ -6,8 +6,8 @@ import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
-import { decryptAiApiKey, isAiKeyEncryptionConfigured } from "@/lib/ai-key-crypto";
-import { buildLanguageModel, getProviderMeta, type AiProvider } from "@/lib/ai-providers";
+import { buildLanguageModel } from "@/lib/ai-providers";
+import { getHostedAiConfig } from "@/lib/hosted-ai";
 import { rateLimit } from "@/lib/rate-limit";
 import type { ApiError, EditorMode } from "@flowchart/core";
 import { THEME_IDS, MODE_PERSONAS, MODE_STRATEGY_HINTS, ANTI_GENERIC_DIRECTIVE } from "@flowchart/core";
@@ -85,57 +85,18 @@ export async function POST(req: Request) {
     return NextResponse.json(body, { status: 429 });
   }
 
-  const headerKey = req.headers.get("x-openai-key");
-  let apiKey: string | null = headerKey?.trim() || null;
-  let keySource: "header" | "byok" | "env" = "header";
-  const skipCredits = user.plan === "pro" || Boolean(headerKey?.trim());
-
-  if (user.plan === "free" && !skipCredits && user.creditsBalance <= 0) {
+  if (user.plan === "free" && user.creditsBalance <= 0) {
     const body: ApiError = {
-      error: "No credits left. Add an AI key in Settings, upgrade to Pro, or wait for an admin grant.",
+      error: "No credits left. Upgrade or contact support.",
       code: "INSUFFICIENT_CREDITS",
     };
     return NextResponse.json(body, { status: 402 });
   }
 
-  if (!apiKey) {
-    const cipher = user.aiApiKeyCipher ?? null;
-    if (cipher) {
-      if (!isAiKeyEncryptionConfigured()) {
-         const body: ApiError = { error: "Server missing encryption secret.", code: "VALIDATION_ERROR" };
-         return NextResponse.json(body, { status: 500 });
-      }
-      try {
-        apiKey = decryptAiApiKey(cipher);
-        keySource = "byok";
-      } catch {
-         const body: ApiError = { error: "Could not decrypt API key.", code: "VALIDATION_ERROR" };
-         return NextResponse.json(body, { status: 400 });
-      }
-    }
-  }
-
-  let detectedProvider: AiProvider | null = null;
-  if (!apiKey) {
-    if (process.env.OPENROUTER_API_KEY) {
-      apiKey = process.env.OPENROUTER_API_KEY;
-      detectedProvider = "openai";
-    } else if (process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-      apiKey = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-      detectedProvider = "google";
-    } else if (process.env.OPENAI_API_KEY) {
-      apiKey = process.env.OPENAI_API_KEY;
-      detectedProvider = "openai";
-    } else if (process.env.AI_GATEWAY_KEY) {
-      apiKey = process.env.AI_GATEWAY_KEY;
-      detectedProvider = "openai";
-    }
-    if (apiKey) keySource = "env";
-  }
-
-  if (!apiKey) {
-    const body: ApiError = { error: "No API key configured.", code: "VALIDATION_ERROR" };
-    return NextResponse.json(body, { status: 400 });
+  const hostedAi = getHostedAiConfig();
+  if (!hostedAi) {
+    const body: ApiError = { error: "Hosted AI is temporarily unavailable.", code: "INTERNAL_ERROR" };
+    return NextResponse.json(body, { status: 503 });
   }
 
   const reqBody = await req.json();
@@ -148,34 +109,9 @@ export async function POST(req: Request) {
     return NextResponse.json(errBody, { status: 400 });
   }
 
-  const userProvider = (user.aiProvider ?? "google") as AiProvider;
-  const provider: AiProvider = (keySource === "env" && detectedProvider) ? detectedProvider : userProvider;
-  
-  const googleModelFromEnv = process.env.GOOGLE_MODEL?.trim();
-  const openAiModelFromEnv = process.env.OPENAI_MODEL?.trim();
-  const usingOpenRouterEnvKey =
-    keySource === "env" && detectedProvider === "openai" && apiKey === process.env.OPENROUTER_API_KEY;
-  const openRouterModelFromEnv = process.env.OPENROUTER_MODEL?.trim();
-
-  const model = (keySource === "env" && detectedProvider === "google")
-    ? (googleModelFromEnv || "gemini-flash-latest")
-    : usingOpenRouterEnvKey
-    ? (openRouterModelFromEnv || "google/gemini-2.5-flash-lite")
-    : (keySource === "env" && detectedProvider === "openai")
-    ? (openAiModelFromEnv || "gpt-4o-mini")
-    : user.aiModel?.trim() ||
-      (provider === "google" ? googleModelFromEnv : undefined) ||
-      (provider === "openai" ? openAiModelFromEnv : undefined) ||
-      getProviderMeta(provider).defaultModel;
-  const baseUrl = usingOpenRouterEnvKey
-    ? "https://openrouter.ai/api/v1"
-    : (keySource === "env" && detectedProvider === "openai")
-    ? (process.env.OPENAI_BASE_URL?.replace(/\/$/, "") ?? null)
-    : (user.aiBaseUrl?.replace(/\/$/, "") ?? null);
-
   let languageModel;
   try {
-    languageModel = buildLanguageModel(provider, model, apiKey, baseUrl);
+    languageModel = buildLanguageModel(hostedAi.provider, hostedAi.model, hostedAi.apiKey, hostedAi.baseUrl);
   } catch (e) {
     const errBody: ApiError = { error: "Failed to initialize AI provider", code: "INTERNAL_ERROR", details: String(e) };
     return NextResponse.json(errBody, { status: 500 });
@@ -198,10 +134,10 @@ export async function POST(req: Request) {
   const sourceLength = (currentSource || "").length;
 
   let creditReserved = false;
-  if (user.plan === "free" && !skipCredits) {
+  if (user.plan === "free") {
     creditReserved = await tryDecrementCredit(user.id);
     if (!creditReserved) {
-      const body: ApiError = { error: "No credits left. Add an AI key in Settings, upgrade to Pro, or wait for an admin grant.", code: "INSUFFICIENT_CREDITS" };
+      const body: ApiError = { error: "No credits left. Upgrade or contact support.", code: "INSUFFICIENT_CREDITS" };
       return NextResponse.json(body, { status: 402 });
     }
   }
@@ -226,8 +162,8 @@ export async function POST(req: Request) {
           effectiveDiagramType: diagramType,
           typeSwitched: false,
           mode: "agent",
-          provider,
-          model,
+          provider: hostedAi.provider,
+          model: hostedAi.model,
           promptLength,
           sourceLength,
           intentLatencyMs: null,

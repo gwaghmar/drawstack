@@ -43,7 +43,7 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node
       data-layout={layout.mode}
       data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
-      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%" }}
+      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined }}
       className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
@@ -61,7 +61,7 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node:
     "data-node-id": node.id,
     "data-node-type": node.type,
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
-    style: { ...nodeStyle(node.style, tokens), maxWidth: "100%" },
+    style: { ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
     className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
 
@@ -453,7 +453,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
   }, []);
 
   const updateSelected = (update: (node: EngineNode) => EngineNode) => {
-    commitDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, update) }));
+    commitDocument((current) => ({ ...current, children: mapNode(current.children, selectedId, (node) => {
+      const next = update(node);
+      return node.locked && next.locked !== false ? node : next;
+    }) }));
   };
 
   const selectNode = (id: string, additive: boolean) => {
@@ -898,15 +901,17 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     setGenerating(true);
     setGenerationError(null);
     try {
+      const selectedNodeIds = [...selectedIdSet];
+      const scope = selectedNodeIds.length > 0 ? "edit" : "create";
       const response = await fetch("/api/ai/engine-v2", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ prompt: value, currentDocument: documentRef.current }),
+        body: JSON.stringify({ prompt: value, currentDocument: documentRef.current, scope, selectedNodeIds }),
       });
-      const body = await response.json() as { document?: EngineDocument; error?: string };
+      const body = await response.json() as { document?: EngineDocument; error?: string; changeSummary?: { changedNodeIds?: string[] } };
       if (!response.ok || !body.document) throw new Error(body.error || "Generation failed");
       commitDocument(body.document, "ai");
-      replaceSelection([body.document.children[0]?.id ?? ""]);
+      replaceSelection(body.changeSummary?.changedNodeIds?.length ? body.changeSummary.changedNodeIds : [body.document.children[0]?.id ?? ""]);
       setAiComposerOpen(false);
     } catch (error) {
       setGenerationError(error instanceof Error ? error.message : "Generation failed");
@@ -1111,6 +1116,18 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             ) : null}
 
             <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
+              <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Position and state</legend>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={selected.visible !== false} onChange={(event) => updateSelected((node) => ({ ...node, visible: event.target.checked }))} /> Visible</label>
+                <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={selected.locked === true} onChange={(event) => updateSelected((node) => ({ ...node, locked: event.target.checked }))} /> Locked</label>
+                <label><span className="mb-1 block text-xs text-[#667067]">Rotation</span><input aria-label="Node rotation" type="number" min="-360" max="360" value={selected.rotation ?? 0} onChange={(event) => updateSelected((node) => ({ ...node, rotation: Number(event.target.value) || 0 }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs" /></label>
+                <label><span className="mb-1 block text-xs text-[#667067]">Opacity</span><input aria-label="Node opacity" type="number" min="0" max="1" step="0.05" value={selected.style?.opacity ?? 1} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, opacity: Math.max(0, Math.min(1, Number(event.target.value))) } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs" /></label>
+                <label className="col-span-2"><span className="mb-1 block text-xs text-[#667067]">Position mode</span><select aria-label="Node position mode" value={selected.style?.position ?? "flow"} onChange={(event) => updateSelected((node) => { const style = { ...node.style }; if (event.target.value === "absolute") style.position = "absolute"; else { delete style.position; delete style.x; delete style.y; } return { ...node, style }; })} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs"><option value="flow">Responsive flow</option><option value="absolute">Absolute</option></select></label>
+                {selected.style?.position === "absolute" ? <><label><span className="mb-1 block text-xs text-[#667067]">X</span><input aria-label="Node X position" type="number" value={selected.style.x ?? 0} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, x: Number(event.target.value) || 0 } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs" /></label><label><span className="mb-1 block text-xs text-[#667067]">Y</span><input aria-label="Node Y position" type="number" value={selected.style.y ?? 0} onChange={(event) => updateSelected((node) => ({ ...node, style: { ...node.style, y: Number(event.target.value) || 0 } }))} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs" /></label></> : null}
+              </div>
+            </fieldset>
+
+            <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
               <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Responsive size</legend>
               <div className="grid grid-cols-2 gap-3">
                 <label>
@@ -1281,7 +1298,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
           {generationError ? (
             <div role="alert" className="flex flex-wrap items-center gap-x-3 gap-y-2 px-2 pt-3 text-xs text-[#FFB59F]">
               <span>{generationError}</span>
-              {generationError.toLowerCase().includes("credit") ? <span className="flex items-center gap-2"><Link href="/app/settings" className="font-semibold text-white underline underline-offset-2">Add AI key</Link><Link href="/app/billing" className="font-semibold text-white underline underline-offset-2">Upgrade</Link></span> : null}
+              {generationError.toLowerCase().includes("credit") ? <Link href="/app/billing" className="font-semibold text-white underline underline-offset-2">View plan</Link> : null}
             </div>
           ) : null}
         </form>

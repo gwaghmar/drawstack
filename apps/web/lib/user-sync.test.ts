@@ -17,14 +17,9 @@ describe("ensureUserAndWorkspaceCore", () => {
           role: values.role ?? "user",
           plan: "free",
           creditsBalance: 5,
-          aiProvider: "google",
           emailVerified: null,
           image: null,
           stripeCustomerId: null,
-          aiApiKeyCipher: null,
-          aiKeyLast4: null,
-          aiBaseUrl: null,
-          aiModel: null,
           handle: null,
         };
       },
@@ -55,14 +50,9 @@ describe("ensureUserAndWorkspaceCore", () => {
       role: "user",
       plan: "pro",
       creditsBalance: 100,
-      aiProvider: "openai",
       emailVerified: null,
       image: null,
       stripeCustomerId: null,
-      aiApiKeyCipher: null,
-      aiKeyLast4: null,
-      aiBaseUrl: null,
-      aiModel: null,
       handle: null,
     };
     const existingWorkspace = {
@@ -98,14 +88,9 @@ describe("ensureUserAndWorkspaceCore", () => {
         role: values.role ?? "user",
         plan: "free",
         creditsBalance: 5,
-        aiProvider: "google",
         emailVerified: null,
         image: null,
         stripeCustomerId: null,
-        aiApiKeyCipher: null,
-        aiKeyLast4: null,
-        aiBaseUrl: null,
-        aiModel: null,
         handle: null,
       }),
       selectWorkspaceByOwnerId: async () => null,
@@ -123,9 +108,9 @@ describe("ensureUserAndWorkspaceCore", () => {
   it("returns isNewUser=false when user already exists", async () => {
     const existingUser = {
       id: "user-old", email: "old@example.com", name: "Old", role: "user",
-      plan: "free", creditsBalance: 5, aiProvider: "google",
+      plan: "free", creditsBalance: 5,
       emailVerified: null, image: null, stripeCustomerId: null,
-      aiApiKeyCipher: null, aiKeyLast4: null, aiBaseUrl: null, aiModel: null, handle: null,
+      handle: null,
     };
     const result = await ensureUserAndWorkspaceCore("old@example.com", {
       selectUserByEmail: async () => existingUser,

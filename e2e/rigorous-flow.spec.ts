@@ -102,12 +102,12 @@ test.describe("Rigorous browser flow", () => {
     await expect(page.getByRole("button", { name: "Set Free" })).toBeVisible();
   });
 
-  test("billing page loads and interval toggle is visible", async ({ page }) => {
+  test("billing page loads with checkout disabled", async ({ page }) => {
     await demoSignIn(page, `billing-${Date.now()}@example.com`);
     await page.goto("/app/billing");
     await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Monthly" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Annual" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Paid plans are coming soon" })).toBeVisible();
+    await expect(page.getByText("Not available", { exact: true })).toBeVisible();
   });
 
   test("mock developer admin can open /app/admin", async ({ page }) => {
@@ -117,12 +117,11 @@ test.describe("Rigorous browser flow", () => {
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();
   });
 
-  test("settings shows AI provider (BYOK) section", async ({ page }) => {
-    await demoSignIn(page, `byok-${Date.now()}@example.com`);
+  test("settings does not expose provider credentials", async ({ page }) => {
+    await demoSignIn(page, `hosted-ai-${Date.now()}@example.com`);
     await page.goto("/app/settings");
-    await expect(
-      page.getByRole("heading", { level: 2, name: "AI Provider (BYOK)" }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: "REST API keys" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 2, name: /AI Provider/ })).toHaveCount(0);
   });
 
   test("public marketing routes respond", async ({ page }) => {

@@ -35,11 +35,6 @@ function getMockUserAndWorkspace(email: string) {
     plan: "pro",
     role: "admin",
     creditsBalance: 100,
-    aiApiKeyCipher: null,
-    aiKeyLast4: null,
-    aiBaseUrl: null,
-    aiModel: null,
-    aiProvider: "openai",
   };
   const mockWorkspace = {
     id: "dev-ws-id",

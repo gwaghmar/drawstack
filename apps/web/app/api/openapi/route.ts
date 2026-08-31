@@ -30,7 +30,7 @@ const spec = {
     },
     "/api/ai/generate": {
       post: {
-        summary: "Generate diagram text from prompt (BYOK or server key)",
+        summary: "Generate a freeform canvas document from a prompt",
       },
     },
   },
