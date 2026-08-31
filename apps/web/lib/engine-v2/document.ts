@@ -22,6 +22,7 @@ export type EngineStyle = {
   fontStyle?: CSSProperties["fontStyle"];
   textDecoration?: CSSProperties["textDecoration"];
   fontSize?: number;
+  fontFamily?: CSSProperties["fontFamily"];
   lineHeight?: number | string;
   letterSpacing?: number | string;
   minHeight?: number;
@@ -171,6 +172,7 @@ export function nodeStyle(style: EngineStyle | undefined, tokens: EngineTokens):
     fontStyle: style.fontStyle,
     textDecoration: style.textDecoration,
     fontSize: style.fontSize,
+    fontFamily: style.fontFamily,
     lineHeight: style.lineHeight,
     letterSpacing: style.letterSpacing,
     minHeight: style.minHeight,
