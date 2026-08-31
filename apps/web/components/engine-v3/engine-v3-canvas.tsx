@@ -70,12 +70,26 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [gestureGuides, setGestureGuides] = useState<SnapGuide[]>([]);
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [zoom, setZoom] = useState(1);
   const activePage = document.pages.find((page) => page.id === activePageId) ?? document.pages[0];
   const selectedNode = useMemo(() => activePage ? findEngineV3Node(document, activePage.id, selectedNodeId)?.node ?? activePage.root : null, [activePage, document, selectedNodeId]);
   const tokenEntries = useMemo(() => Object.entries(document.tokens.colors), [document.tokens.colors]);
   const activePageView = useMemo(() => activePage ? createEngineV3PageView(document, activePage.id) : null, [activePage, document]);
   const selectedLocation = useMemo(() => activePage && selectedNode ? findEngineV3Node(document, activePage.id, selectedNode.id) : null, [activePage, document, selectedNode]);
-  const selectNode = (id: string) => { setSelectedNodeId(id); setSelectedNodeIds(new Set([id])); };
+  const selectNode = (id: string, additive = false) => {
+    if (!additive) {
+      setSelectedNodeId(id);
+      setSelectedNodeIds(new Set([id]));
+      return;
+    }
+    setSelectedNodeIds((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      if (next.size === 0) next.add(id);
+      return next;
+    });
+    setSelectedNodeId(id);
+  };
   useEffect(() => {
     const measure = () => { const element = canvasRef.current?.querySelector<HTMLElement>(`[data-node-id="${selectedNodeId}"]`); const canvas = canvasRef.current; if (!element || !canvas) return setSelectedBounds(null); const a = element.getBoundingClientRect(); const b = canvas.getBoundingClientRect(); setSelectedBounds({ left: a.left - b.left, top: a.top - b.top, width: a.width, height: a.height }); };
     measure();
@@ -141,6 +155,32 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
+      const modifier = event.metaKey || event.ctrlKey;
+      const key = event.key.toLowerCase();
+      if (modifier && key === "a" && activePage && selectedNode) {
+        event.preventDefault();
+        const location = findEngineV3Node(document, activePage.id, selectedNode.id);
+        const siblings = location?.parentId
+          ? findEngineV3Node(document, activePage.id, location.parentId)?.node
+          : activePage.root;
+        if (siblings?.type === "frame") setSelectedNodeIds(new Set(siblings.children.map((node) => node.id)));
+        return;
+      }
+      if (modifier && key === "d" && activePage && selectedNodeIds.size === 1) {
+        event.preventDefault();
+        const nodeId = [...selectedNodeIds][0];
+        if (nodeId !== activePage.root.id) runCommand({ kind: "node", action: "duplicate", pageId: activePage.id, nodeId, precondition: { exists: true } });
+        return;
+      }
+      if (!modifier && (event.key === "Delete" || event.key === "Backspace") && activePage) {
+        const removable = [...selectedNodeIds].filter((id) => id !== activePage.root.id);
+        if (removable.length) {
+          event.preventDefault();
+          runCommand({ kind: "batch", commands: removable.map((nodeId) => ({ kind: "node", action: "remove", pageId: activePage.id, nodeId, precondition: { exists: true } })) });
+          selectNode(activePage.root.id);
+        }
+        return;
+      }
       if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
       event.preventDefault();
       if (event.shiftKey) redo(); else undo();
@@ -449,7 +489,13 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <div className="mb-3 flex items-center justify-between"><span className="text-xs font-semibold">{drawer === "pages" ? "Pages" : "Layers"}</span><button type="button" aria-label={`Close ${drawer}`} className="rounded p-1 hover:bg-[#DDE1D9]" onClick={() => setDrawer(null)}><X size={14} /></button></div>
           {drawer === "pages" ? <><div className="space-y-2" role="tablist" aria-label="Document pages">{document.pages.map((page) => <button key={page.id} type="button" role="tab" aria-selected={page.id === activePage.id} onClick={() => { setActivePageId(page.id); selectNode(page.root.id); }} className={`w-full rounded-lg border p-2 text-left ${page.id === activePage.id ? "border-[#3157F6] bg-white shadow-sm" : "border-[#D7DBD2] bg-[#F7F8F4] hover:border-[#3157F6]"}`}><div className="mb-2 flex aspect-[4/3] items-center justify-center rounded border border-[#D7DBD2] bg-white text-[10px] text-[#667067]">{page.name.slice(0, 1).toUpperCase()}</div><span className="block truncate text-xs font-medium">{page.name}</span></button>)}</div><div className="mt-3 grid grid-cols-3 gap-1"><button type="button" onClick={addPage} className="rounded-md border border-[#C8CEC4] bg-white p-2" aria-label="Add page"><Plus size={13} /></button><button type="button" onClick={duplicatePage} className="rounded-md border border-[#C8CEC4] bg-white p-2" aria-label="Duplicate page"><Copy size={13} /></button><button type="button" onClick={deletePage} disabled={document.pages.length <= 1} className="rounded-md border border-[#C8CEC4] bg-white p-2 text-[#B93815] disabled:opacity-35" aria-label="Delete page"><Trash2 size={13} /></button></div></> : <LayerTree nodes={[activePage.root]} selectedId={selectedNode?.id ?? ""} selectedIds={selectedNodeIds} onSelect={selectNode} onToggle={(id, checked) => setSelectedNodeIds((current) => { const next = new Set(current); if (checked) next.add(id); else next.delete(id); return next; })} />}
         </aside> : null}
-        <section className="min-w-0 flex-1 overflow-auto bg-[#E9EBE6] p-4 sm:p-8" aria-label="Editable canvas"><div ref={canvasRef} className="relative mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
+        <section className="relative min-w-0 flex-1 overflow-auto bg-[#E9EBE6] p-4 sm:p-8" aria-label="Editable canvas">
+          <div className="sticky top-0 z-40 mx-auto mb-3 flex w-fit items-center gap-1 rounded-full border border-[#D7DBD2] bg-white/95 p-1 shadow-sm backdrop-blur" aria-label="Canvas zoom">
+            <button type="button" onClick={() => setZoom((value) => Math.max(0.5, Math.round((value - 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom out" title="Zoom out"><Minus size={13} /></button>
+            <button type="button" onClick={() => setZoom(1)} className="min-w-12 rounded-full px-2 py-1 font-mono text-[10px] font-semibold text-[#566057] hover:bg-[#EEF0EA]" aria-label="Reset zoom">{Math.round(zoom * 100)}%</button>
+            <button type="button" onClick={() => setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom in" title="Zoom in"><Plus size={13} /></button>
+          </div>
+          <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} className="relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
           <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} />
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
@@ -464,7 +510,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             ["w", selectedBounds.left - 5, selectedBounds.top + selectedBounds.height / 2 - 10, "ew-resize"],
           ] as const).map(([handle, left, top, cursor]) => <button key={handle} type="button" aria-label={`Resize selected node ${handle}`} onPointerDown={(event) => beginNodeResize(event, handle)} className={`absolute z-30 border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6] ${handle.length === 1 ? handle === "n" || handle === "s" ? "h-3 w-5 rounded-full" : "h-5 w-3 rounded-full" : "h-3 w-3 rounded-sm"}`} style={{ left, top, cursor }} />) : null}
           {gestureGuides.map((guide, index) => guide.axis === "x" ? <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[#3157F6]" style={{ left: `${guide.position / activePage.width * 100}%` }} /> : activePage.height === "auto" ? null : <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[#3157F6]" style={{ top: `${guide.position / activePage.height * 100}%` }} />)}
-        </div></section>
+          </div></div>
+        </section>
         <aside className={`w-[272px] shrink-0 overflow-y-auto border-l border-[#D7DBD2] bg-[#EEF0EA] p-4 max-xl:fixed max-xl:inset-y-14 max-xl:right-0 max-xl:z-30 max-xl:shadow-xl ${drawer === "inspector" ? "max-xl:block" : "max-xl:hidden"}`} aria-label="Inspector">
           <div className="mb-4 flex items-center justify-between"><div><div className="text-sm font-semibold">Design</div><div className="text-[10px] text-[#667067]">{selectedNode?.name ?? "Page"}</div></div><button type="button" aria-label="Close inspector" className="rounded p-1 hover:bg-[#DDE1D9] xl:hidden" onClick={() => setDrawer(null)}><X size={14} /></button></div>
           {selectedNode && selectedNode.id !== activePage.root.id ? <section className="mb-4 rounded-xl border border-[#D7DBD2] bg-white p-3" aria-label="Object colors"><div className="mb-3 text-xs font-semibold">Colors</div><div className="grid grid-cols-3 gap-2"><label className="text-center text-[10px] text-[#667067]"><input aria-label="Selected fill color" type="color" value={resolvedStyleColor(selectedNode.style?.background, "#ffffff")} onChange={(event) => patchSelectedStyle({ background: event.target.value })} className="mb-1 h-9 w-full cursor-pointer rounded-lg border border-[#C8CEC4] bg-transparent p-1" />Fill</label>{selectedNode.type === "text" ? <label className="text-center text-[10px] text-[#667067]"><input aria-label="Selected text color" type="color" value={resolvedStyleColor(selectedNode.style?.color, "#15171a")} onChange={(event) => patchSelectedStyle({ color: event.target.value })} className="mb-1 h-9 w-full cursor-pointer rounded-lg border border-[#C8CEC4] bg-transparent p-1" />Text</label> : <div /> }<label className="text-center text-[10px] text-[#667067]"><input aria-label="Selected border color" type="color" value={resolvedStyleColor(selectedNode.style?.borderColor, "#d7dbd2")} onChange={(event) => patchSelectedStyle({ borderColor: event.target.value, borderWidth: selectedNode.style?.borderWidth ?? 1 })} className="mb-1 h-9 w-full cursor-pointer rounded-lg border border-[#C8CEC4] bg-transparent p-1" />Border</label></div></section> : null}
