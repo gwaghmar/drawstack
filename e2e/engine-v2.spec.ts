@@ -393,6 +393,18 @@ test("engine v3 adds editable filled vector shapes", async ({ page }) => {
   await expect(star.locator("path")).toHaveAttribute("d", /Z$/);
 });
 
+test("engine v3 adds regular polygon shapes", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const before = await page.locator('[data-node-type="path"]').count();
+  await page.getByLabel("Add shape").selectOption("hexagon");
+  await expect(page.locator('[data-node-type="path"]')).toHaveCount(before + 1);
+  const hexagon = page.locator('[data-node-type="path"]').last();
+  await expect(hexagon).toHaveAttribute("aria-label", "Hexagon");
+  await expect(hexagon.locator("path")).toHaveAttribute("d", /Z$/);
+  await hexagon.click();
+  await expect(page.getByRole("toolbar", { name: "Quick object actions" })).toBeVisible();
+});
+
 test("engine v3 exposes arrange controls for a multi-selection", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
