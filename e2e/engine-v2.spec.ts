@@ -393,6 +393,13 @@ test("engine v3 adds editable filled vector shapes", async ({ page }) => {
   await expect(star.locator("path")).toHaveAttribute("d", /Z$/);
 });
 
+test("engine v3 exposes arrange controls for a multi-selection", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  await page.keyboard.press("Control+a");
+  await expect(page.getByLabel("Quick alignment")).toBeVisible();
+});
+
 test("engine v3 allows keyboard selection of canvas objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const status = page.locator('[data-node-id="status"]');
