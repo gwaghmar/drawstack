@@ -558,6 +558,16 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (handle.includes("w")) { nextWidth = Math.max(4, startWidth - dx); nextLeft = startLeft + startWidth - nextWidth; }
       if (handle.includes("s")) nextHeight = Math.max(4, startHeight + dy);
       if (handle.includes("n")) { nextHeight = Math.max(4, startHeight - dy); nextTop = startTop + startHeight - nextHeight; }
+      if (pointer.shiftKey && startWidth > 0 && startHeight > 0) {
+        const ratio = startWidth / startHeight;
+        if (handle.includes("e") || handle.includes("w")) {
+          nextHeight = Math.max(4, nextWidth / ratio);
+          if (handle.includes("n")) nextTop = startTop + startHeight - nextHeight;
+        } else {
+          nextWidth = Math.max(4, nextHeight * ratio);
+          if (handle.includes("w")) nextLeft = startLeft + startWidth - nextWidth;
+        }
+      }
       changed = true;
       const sx = nextWidth / Math.max(startWidth, 1); const sy = nextHeight / Math.max(startHeight, 1);
       let preview = base;
