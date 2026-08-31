@@ -69,6 +69,8 @@ export function validateEngineV3Document(input: unknown): EngineV3ValidationResu
     if (node.type === "path") {
       if (!Array.isArray(node.points) || node.points.length < 2) add(`${path}.points`, "Path requires at least two points");
       else node.points.forEach((point: unknown, index: number) => { if (!record(point) || !finite(point.x) || !finite(point.y)) add(`${path}.points[${index}]`, "Path points must contain finite coordinates"); });
+      if (node.lineStyle !== undefined && !["straight", "elbow", "curve"].includes(String(node.lineStyle))) add(`${path}.lineStyle`, "Unsupported path line style");
+      if (node.arrowEnd !== undefined && typeof node.arrowEnd !== "boolean") add(`${path}.arrowEnd`, "Path arrowEnd must be boolean");
     }
     if (node.componentRef !== undefined) {
       const componentRef = String(node.componentRef);
