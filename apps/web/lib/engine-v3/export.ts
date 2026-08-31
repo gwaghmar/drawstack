@@ -46,7 +46,7 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
   const records = planned.records;
   const dimensions = (record: typeof records[number], availableWidth = 320) => ({
     width: typeof record.style?.width === "number" ? record.style.width : typeof record.style?.width === "string" && /^\d+(?:\.\d+)?%$/.test(record.style.width) ? availableWidth * Number.parseFloat(record.style.width) / 100 : record.type === "text" ? 280 : 320,
-    height: typeof record.style?.minHeight === "number" ? record.style.minHeight : record.type === "text" ? 64 : record.type === "metric" ? 129 : record.type === "chart" ? 330 : record.type === "graph" ? 280 : 180,
+    height: typeof record.style?.minHeight === "number" ? record.style.minHeight : record.type === "text" ? 64 : record.type === "metric" ? 129 : record.type === "chart" ? 330 : record.type === "graph" ? 280 : record.type === "path" ? 180 : 180,
   });
   const positions = new Map<string, { x: number; y: number }>();
   const sizes = new Map<string, { width: number; height: number }>();
@@ -97,6 +97,10 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
     }
     if (record.type === "metric") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><rect width="${width}" height="${height}" rx="${Number(record.style?.borderRadius ?? 14)}" fill="${fill(record)}" stroke="${stroke(record)}" stroke-width="${Number(record.style?.borderWidth ?? 1)}"/>${text(String(source.label ?? ""), 20, 28, 10, "#667067", 600)}${text(String(source.value ?? ""), 20, 70, 32, source.tone === "warning" ? "#FF5D2E" : "#3157F6", 650)}${text(String(source.detail ?? ""), 20, 102, 12, "#667067")}</g>`;
     if (record.type === "image") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><image href="${record.asset?.ref.source ?? String(source.src ?? "")}" width="${width}" height="${height}" preserveAspectRatio="xMidYMid meet"/></g>`;
+    if (record.type === "path") {
+      const points = Array.isArray(source.points) ? source.points.filter((point): point is { x: number; y: number } => Boolean(point && typeof point === "object" && Number.isFinite((point as { x?: unknown }).x) && Number.isFinite((point as { y?: unknown }).y))).map((point) => `${point.x},${point.y}`).join(" ") : "";
+      return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><polyline points="${points}" fill="none" stroke="${textColor(record)}" stroke-width="${Number(record.style?.borderWidth ?? 3)}" stroke-linecap="round" stroke-linejoin="round"/></g>`;
+    }
     const graphic = record.type === "graph" ? graphSvg(record.node as never, view.tokens as never) : chartSvg(record.node as never, view.tokens as never);
     return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><rect width="${width}" height="${height}" rx="14" fill="${fill(record)}" stroke="${stroke(record)}"/><text x="20" y="28" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="15" font-weight="650" fill="#15171A">${String(source.title ?? "").replace(/[&<>]/g, "")}</text><g transform="translate(0 40)">${graphic.replace(/^<svg[^>]*>|<\/svg>$/g, "")}</g></g>`;
   }).join("");
