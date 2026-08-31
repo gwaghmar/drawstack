@@ -393,6 +393,22 @@ test("engine v3 draws editable pen paths and connector styles", async ({ page })
   await expect(page.getByRole("button", { name: "Reset zoom" })).toHaveText("110%");
 });
 
+test("engine v3 creates a bound connector from two selected objects", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  const status = page.locator('[data-node-id="status"]');
+  await title.click();
+  await status.evaluate((element) => element.dispatchEvent(new MouseEvent("click", { bubbles: true, shiftKey: true })));
+  const connect = page.getByRole("button", { name: "Connect selected objects" });
+  await expect(connect).toBeEnabled();
+  await connect.click();
+  const connector = page.locator('[data-node-type="path"]');
+  await expect(connector).toBeVisible();
+  await connector.click();
+  await expect(page.getByLabel("Connector start node")).toHaveValue("title");
+  await expect(page.getByLabel("Connector end node")).toHaveValue("status");
+});
+
 test("engine v3 previews, rejects, applies, and undoes an AI proposal", async ({ page }) => {
   await page.route("**/api/ai/engine-v3", async (route) => {
     const request = route.request().postDataJSON() as { document: Record<string, unknown>; revision: number };

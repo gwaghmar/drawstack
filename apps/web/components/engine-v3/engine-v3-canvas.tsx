@@ -228,7 +228,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     }
     const location = findEngineV3Node(document, activePage.id, nodeId);
     if (!location || location.node.locked) return;
-    selectNode(nodeId);
+    selectNode(nodeId, event.shiftKey || event.metaKey || event.ctrlKey);
     const startX = event.clientX; const startY = event.clientY;
     const visual = visualNodeTransform(nodeId);
     const originalX = visual?.x ?? location.node.transform?.x ?? 0; const originalY = visual?.y ?? location.node.transform?.y ?? 0;
