@@ -432,7 +432,14 @@ test("engine v3 keeps a visible share link when clipboard access is unavailable"
   await page.goto("/app/engine-v2?mode=v3");
   await page.getByRole("button", { name: "Share document", exact: true }).click();
   await expect(page.getByRole("status", { name: "Share link ready" })).toBeVisible();
-  await expect(page.getByLabel("Share link URL")).toHaveValue(/\/s\//);
+  const shareUrl = await page.getByLabel("Share link URL").inputValue();
+  expect(shareUrl).toMatch(/\/s\//);
+  const shared = await page.context().newPage();
+  const response = await shared.goto(shareUrl);
+  expect(response?.status()).toBe(200);
+  await expect(shared.getByText("View-only link.", { exact: false })).toBeVisible();
+  await expect(shared.getByRole("heading").first()).toBeVisible();
+  await shared.close();
 });
 
 test("engine v3 previews, rejects, applies, and undoes an AI proposal", async ({ page }) => {
