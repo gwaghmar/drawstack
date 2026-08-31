@@ -373,6 +373,15 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await expect(page.getByText("More settings", { exact: true })).toBeVisible();
 });
 
+test("engine v3 exposes quick actions beside a selected object", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  await expect(page.getByRole("toolbar", { name: "Quick object actions" })).toBeVisible();
+  await expect(page.getByLabel("Quick fill color")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Quick duplicate selected" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Quick delete selected" })).toBeVisible();
+});
+
 test("engine v3 allows keyboard selection of canvas objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const status = page.locator('[data-node-id="status"]');
