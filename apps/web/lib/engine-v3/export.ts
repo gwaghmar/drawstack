@@ -31,7 +31,10 @@ function stem(name: string): string {
 
 function pageWarning(document: EngineDocumentV3, page: Page): string[] {
   const warnings: string[] = [];
-  if (document.assets && Object.keys(document.assets).length) warnings.push("Asset files are referenced but are not embedded in this export.");
+  const referenced = new Set<string>();
+  const visit = (nodes: EngineDocumentV3["pages"][number]["root"]["children"]) => nodes.forEach((node) => { if (node.assetRef) referenced.add(node.assetRef); if (node.type === "frame") visit(node.children); });
+  visit(page.root.children);
+  if ([...referenced].some((id) => !document.assets[id]?.source.startsWith("data:"))) warnings.push("Asset files are referenced but are not embedded in this export.");
   if (page.height === "auto") warnings.push("Auto page height is resolved by the print/layout target.");
   return warnings;
 }
