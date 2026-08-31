@@ -460,6 +460,15 @@ test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
   await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
 });
 
+test("engine v3 escapes from a nested layer to its parent", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  const name = page.getByLabel("V3 node name");
+  await expect(name).toHaveValue("Report title");
+  await page.keyboard.press("Escape");
+  await expect(name).not.toHaveValue("Report title");
+});
+
 test("engine v3 creates a bound connector from two selected objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');

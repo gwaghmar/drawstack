@@ -203,7 +203,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       }
       if (event.key === "Escape" && activePage) {
         event.preventDefault();
-        selectNode(activePage.root.id);
+        selectNode(selectedLocation?.parentId ?? activePage.root.id);
         return;
       }
       if (!modifier && activePage && selectedNodeIds.size === 1 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
