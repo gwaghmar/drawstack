@@ -507,6 +507,20 @@ test("engine v3 starts inline text editing from the keyboard", async ({ page }) 
   await expect(page.getByLabel("Inline text editor")).toBeVisible();
 });
 
+test("engine v3 changes text style from the inspector", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const style = page.getByLabel("Text style");
+  await expect(style).toHaveValue("display");
+  const before = await title.evaluate((element) => getComputedStyle(element).fontSize);
+  await style.selectOption("body");
+  await expect(style).toHaveValue("body");
+  await expect.poll(() => title.evaluate((element) => getComputedStyle(element).fontSize)).not.toBe(before);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(style).toHaveValue("display");
+});
+
 test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
