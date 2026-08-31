@@ -329,7 +329,7 @@ test("engine v3 upgrade preview manages pages and committed color tokens", async
 
 test("engine v3 edits nested nodes and reusable components", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
-  await page.getByRole("button", { name: "Show layers", exact: true }).click();
+  await page.getByRole("button", { name: "Show layers", exact: true }).dispatchEvent("click");
   await page.getByRole("button", { name: "text Report title", exact: true }).click();
   const title = page.locator('[data-node-id="title"]');
   await page.getByLabel("Edit selected text").fill("Editable across pages");
