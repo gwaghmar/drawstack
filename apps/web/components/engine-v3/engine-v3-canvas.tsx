@@ -513,7 +513,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   };
   const handleCanvasPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     if (penMode) { beginPen(event); return; }
-    if (event.button === 0 && event.target === event.currentTarget && activePage) selectNode(activePage.root.id);
+    if (event.button === 0 && activePage) {
+      const target = event.target as Element | null;
+      if (!target?.closest("[data-node-id]")) selectNode(activePage.root.id);
+    }
   };
   const makeComponent = () => {
     if (!selectedNode || selectedNode.componentRef || !activePage) return;
