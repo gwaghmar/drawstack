@@ -36,6 +36,19 @@ describe("engine v3 node operations", () => {
     assert.deepEqual(findEngineV3Node(patched, pageId, "header")?.node.transform, { x: 24, y: 12 });
   });
 
+  it("inserts text, card, and frame nodes with independent visual styles", () => {
+    const document = base();
+    const pageId = document.pages[0].id;
+    const rootId = document.pages[0].root.id;
+    const text = { id: "new-text", name: "Text", type: "text" as const, content: "Hello", variant: "body" as const, style: { color: "$cobalt" } };
+    const card = { id: "new-card", name: "Card", type: "metric" as const, label: "Status", value: "Ready", detail: "Now", tone: "positive" as const, style: { background: "#fff" } };
+    const frame = { id: "new-frame", name: "Frame", type: "frame" as const, layout: { mode: "flex" as const, gap: 8, padding: 12 }, children: [] };
+    const next = insertEngineV3Node(insertEngineV3Node(insertEngineV3Node(document, pageId, rootId, text), pageId, rootId, card), pageId, rootId, frame);
+    assert.equal(findEngineV3Node(next, pageId, "new-text")?.node.style?.color, "$cobalt");
+    assert.equal(findEngineV3Node(next, pageId, "new-card")?.node.type, "metric");
+    assert.equal(findEngineV3Node(next, pageId, "new-frame")?.node.type, "frame");
+  });
+
   it("groups and ungroups siblings without losing their order", () => {
     const document = base();
     const pageId = document.pages[0].id;

@@ -308,12 +308,14 @@ test("engine v2 rejects chart families that do not match existing data", async (
 test("engine v3 upgrade preview manages pages and committed color tokens", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await expect(page.getByText("Engine v3", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Show pages", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Revenue operating brief" })).toBeVisible();
 
   await page.getByRole("button", { name: "Duplicate page", exact: true }).click();
   await expect(page.getByRole("tab")).toHaveCount(2);
   await page.getByRole("button", { name: "Add page", exact: true }).click();
   await expect(page.getByRole("tab")).toHaveCount(3);
+  await page.getByText("More settings", { exact: true }).click();
   await page.getByLabel("Page name").fill("Social launch");
   await expect(page.getByRole("tab", { name: "Social launch" })).toBeVisible();
   await page.getByRole("button", { name: "Delete page", exact: true }).click();
@@ -327,11 +329,13 @@ test("engine v3 upgrade preview manages pages and committed color tokens", async
 
 test("engine v3 edits nested nodes and reusable components", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "Show layers", exact: true }).click();
   await page.getByRole("button", { name: "text Report title", exact: true }).click();
   const title = page.locator('[data-node-id="title"]');
-  await page.getByLabel("V3 text content").fill("Editable across pages");
+  await page.getByLabel("Edit selected text").fill("Editable across pages");
   await expect(title).toHaveText("Editable across pages");
 
+  await page.getByText("More settings", { exact: true }).click();
   await page.getByLabel("V3 node X").fill("18");
   await page.getByLabel("V3 node Y").fill("24");
   await page.getByLabel("V3 node opacity").fill("0.6");
@@ -340,7 +344,7 @@ test("engine v3 edits nested nodes and reusable components", async ({ page }) =>
   await expect(title).toHaveCSS("opacity", "0.6");
 
   await page.getByLabel("V3 node locked").check();
-  await page.getByLabel("V3 text content").fill("Blocked edit");
+  await page.getByLabel("Edit selected text").fill("Blocked edit");
   await expect(title).toHaveText("Editable across pages");
   await expect(page.getByRole("alert").filter({ hasText: "locked" })).toBeVisible();
   await page.getByLabel("V3 node locked").uncheck();
@@ -354,9 +358,10 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
   await title.click();
+  await page.getByText("More settings", { exact: true }).click();
   await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
 
-  await page.getByLabel("V3 text content").fill("Direct canvas edit");
+  await page.getByLabel("Edit selected text").fill("Direct canvas edit");
   await expect(title).toHaveText("Direct canvas edit");
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(title).not.toHaveText("Direct canvas edit");
@@ -374,8 +379,8 @@ test("engine v3 previews, rejects, applies, and undoes an AI proposal", async ({
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ proposal: { envelope: { id: "ai-test", baseRevision: request.revision, actor: "agent", origin: "ai", timestamp: "2026-08-31T00:00:00.000Z", command }, preview, affectedIds: ["title"], explanation: "Updated the selected title" } }) });
   });
   await page.goto("/app/engine-v2?mode=v3");
-  await page.getByRole("button", { name: "text Report title", exact: true }).click();
   const title = page.locator('[data-node-id="title"]');
+  await title.click();
   const original = await title.textContent();
   await page.getByLabel("AI edit prompt").fill("Make the title clearer");
   await page.getByRole("button", { name: "Propose", exact: true }).click();
@@ -396,6 +401,7 @@ test("engine v3 uploads and places a persistent image asset", async ({ page }) =
   const image = page.locator('[data-node-type="image"]');
   await expect(image).toBeVisible();
   await expect(image).toHaveAttribute("src", /\/api\/engine-v3\/assets\?sha256=/);
+  await page.getByText("More settings", { exact: true }).click();
   await expect(page.getByLabel("V3 node name")).toHaveValue("Image");
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(image).toHaveCount(0);
@@ -410,6 +416,7 @@ test("engine v3 drags a canvas node as one undoable gesture", async ({ page }) =
   await page.mouse.down();
   await page.mouse.move(bounds.x + bounds.width / 2 + 48, bounds.y + bounds.height / 2 + 32, { steps: 4 });
   await page.mouse.up();
+  await page.getByText("More settings", { exact: true }).click();
   await expect(page.getByLabel("V3 node X")).not.toHaveValue("0");
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(page.getByLabel("V3 node X")).toHaveValue("0");
@@ -421,7 +428,7 @@ test("engine v3 resizes and groups layers through reversible commands", async ({
   const title = page.locator('[data-node-id="title"]');
   await title.click();
   const before = await title.boundingBox();
-  const handle = page.getByRole("button", { name: "Resize selected node" });
+  const handle = page.getByRole("button", { name: "Resize selected node se", exact: true });
   const handleBounds = await handle.boundingBox();
   if (!before || !handleBounds) throw new Error("Resize geometry is unavailable");
   await page.mouse.move(handleBounds.x + 4, handleBounds.y + 4);
@@ -433,6 +440,8 @@ test("engine v3 resizes and groups layers through reversible commands", async ({
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect.poll(async () => (await title.boundingBox())?.width).toBeCloseTo(before.width, 0);
 
+  await page.getByText("More settings", { exact: true }).click();
+  await page.getByRole("button", { name: "Show layers", exact: true }).click();
   await page.getByLabel("Include Report title in group selection").uncheck();
   await page.getByLabel("Include Monthly revenue in group selection").check();
   await page.getByLabel("Include Net retention in group selection").check();

@@ -23,4 +23,25 @@ describe("engine v3 canvas gestures", () => {
     const title = findEngineV3Node(document, pageId, "title")!; title.node.locked = true;
     assert.throws(() => dragEngineV3Node(document, pageId, "title", 10, 10), /locked/);
   });
+
+  it("supports dragging flow children without changing their parent or identity", () => {
+    const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+    const pageId = document.pages[0].id;
+    const before = findEngineV3Node(document, pageId, "mrr")!;
+    const result = dragEngineV3Node(document, pageId, "mrr", 120, 80);
+    const after = findEngineV3Node(result.document, pageId, "mrr")!;
+    assert.equal(after.parentId, before.parentId);
+    assert.equal(after.node.id, before.node.id);
+    assert.deepEqual(after.node.transform, { x: 120, y: 80 });
+  });
+
+  it("resizes width and height independently", () => {
+    const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+    const pageId = document.pages[0].id;
+    const widthOnly = resizeEngineV3Node(document, pageId, "mrr", 240);
+    assert.equal(findEngineV3Node(widthOnly.document, pageId, "mrr")?.node.style?.width, 240);
+    assert.equal(findEngineV3Node(widthOnly.document, pageId, "mrr")?.node.style?.minHeight, undefined);
+    const both = resizeEngineV3Node(document, pageId, "mrr", 240, 180);
+    assert.deepEqual(findEngineV3Node(both.document, pageId, "mrr")?.node.style, { width: 240, minHeight: 180 });
+  });
 });
