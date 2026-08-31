@@ -934,6 +934,26 @@ test("engine v3 exposes independent corner resize handles", async ({ page }) => 
   await expect.poll(async () => (await title.boundingBox())?.width).toBeCloseTo(before.width, 0);
 });
 
+test("engine v3 preserves aspect ratio while shift-resizing", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const before = await title.boundingBox();
+  const southeast = page.getByRole("button", { name: "Resize selected node se", exact: true });
+  const handleBounds = await southeast.boundingBox();
+  if (!before || !handleBounds) throw new Error("Southeast resize geometry is unavailable");
+  const beforeRatio = before.width / before.height;
+  await page.keyboard.down("Shift");
+  await page.mouse.move(handleBounds.x + 4, handleBounds.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(handleBounds.x + 34, handleBounds.y + 12, { steps: 3 });
+  await page.mouse.up();
+  await page.keyboard.up("Shift");
+  const after = await title.boundingBox();
+  if (!after) throw new Error("Resized title geometry is unavailable");
+  expect(after.width / after.height).toBeCloseTo(beforeRatio, 1);
+});
+
 test("engine v3 resizes a multi-selection from shared bounds", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
