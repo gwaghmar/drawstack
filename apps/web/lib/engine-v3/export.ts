@@ -100,7 +100,8 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
     if (record.type === "frame") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><rect width="${width}" height="${height}" rx="${Number(record.style?.borderRadius ?? 0)}" fill="${fill(record)}" stroke="${stroke(record)}" stroke-width="${Number(record.style?.borderWidth ?? 0)}"/></g>`;
     if (record.type === "text") {
       const variant = String(source.variant ?? "body");
-      const size = variant === "display" ? 58 : variant === "heading" ? 24 : variant === "caption" ? 11 : 15;
+      const defaultSize = variant === "display" ? 58 : variant === "heading" ? 24 : variant === "caption" ? 11 : 15;
+      const size = typeof source.style === "object" && source.style && "fontSize" in source.style && typeof source.style.fontSize === "number" ? Math.max(8, Math.min(160, source.style.fontSize)) : defaultSize;
       const alignment = source.style && typeof source.style === "object" && "textAlign" in source.style ? source.style.textAlign : "left";
       const anchor = alignment === "center" ? "middle" : alignment === "right" ? "end" : "start";
       const textX = anchor === "middle" ? width / 2 : anchor === "end" ? width : 0;

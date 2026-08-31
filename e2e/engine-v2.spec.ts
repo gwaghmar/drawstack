@@ -551,6 +551,18 @@ test("engine v3 toggles text formatting from the inspector", async ({ page }) =>
   await expect(title).not.toHaveCSS("text-decoration-line", "underline");
 });
 
+test("engine v3 applies a custom text font size", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const size = page.getByLabel("Text font size");
+  await size.fill("32");
+  await expect(size).toHaveValue("32");
+  await expect(title).toHaveCSS("font-size", "32px");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(size).toHaveValue("");
+});
+
 test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();

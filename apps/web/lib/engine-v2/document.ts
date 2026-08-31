@@ -21,6 +21,7 @@ export type EngineStyle = {
   fontWeight?: CSSProperties["fontWeight"];
   fontStyle?: CSSProperties["fontStyle"];
   textDecoration?: CSSProperties["textDecoration"];
+  fontSize?: number;
   minHeight?: number;
   width?: number | string;
   flex?: number;
@@ -167,6 +168,7 @@ export function nodeStyle(style: EngineStyle | undefined, tokens: EngineTokens):
     fontWeight: style.fontWeight,
     fontStyle: style.fontStyle,
     textDecoration: style.textDecoration,
+    fontSize: style.fontSize,
     minHeight: style.minHeight,
     width: style.width,
     flex: style.flex,
