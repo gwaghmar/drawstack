@@ -72,6 +72,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [gestureGuides, setGestureGuides] = useState<SnapGuide[]>([]);
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextValue, setEditingTextValue] = useState("");
   const [zoom, setZoom] = useState(1);
@@ -559,7 +560,26 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     if (penMode) { beginPen(event); return; }
     if (event.button === 0 && activePage) {
       const target = event.target as Element | null;
-      if (!target?.closest("[data-node-id]")) selectNode(activePage.root.id);
+      if (!target?.closest("[data-node-id]") && canvasRef.current) {
+        event.preventDefault();
+        const bounds = canvasRef.current.getBoundingClientRect();
+        const start = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+        let current = start;
+        const update = (pointer: PointerEvent) => {
+          current = { x: pointer.clientX - bounds.left, y: pointer.clientY - bounds.top };
+          setMarquee({ left: Math.min(start.x, current.x), top: Math.min(start.y, current.y), width: Math.abs(current.x - start.x), height: Math.abs(current.y - start.y) });
+        };
+        const finish = () => {
+          window.removeEventListener("pointermove", update); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
+          setMarquee(null);
+          if (Math.abs(current.x - start.x) < 6 && Math.abs(current.y - start.y) < 6) { selectNode(activePage.root.id); return; }
+          const left = Math.min(start.x, current.x); const right = Math.max(start.x, current.x); const top = Math.min(start.y, current.y); const bottom = Math.max(start.y, current.y);
+          const ids = [...canvasRef.current!.querySelectorAll<HTMLElement>("[data-node-id]")].filter((element) => element.dataset.nodeId !== activePage.root.id).filter((element) => { const rect = element.getBoundingClientRect(); const x = rect.left - bounds.left; const y = rect.top - bounds.top; return x < right && x + rect.width > left && y < bottom && y + rect.height > top; }).map((element) => element.dataset.nodeId).filter((id): id is string => Boolean(id));
+          if (ids.length) { setSelectedNodeId(ids[0]); setSelectedNodeIds(new Set(ids)); } else selectNode(activePage.root.id);
+        };
+        const cancel = () => { window.removeEventListener("pointermove", update); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setMarquee(null); };
+        window.addEventListener("pointermove", update); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
+      }
     }
   };
   const makeComponent = () => {
@@ -770,6 +790,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <div className="mx-auto max-sm:min-w-[720px]" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={handleCanvasPointerDown} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
           <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} onDoubleClick={beginTextEdit} />
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
+          {marquee ? <div aria-label="Marquee selection" className="pointer-events-none absolute z-40 border border-[#3157F6] bg-[#3157F6]/10" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? ([
             ["nw", selectedBounds.left - 6, selectedBounds.top - 6, "nwse-resize"],

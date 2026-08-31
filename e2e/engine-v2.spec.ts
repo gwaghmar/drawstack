@@ -359,7 +359,8 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   const title = page.locator('[data-node-id="title"]');
   await title.click();
   await page.getByText("More settings", { exact: true }).click();
-  await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Header");
+  await expect(title).toHaveClass(/outline/);
 
   await page.getByLabel("Edit selected text").fill("Direct canvas edit");
   await expect(title).toHaveText("Direct canvas edit");
@@ -603,6 +604,25 @@ test("engine v3 drags Shift-selected nodes together", async ({ page }) => {
   expect(titleAfter?.x ?? 0).toBeGreaterThan(titleBefore.x);
   expect(revenueAfter?.x ?? 0).toBeGreaterThan(revenueBefore.x);
   expect((titleAfter?.x ?? 0) - titleBefore.x).toBeCloseTo((revenueAfter?.x ?? 0) - revenueBefore.x, 0);
+});
+
+test("engine v3 selects objects with a marquee on empty canvas", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const surface = page.locator('[data-engine-document="v2"]');
+  const title = page.locator('[data-node-id="title"]');
+  const surfaceBounds = await surface.boundingBox();
+  const titleBounds = await title.boundingBox();
+  if (!surfaceBounds || !titleBounds) throw new Error("Marquee geometry is unavailable");
+  const start = { x: surfaceBounds.x + 4, y: surfaceBounds.y + 4 };
+  const end = { x: titleBounds.x + titleBounds.width + 12, y: titleBounds.y + titleBounds.height + 12 };
+  await surface.evaluate((element, points) => {
+    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: points.start.x, clientY: points.start.y }));
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, clientX: points.end.x, clientY: points.end.y }));
+    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, clientX: points.end.x, clientY: points.end.y }));
+  }, { start, end });
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Header");
+  await expect(title).toHaveClass(/outline/);
+  await expect(page.getByLabel("Marquee selection")).toHaveCount(0);
 });
 
 test("engine v3 resizes and groups layers through reversible commands", async ({ page }) => {
