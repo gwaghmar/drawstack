@@ -284,7 +284,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const scale = visual?.scale ?? 1;
     const startWidth = selectedBounds.width * scale; const startHeight = selectedBounds.height * scale;
     const startX = visual?.x ?? selectedNode.transform?.x ?? 0; const startY = visual?.y ?? selectedNode.transform?.y ?? 0;
-    const pageId = activePage.id; const nodeId = selectedNode.id; const base = historyRef.current!.snapshot().document; let width = startWidth; let height = startHeight; let x = startX; let y = startY; let changed = false;
+    const pageId = activePage.id; const nodeId = selectedNode.id; const base = historyRef.current!.snapshot().document; const parentOffset = engineV3NodeParentOffset(base, pageId, nodeId); let width = startWidth; let height = startHeight; let x = startX; let y = startY; let changed = false;
     const move = (pointer: PointerEvent) => {
       const dx = (pointer.clientX - event.clientX) * scale; const dy = (pointer.clientY - event.clientY) * scale;
       if (handle.includes("e")) width = Math.max(24, startWidth + dx);
@@ -293,10 +293,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (handle.includes("n")) { height = Math.max(24, startHeight - dy); y = startY + startHeight - height; }
       changed = true;
       const changes: Partial<EngineNode> = { style: { ...selectedNode.style, width: Math.round(width), minHeight: Math.round(height) } };
-      if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x), y: Math.round(y) };
+      if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x - parentOffset.x), y: Math.round(y - parentOffset.y) };
       try { setDocument(patchEngineV3Node(base, pageId, nodeId, changes)); } catch { /* commit below reports failures */ }
     };
-    const finish = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); if (changed) { const changes: Record<string, unknown> = { style: { ...selectedNode.style, width: Math.round(width), minHeight: Math.round(height) } }; if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x), y: Math.round(y) }; runCommand({ kind: "node", action: "patch", pageId, nodeId, changes }); } };
+    const finish = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); if (changed) { const changes: Record<string, unknown> = { style: { ...selectedNode.style, width: Math.round(width), minHeight: Math.round(height) } }; if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x - parentOffset.x), y: Math.round(y - parentOffset.y) }; runCommand({ kind: "node", action: "patch", pageId, nodeId, changes }); } };
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
   };
