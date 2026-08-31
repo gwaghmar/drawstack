@@ -394,6 +394,9 @@ test("engine v3 draws editable pen paths and connector styles", async ({ page })
   const pngDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export active page as PNG" }).click();
   await expect((await pngDownload).suggestedFilename()).toMatch(/\.png$/);
+  const pdfDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export active page as PDF" }).click();
+  await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 });
 
 test("engine v3 creates a bound connector from two selected objects", async ({ page }) => {
