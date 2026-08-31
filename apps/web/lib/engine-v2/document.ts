@@ -14,6 +14,8 @@ export type EngineStyle = {
   borderColor?: string;
   borderWidth?: number;
   borderStyle?: CSSProperties["borderStyle"];
+  strokeLinecap?: "butt" | "round" | "square";
+  strokeLinejoin?: "miter" | "round" | "bevel";
   borderRadius?: number;
   boxShadow?: string;
   objectFit?: CSSProperties["objectFit"];
