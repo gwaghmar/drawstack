@@ -12,6 +12,9 @@ export class EngineV3HistoryController {
   private future: Entry[] = [];
   constructor(document: EngineDocumentV3, revision = 0, maxEntries = 100) { this.document = structuredClone(document); this.revision = revision; this.maxEntries = Math.max(1, maxEntries); }
   snapshot(): EngineV3HistoryState { return { document: structuredClone(this.document), revision: this.revision, canUndo: this.past.length > 0, canRedo: this.future.length > 0 }; }
+  replaceFromRemote(document: EngineDocumentV3, revision: number): EngineV3HistoryState {
+    this.document = structuredClone(document); this.revision = revision; this.past = []; this.future = []; return this.snapshot();
+  }
   apply(command: EngineV3Command, origin: CommandOrigin = "local", actor = "local", id = crypto.randomUUID()): EngineV3HistoryState {
     const envelope: EngineV3CommandEnvelope = { id, baseRevision: this.revision, actor, origin, timestamp: new Date().toISOString(), command };
     const result = applyEngineV3Command(this.document, this.revision, envelope);

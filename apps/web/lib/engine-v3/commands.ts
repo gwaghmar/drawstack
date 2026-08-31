@@ -1,5 +1,6 @@
 import type { AssetRef, ComponentDefinition, EngineDocumentV3, EngineNode, Page, TokenSet } from "./document.ts";
 import { validateEngineV3Document } from "./compiler.ts";
+import { duplicateEngineV3Subtree, groupEngineV3Nodes, reorderEngineV3Node, ungroupEngineV3Node } from "./node-operations.ts";
 
 export type CommandOrigin = "local" | "ai" | "import" | "undo" | "redo";
 export type CommandPrecondition = { exists?: boolean; type?: EngineNode["type"]; revision?: number };
@@ -9,7 +10,7 @@ export type EngineV3Command =
   | { kind: "tokens"; tokens: TokenSet; precondition?: CommandPrecondition }
   | { kind: "asset"; action: "define" | "remove"; asset: AssetRef | { sha256: string }; precondition?: CommandPrecondition }
   | { kind: "component"; action: "define" | "remove"; component: ComponentDefinition | { id: string }; precondition?: CommandPrecondition }
-  | { kind: "node"; action: "add" | "patch" | "remove"; pageId: string; node?: EngineNode; nodeId?: string; parentId?: string | null; index?: number; changes?: Record<string, unknown>; unset?: string[]; precondition?: CommandPrecondition };
+  | { kind: "node"; action: "add" | "patch" | "remove" | "reorder" | "duplicate" | "group" | "ungroup"; pageId: string; node?: EngineNode; nodeId?: string; nodeIds?: string[]; frame?: Extract<EngineNode, { type: "frame" }>; parentId?: string | null; index?: number; toIndex?: number; changes?: Record<string, unknown>; unset?: string[]; precondition?: CommandPrecondition };
 export type EngineV3CommandEnvelope = { id: string; baseRevision: number; actor: string; origin: CommandOrigin; timestamp: string; command: EngineV3Command };
 export type CommandFailure = { ok: false; code: "revision-conflict" | "missing-page" | "missing-target" | "precondition-failed" | "invalid-command"; message: string; affectedIds: string[] };
 export type CommandSuccess = { ok: true; document: EngineDocumentV3; revision: number; inverse: EngineV3CommandEnvelope; affectedIds: string[] };
@@ -107,6 +108,35 @@ export function applyEngineV3Command(document: EngineDocumentV3, revision: numbe
       if (command.action === "define") { if (old) throw new Error("Component exists"); next.components[id] = copy(command.component as ComponentDefinition); inverse = { kind: "component", action: "remove", component: { id } }; }
       else { if (!old) throw new Error("Missing component"); delete next.components[id]; inverse = { kind: "component", action: "define", component: old }; }
       affectedIds.push(id);
+    } else if (command.kind === "node" && ["reorder", "duplicate", "group", "ungroup"].includes(command.action)) {
+      const page = next.pages.find((item) => item.id === command.pageId); if (!page) return { ok: false, code: "missing-page", message: "Page does not exist", affectedIds: [command.pageId] };
+      if (command.action === "reorder") {
+        if (!command.nodeId || command.toIndex === undefined) throw new Error("Invalid reorder");
+        const location = locate(page.root, command.nodeId); if (!location) throw new Error("Missing node");
+        next = reorderEngineV3Node(next, page.id, command.nodeId, command.toIndex);
+        inverse = { kind: "node", action: "reorder", pageId: page.id, nodeId: command.nodeId, toIndex: location.index };
+      } else if (command.action === "duplicate") {
+        if (!command.nodeId) throw new Error("Invalid duplicate");
+        const location = locate(page.root, command.nodeId); if (!location || location.parentId === null) throw new Error("Missing node");
+        next = duplicateEngineV3Subtree(next, page.id, command.nodeId);
+        const nextPage = next.pages.find((item) => item.id === page.id)!;
+        const parent = findNode(nextPage, location.parentId);
+        if (!parent || parent.type !== "frame") throw new Error("Missing duplicate parent");
+        const duplicate = parent.children[location.index + 1]; if (!duplicate) throw new Error("Missing duplicate");
+        inverse = { kind: "node", action: "remove", pageId: page.id, nodeId: duplicate.id };
+        affectedIds.push(duplicate.id);
+      } else if (command.action === "group") {
+        if (!command.nodeIds || !command.frame) throw new Error("Invalid group");
+        next = groupEngineV3Nodes(next, page.id, command.nodeIds, command.frame);
+        inverse = { kind: "node", action: "ungroup", pageId: page.id, nodeId: command.frame.id };
+      } else {
+        if (!command.nodeId) throw new Error("Invalid ungroup");
+        const frame = findNode(page, command.nodeId); if (!frame || frame.type !== "frame") throw new Error("Missing frame");
+        const childIds = frame.children.map((child) => child.id);
+        next = ungroupEngineV3Node(next, page.id, command.nodeId);
+        inverse = { kind: "node", action: "group", pageId: page.id, nodeIds: childIds, frame };
+      }
+      affectedIds.push(...(command.nodeIds ?? [command.nodeId ?? page.id]));
     } else {
       const page = next.pages.find((item) => item.id === command.pageId); if (!page) return { ok: false, code: "missing-page", message: "Page does not exist", affectedIds: [command.pageId] };
       const id = command.nodeId ?? command.node?.id ?? ""; const target = findNode(page, id); const failure = check(command.precondition, target, revision, id); if (failure) return failure;

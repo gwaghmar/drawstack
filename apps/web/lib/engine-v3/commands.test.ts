@@ -4,6 +4,7 @@ import { ENGINE_V2_SAMPLE } from "../engine-v2/document.ts";
 import { migrateV2ToV3 } from "./migration.ts";
 import { applyEngineV3Command, type EngineV3CommandEnvelope } from "./commands.ts";
 import { serializeEngineV3Document } from "./serialization.ts";
+import { findEngineV3Node } from "./node-operations.ts";
 
 const envelope = (command: EngineV3CommandEnvelope["command"], baseRevision = 0): EngineV3CommandEnvelope => ({ id: "command-1", baseRevision, actor: "test", origin: "local", timestamp: "2026-08-31T00:00:00.000Z", command });
 
@@ -59,4 +60,25 @@ describe("engine-v3 command envelopes", () => {
     if (!restored.ok) return;
     assert.equal(serializeEngineV3Document(restored.document), serializeEngineV3Document(document));
   });
+});
+
+it("uses precise reversible inverses for structural commands", () => {
+  const { document } = migrateV2ToV3(ENGINE_V2_SAMPLE);
+  const pageId = document.pages[0].id;
+  const duplicated = applyEngineV3Command(document, 0, envelope({ kind: "node", action: "duplicate", pageId, nodeId: "title" }));
+  assert.equal(duplicated.ok, true);
+  if (!duplicated.ok) return;
+  assert.equal(duplicated.inverse.command.kind, "node");
+  assert.equal(duplicated.inverse.command.kind === "node" ? duplicated.inverse.command.action : "", "remove");
+  const restored = applyEngineV3Command(duplicated.document, duplicated.revision, duplicated.inverse);
+  assert.equal(restored.ok, true);
+  if (restored.ok) assert.equal(serializeEngineV3Document(restored.document), serializeEngineV3Document(document));
+
+  const grouped = applyEngineV3Command(document, 0, envelope({ kind: "node", action: "group", pageId, nodeIds: ["mrr", "retention"], frame: { id: "metrics-group", name: "Metrics group", type: "frame", layout: { mode: "flex", gap: 0, padding: 0 }, children: [] } }));
+  assert.equal(grouped.ok, true);
+  if (!grouped.ok) return;
+  assert.equal(findEngineV3Node(grouped.document, pageId, "metrics-group")?.node.type, "frame");
+  const ungrouped = applyEngineV3Command(grouped.document, grouped.revision, grouped.inverse);
+  assert.equal(ungrouped.ok, true);
+  if (ungrouped.ok) assert.equal(serializeEngineV3Document(ungrouped.document), serializeEngineV3Document(document));
 });

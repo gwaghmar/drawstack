@@ -389,3 +389,30 @@ test("engine v3 drags a canvas node as one undoable gesture", async ({ page }) =
   await expect(page.getByLabel("V3 node X")).toHaveValue("0");
   await expect(page.getByLabel("V3 node Y")).toHaveValue("0");
 });
+
+test("engine v3 resizes and groups layers through reversible commands", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const before = await title.boundingBox();
+  const handle = page.getByRole("button", { name: "Resize selected node" });
+  const handleBounds = await handle.boundingBox();
+  if (!before || !handleBounds) throw new Error("Resize geometry is unavailable");
+  await page.mouse.move(handleBounds.x + 4, handleBounds.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(handleBounds.x + 64, handleBounds.y + 36, { steps: 4 });
+  await page.mouse.up();
+  const after = await title.boundingBox();
+  expect(after?.width).toBeGreaterThan(before.width);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect.poll(async () => (await title.boundingBox())?.width).toBeCloseTo(before.width, 0);
+
+  await page.getByLabel("Include Report title in group selection").uncheck();
+  await page.getByLabel("Include Monthly revenue in group selection").check();
+  await page.getByLabel("Include Net retention in group selection").check();
+  await page.getByRole("button", { name: "Group", exact: true }).click();
+  await expect(page.getByRole("button", { name: "frame Group", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByRole("button", { name: "metric Monthly revenue", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "metric Net retention", exact: true })).toBeVisible();
+});

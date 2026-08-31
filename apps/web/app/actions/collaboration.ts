@@ -18,6 +18,8 @@ import {
 } from "@/lib/project-access";
 import { ensureUserAndWorkspace } from "@/lib/user-sync";
 import { engineTransactionRecordId, parseEngineTransactionEnvelope, type EngineEditCursor, type EngineTransactionEnvelope, type EngineTransactionRecord } from "@/lib/engine-v2/collaboration";
+import { parseEngineV3CommandEnvelope } from "@/lib/engine-v3/collaboration-envelope";
+import type { EngineV3CommandEnvelope } from "@/lib/engine-v3/commands";
 import { asc, eq, and, gt, or } from "drizzle-orm";
 
 async function getProjectAccess(projectId: string): Promise<{
@@ -330,5 +332,55 @@ export async function pollEngineV2Collaboration(
   } catch (err) {
     console.error("[pollEngineV2Collaboration]", err);
     return { success: false, error: "Failed to load Engine v2 collaboration updates" };
+  }
+}
+
+export type EngineV3CommandRecord = { envelope: EngineV3CommandEnvelope; cursor: EngineEditCursor; userId: string };
+
+export async function submitEngineV3Command(projectId: string, envelope: EngineV3CommandEnvelope): Promise<{ success: true; duplicate: boolean } | { success: false; error: string }> {
+  try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canEditProject(context.access)) return { success: false, error: "Editor access required" };
+    if (!parseEngineV3CommandEnvelope(envelope)) return { success: false, error: "Invalid Engine v3 command" };
+    const recordId = `${projectId}:v3:${envelope.id}`;
+    const inserted = await db.insert(projectEdits).values({
+      id: recordId,
+      projectId,
+      userId: context.userId,
+      operation: "engine-v3-command",
+      operationData: JSON.stringify(envelope),
+      clientId: envelope.actor,
+      lamportTimestamp: envelope.baseRevision,
+    }).onConflictDoNothing({ target: projectEdits.id }).returning({ id: projectEdits.id });
+    return { success: true, duplicate: inserted.length === 0 };
+  } catch (error) {
+    console.error("[submitEngineV3Command]", error);
+    return { success: false, error: "Failed to record Engine v3 command" };
+  }
+}
+
+export async function pollEngineV3Collaboration(projectId: string, after: EngineEditCursor): Promise<{ success: true; records: EngineV3CommandRecord[]; nextCursor: EngineEditCursor; hasMore: boolean } | { success: false; error: string }> {
+  try {
+    const context = await getProjectAccess(projectId);
+    if (!context || !canReadProject(context.access)) return { success: false, error: "Project access required" };
+    const afterDate = new Date(after.createdAt);
+    if (Number.isNaN(afterDate.getTime())) return { success: false, error: "Invalid collaboration cursor" };
+    const rows = await db.select().from(projectEdits).where(and(
+      eq(projectEdits.projectId, projectId),
+      eq(projectEdits.operation, "engine-v3-command"),
+      or(gt(projectEdits.createdAt, afterDate), and(eq(projectEdits.createdAt, afterDate), gt(projectEdits.id, after.id))),
+    )).orderBy(asc(projectEdits.createdAt), asc(projectEdits.id)).limit(201);
+    const page = rows.slice(0, 200);
+    const records = page.flatMap((row): EngineV3CommandRecord[] => {
+      try {
+        const envelope = parseEngineV3CommandEnvelope(JSON.parse(row.operationData));
+        return envelope ? [{ envelope, cursor: { createdAt: row.createdAt.toISOString(), id: row.id }, userId: row.userId }] : [];
+      } catch { return []; }
+    });
+    const last = page.at(-1);
+    return { success: true, records, nextCursor: last ? { createdAt: last.createdAt.toISOString(), id: last.id } : after, hasMore: rows.length > page.length };
+  } catch (error) {
+    console.error("[pollEngineV3Collaboration]", error);
+    return { success: false, error: "Failed to load Engine v3 collaboration updates" };
   }
 }

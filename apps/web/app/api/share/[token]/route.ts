@@ -4,6 +4,18 @@ import { db } from "@/lib/db";
 import { projects, shareLinks } from "@/lib/db/schema";
 import { sha256Hex } from "@/lib/crypto";
 import { rateLimit } from "@/lib/rate-limit";
+import { parseSharedEngineV3Document } from "@/lib/engine-v3/shared-document";
+import { serializeEngineV3Document } from "@/lib/engine-v3/serialization";
+
+function withShareAssetSources(source: string, diagramType: string, token: string): string {
+  const document = parseSharedEngineV3Document(diagramType, source);
+  if (!document) return source;
+  const next = structuredClone(document);
+  for (const asset of Object.values(next.assets)) {
+    asset.source = `/api/share/${encodeURIComponent(token)}/assets/${asset.sha256}`;
+  }
+  return serializeEngineV3Document(next);
+}
 
 export async function GET(
   req: Request,
@@ -38,7 +50,7 @@ export async function GET(
   if (!p) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   return NextResponse.json(
-    { id: p.id, title: p.title, source: p.source, themeId: p.themeId, diagramType: p.diagramType },
+    { id: p.id, title: p.title, source: withShareAssetSources(p.source, p.diagramType, token), themeId: p.themeId, diagramType: p.diagramType },
     {
       headers: {
         "Cache-Control": "no-store",
@@ -47,4 +59,3 @@ export async function GET(
     }
   );
 }
-

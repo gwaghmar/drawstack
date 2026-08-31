@@ -3,8 +3,27 @@ import type { EngineDocumentV3, Page } from "./document.ts";
 import { createEngineV3RenderPlan } from "./render-plan.ts";
 import { serializeEngineV3Document } from "./serialization.ts";
 import { createEngineV3PageView } from "./view-adapter.ts";
+import { portableAssetSource } from "./asset-sharing.ts";
 
 export type EngineV3ExportPayload = EngineV2ExportPayload & { warnings: string[]; pageId?: string };
+
+export async function inlineEngineV3Assets(
+  document: EngineDocumentV3,
+  read: (sha256: string) => Promise<string | null>,
+): Promise<EngineDocumentV3> {
+  const next = structuredClone(document);
+  const referenced = new Set<string>();
+  const visit = (nodes: EngineDocumentV3["pages"][number]["root"]["children"]) => nodes.forEach((node) => { if (node.assetRef) referenced.add(node.assetRef); if (node.type === "frame") visit(node.children); });
+  next.pages.forEach((page) => { if (page.root.assetRef) referenced.add(page.root.assetRef); visit(page.root.children); });
+  for (const id of referenced) {
+    const asset = next.assets[id];
+    if (!asset) throw new Error(`Asset ${id} is unavailable for portable export`);
+    const embedded = await read(id);
+    if (!embedded) throw new Error(`Asset ${id} is unavailable for portable export`);
+    asset.source = portableAssetSource(asset, embedded);
+  }
+  return next;
+}
 
 function stem(name: string): string {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "drawstack";
