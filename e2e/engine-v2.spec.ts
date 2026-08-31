@@ -448,6 +448,20 @@ test("engine v3 supports keyboard zoom shortcuts", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Reset zoom", exact: true })).toHaveText("100%");
 });
 
+test("engine v3 resizes a selected object with modifier arrows", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  await page.getByText("More settings", { exact: true }).click();
+  const width = page.getByLabel("V3 node width");
+  await width.fill("280");
+  await page.getByRole("button", { name: "Select tool", exact: true }).focus();
+  await page.keyboard.press("Control+ArrowRight");
+  await expect(width).toHaveValue("281");
+  await page.keyboard.press("Control+Shift+ArrowLeft");
+  await expect(width).toHaveValue("271");
+});
+
 test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');

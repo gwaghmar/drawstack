@@ -229,6 +229,21 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           return;
         }
       }
+      if (modifier && !event.altKey && activePage && selectedNodeIds.size === 1 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        const nodeId = [...selectedNodeIds][0];
+        const location = findEngineV3Node(document, activePage.id, nodeId);
+        if (location && nodeId !== activePage.root.id && !location.node.locked) {
+          event.preventDefault();
+          const step = event.shiftKey ? 10 : 1;
+          const width = typeof location.node.style?.width === "number" ? location.node.style.width : 240;
+          const height = typeof location.node.style?.minHeight === "number" ? location.node.style.minHeight : 120;
+          const changes = event.key === "ArrowLeft" || event.key === "ArrowRight"
+            ? { style: { ...location.node.style, width: Math.max(24, width + (event.key === "ArrowRight" ? step : -step)) } }
+            : { style: { ...location.node.style, minHeight: Math.max(24, height + (event.key === "ArrowDown" ? step : -step)) } };
+          runCommand({ kind: "node", action: "patch", pageId: activePage.id, nodeId, changes });
+          return;
+        }
+      }
       if (!modifier && (event.key === "Delete" || event.key === "Backspace") && activePage) {
         const removable = [...selectedNodeIds].filter((id) => id !== activePage.root.id);
         if (removable.length) {
