@@ -39,9 +39,15 @@ export async function createShareLink(projectId: string, previewDataUrl?: string
     .limit(1);
 
   if (existing) {
-    // Re-derive the raw token isn't possible (we only store the hash), so we
-    // need to issue a new token for the same project. But we avoid token sprawl
-    // by deleting the old one first so only one active token exists at a time.
+    if (existing.rawToken) {
+      if (preview) {
+        await db.update(shareLinks)
+          .set({ previewDataUrl: preview })
+          .where(eq(shareLinks.id, existing.id));
+      }
+      return existing.rawToken;
+    }
+    // Legacy rows did not retain the raw token, so rotation is unavoidable.
     await db.delete(shareLinks).where(eq(shareLinks.id, existing.id));
   }
 

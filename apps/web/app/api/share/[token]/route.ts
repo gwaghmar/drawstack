@@ -6,14 +6,13 @@ import { sha256Hex } from "@/lib/crypto";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseSharedEngineV3Document } from "@/lib/engine-v3/shared-document";
 import { serializeEngineV3Document } from "@/lib/engine-v3/serialization";
+import { referencedEngineV3AssetIds } from "@/lib/engine-v3/asset-sharing";
 
 function withShareAssetSources(source: string, diagramType: string, token: string): string {
   const document = parseSharedEngineV3Document(diagramType, source);
   if (!document) return source;
   const next = structuredClone(document);
-  for (const asset of Object.values(next.assets)) {
-    asset.source = `/api/share/${encodeURIComponent(token)}/assets/${asset.sha256}`;
-  }
+  for (const id of referencedEngineV3AssetIds(next)) if (next.assets[id]) next.assets[id].source = `/api/share/${encodeURIComponent(token)}/assets/${id}`;
   return serializeEngineV3Document(next);
 }
 
@@ -54,6 +53,7 @@ export async function GET(
     {
       headers: {
         "Cache-Control": "no-store",
+        "Referrer-Policy": "no-referrer",
         "X-Robots-Tag": "noindex, nofollow",
       },
     }

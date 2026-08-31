@@ -7,6 +7,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { parseSharedEngineV3Document } from "@/lib/engine-v3/shared-document";
 import { runtimeAssetStorage } from "@/lib/engine-v3/runtime-asset-storage";
 import type { EngineNode } from "@/lib/engine-v3/document";
+import { isSharedInlineImageMime } from "@/lib/engine-v3/asset-sharing";
 
 const SHA256 = /^[a-f0-9]{64}$/;
 
@@ -41,6 +42,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
 
   const stored = await runtimeAssetStorage().get(record.ownerEmail, sha256);
   if (!stored) return NextResponse.json({ error: "Asset unavailable" }, { status: 404 });
+  if (!isSharedInlineImageMime(stored.asset.mime)) return NextResponse.json({ error: "Asset type unavailable" }, { status: 404 });
   return new NextResponse(stored.content.buffer.slice(stored.content.byteOffset, stored.content.byteOffset + stored.content.byteLength) as ArrayBuffer, {
     headers: {
       "Content-Type": stored.asset.mime,
@@ -48,6 +50,8 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
       "Cache-Control": "private, max-age=300",
       "X-Content-Type-Options": "nosniff",
       "X-Robots-Tag": "noindex, nofollow",
+      "Referrer-Policy": "no-referrer",
+      "Content-Disposition": "inline",
     },
   });
 }
