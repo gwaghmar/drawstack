@@ -559,6 +559,13 @@ test("engine v3 lets users turn snapping off for free placement", async ({ page 
   await expect(page.getByRole("button", { name: "Enable snapping" })).toHaveAttribute("aria-pressed", "false");
 });
 
+test("engine v3 toggles a visible canvas grid", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const grid = page.getByRole("button", { name: "Show canvas grid" });
+  await grid.click();
+  await expect(page.getByRole("button", { name: "Hide canvas grid" })).toHaveAttribute("aria-pressed", "true");
+});
+
 test("engine v3 can focus the canvas by hiding editor panels", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await expect(page.getByLabel("Create tools")).toBeVisible();
