@@ -391,6 +391,9 @@ test("engine v3 draws editable pen paths and connector styles", async ({ page })
   await expect(page.getByLabel("Connector arrow end")).toBeChecked();
   await page.getByRole("button", { name: "Zoom in" }).click();
   await expect(page.getByRole("button", { name: "Reset zoom" })).toHaveText("110%");
+  const pngDownload = page.waitForEvent("download");
+  await page.getByRole("button", { name: "Export active page as PNG" }).click();
+  await expect((await pngDownload).suggestedFilename()).toMatch(/\.png$/);
 });
 
 test("engine v3 creates a bound connector from two selected objects", async ({ page }) => {

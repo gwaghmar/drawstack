@@ -517,7 +517,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       setShareState("error");
     }
   };
-  const download = (payload: EngineV3ExportPayload) => {
+  const download = (payload: Pick<EngineV3ExportPayload, "filename" | "mimeType"> & { contents: string | Blob }) => {
     const url = URL.createObjectURL(new Blob([payload.contents], { type: payload.mimeType }));
     const link = window.document.createElement("a");
     link.href = url;
@@ -525,7 +525,28 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     link.click();
     URL.revokeObjectURL(url);
   };
-  const exportActivePage = async (kind: "svg" | "html" | "tsx") => {
+  const downloadPng = async (svg: EngineV3ExportPayload) => {
+    const source = new Blob([svg.contents], { type: "image/svg+xml" });
+    const url = URL.createObjectURL(source);
+    try {
+      const image = new Image();
+      image.decoding = "async";
+      image.src = url;
+      await image.decode();
+      const canvas = window.document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d");
+      if (!context) throw new Error("PNG export is unavailable in this browser");
+      context.drawImage(image, 0, 0);
+      const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"));
+      if (!blob) throw new Error("PNG export could not be created");
+      download({ ...svg, filename: svg.filename.replace(/\.svg$/i, ".png"), mimeType: "image/png", contents: blob });
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+  };
+  const exportActivePage = async (kind: "svg" | "html" | "tsx" | "png") => {
     try {
       const portable = await inlineEngineV3Assets(document, async (sha256) => {
         const response = await fetch(`/api/engine-v3/assets?sha256=${sha256}`);
@@ -535,8 +556,11 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           const reader = new FileReader(); reader.onload = () => resolve(typeof reader.result === "string" ? reader.result : null); reader.onerror = () => resolve(null); reader.readAsDataURL(blob);
         });
       });
-      const payload = createEngineV3PageExports(portable, kind).find((item) => item.pageId === activePageId);
-      if (payload) download(payload);
+      const payload = createEngineV3PageExports(portable, kind === "png" ? "svg" : kind).find((item) => item.pageId === activePageId);
+      if (payload) {
+        if (kind === "png") await downloadPng(payload);
+        else download(payload);
+      }
       setEditorError(null);
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : "The export could not be created");
@@ -548,7 +572,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     <main className="flex min-h-[680px] flex-col overflow-hidden bg-[#F7F8F4] text-[#15171A]">
       <header className="flex min-h-14 items-center justify-between border-b border-[#D7DBD2] bg-[#F7F8F4] px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3"><button type="button" className="rounded-md p-2 hover:bg-[#E4E7E1] lg:hidden" aria-label="Open layers" onClick={() => setDrawer("layers")}><Layers3 size={16} /></button><div className="truncate text-sm font-semibold">{document.metadata.name}</div><span className="hidden font-mono text-[9px] uppercase tracking-[0.14em] text-[#667067] sm:inline">Engine v3</span>{projectId ? <button type="button" onClick={() => collaboration.status === "offline" ? void collaboration.retry() : undefined} className="rounded px-2 py-1 font-mono text-[9px] uppercase text-[#667067]" aria-label={`Collaboration ${collaboration.status}`}>{collaboration.status === "synced" ? "Live" : collaboration.status === "offline" ? "Offline" : "Syncing"}</button> : null}</div>
-        <div className="flex items-center gap-1"><button type="button" onClick={undo} disabled={!historyState.canUndo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Undo" title="Undo"><Undo2 size={15} /></button><button type="button" onClick={redo} disabled={!historyState.canRedo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Redo" title="Redo"><Redo2 size={15} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={15} /></button><button type="button" onClick={saveDocument} disabled={saveState === "saving" || saveState === "conflict"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Save document" title={saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : saveState === "saved" ? "Saved" : "Save"}><Save size={15} /></button><button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Share document" title={shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}><Share2 size={15} /></button><button type="button" onClick={() => void exportActivePage("svg")} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Export active page as SVG" title="Export active page as SVG"><Download size={15} /></button>{(["html", "tsx"] as const).map((kind) => <button key={kind} type="button" onClick={() => void exportActivePage(kind)} className="hidden rounded-md px-2 py-2 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1] sm:block" aria-label={`Export active page as ${kind.toUpperCase()}`}>{kind}</button>)}<button type="button" onClick={() => download(createEngineV3JsonExport(document))} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold hover:bg-[#E4E7E1]" aria-label="Export document JSON">JSON</button></div>
+        <div className="flex items-center gap-1"><button type="button" onClick={undo} disabled={!historyState.canUndo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Undo" title="Undo"><Undo2 size={15} /></button><button type="button" onClick={redo} disabled={!historyState.canRedo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Redo" title="Redo"><Redo2 size={15} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={15} /></button><button type="button" onClick={saveDocument} disabled={saveState === "saving" || saveState === "conflict"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Save document" title={saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : saveState === "saved" ? "Saved" : "Save"}><Save size={15} /></button><button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Share document" title={shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}><Share2 size={15} /></button><button type="button" onClick={() => void exportActivePage("svg")} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Export active page as SVG" title="Export active page as SVG"><Download size={15} /></button><button type="button" onClick={() => void exportActivePage("png")} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1]" aria-label="Export active page as PNG">PNG</button>{(["html", "tsx"] as const).map((kind) => <button key={kind} type="button" onClick={() => void exportActivePage(kind)} className="hidden rounded-md px-2 py-2 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1] sm:block" aria-label={`Export active page as ${kind.toUpperCase()}`}>{kind}</button>)}<button type="button" onClick={() => download(createEngineV3JsonExport(document))} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold hover:bg-[#E4E7E1]" aria-label="Export document JSON">JSON</button></div>
       </header>
       {collaborationConflicts.length ? <div role="alert" className="flex items-center justify-between border-b border-[#D98A76] bg-[#FFF0EB] px-4 py-2 text-xs text-[#8B2D13]"><span>Concurrent edits touched the same item. Review the current result before saving.</span><button type="button" className="rounded border border-[#D98A76] bg-white px-2 py-1 font-semibold" onClick={() => setCollaborationConflicts([])}>Dismiss</button></div> : null}
       <section className="border-b border-[#D7DBD2] bg-[#15171A] px-4 py-3 text-white" aria-label="AI proposal editor"><form className="mx-auto flex max-w-[1080px] flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); void requestAiProposal(); }}><input aria-label="AI edit prompt" value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder={selectedNodeIds.size ? "Describe an edit to the selected nodes" : "Describe what to create"} disabled={Boolean(aiProposal)} className="min-w-[220px] flex-1 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/50 focus:border-[#B7FF4A] disabled:opacity-50" /><label className="flex items-center gap-2 px-1 text-xs"><input type="checkbox" checked={aiSafeMode} onChange={(event) => setAiSafeMode(event.target.checked)} disabled={Boolean(aiProposal)} /> Safe mode</label><button type="submit" disabled={!aiPrompt.trim() || aiState === "loading" || Boolean(aiProposal)} className="rounded-md bg-[#B7FF4A] px-3 py-2 text-xs font-semibold text-[#15171A] disabled:opacity-40">{aiState === "loading" ? "Thinking…" : "Propose"}</button></form>{aiProposal ? <div className="mx-auto mt-3 flex max-w-[1080px] flex-wrap items-center justify-between gap-3 rounded-md border border-[#B7FF4A]/40 bg-white/10 px-3 py-2 text-xs" role="status" aria-label="AI change proposal"><span><strong>Preview:</strong> {aiProposal.explanation || "Review proposed changes"} ({aiProposal.affectedIds.length} affected)</span><span className="flex gap-2"><button type="button" onClick={applyAiProposal} className="rounded bg-[#B7FF4A] px-3 py-1.5 font-semibold text-[#15171A]">Apply</button><button type="button" onClick={rejectAiProposal} className="rounded border border-white/30 px-3 py-1.5">Reject</button></span></div> : null}</section>
