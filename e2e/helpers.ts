@@ -3,7 +3,7 @@ import type { Page } from "@playwright/test";
 /** Dev-only demo credentials sign-in. Prefer Enter to submit — button click alone may not complete the server action in automated browsers. */
 export async function demoSignIn(page: Page, email: string) {
   await page.goto("/login");
-  const emailInput = page.locator('input[name="email"]');
+  const emailInput = page.getByPlaceholder("dev@example.com");
   await emailInput.fill(email);
   const waitForApp = () => page.waitForURL(/\/app(?:\/|$)/, { timeout: 30_000 });
 

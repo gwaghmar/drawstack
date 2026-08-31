@@ -18,11 +18,10 @@ test("exports a real PDF from the editor", async ({ page }, testInfo) => {
   await devSignIn(page, `pdf-${Date.now()}@example.com`);
   await page.goto("/app/editor");
 
-  // The default editor renders a demo mermaid sequence diagram ("OAuth Login Flow").
   const prompt = page.getByPlaceholder("How should I change the diagram?");
   await expect(prompt).toBeVisible({ timeout: 30_000 });
-  // Wait until the diagram SVG has actually rendered (a participant label appears).
-  await expect(page.getByText("App Server").first()).toBeVisible({ timeout: 20_000 });
+  // Wait until the current freeform Konva canvas has mounted before capturing it.
+  await expect(page.locator(".konvajs-content canvas").first()).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(800);
 
   // Open the export menu and click PDF.

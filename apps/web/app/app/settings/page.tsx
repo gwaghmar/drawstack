@@ -80,8 +80,8 @@ export default async function SettingsPage({
         <section className="rounded-2xl border border-slate-200 bg-white p-6">
           <h2 className="text-lg font-medium">Billing</h2>
           <p className="mt-2 text-sm text-slate-600">
-            Pro unlocks server export (PNG/PDF), batch ZIP, and unlimited AI when using the hosted key.
-            Free tier includes credits for hosted AI or use BYOK above.
+            Pro removes the editor watermark and includes unlimited hosted AI generations.
+            Free tier includes hosted AI credits, or you can use your own provider key above.
           </p>
           <div className="mt-4">
             <a

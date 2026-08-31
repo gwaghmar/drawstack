@@ -237,7 +237,7 @@ test("Engine v2 mixed documents preserve flow, graphs, PNG size, and print DOM",
   const artboardBounds = await page.locator('[data-node-id="root"]').boundingBox();
   expect(artboardBounds).not.toBeNull();
   const downloadPromise = page.waitForEvent("download");
-  await page.getByRole("button", { name: "Export PNG" }).click();
+  await page.getByRole("button", { name: "PNG", exact: true }).first().click();
   const download = await downloadPromise;
   const pngPath = await download.path();
   expect(pngPath).not.toBeNull();

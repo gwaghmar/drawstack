@@ -2,50 +2,25 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { demoSignIn } from "./helpers";
 
-const COMPLEX_FLOW = `flowchart LR
-  subgraph edge["Edge Layer"]
-    U[Users] --> CDN[CDN]
-    CDN --> WAF[WAF]
-    WAF --> GW[API Gateway]
-  end
-  subgraph svc["Services"]
-    GW --> AUTH[Auth]
-    GW --> PROFILE[Profile]
-    GW --> ORDER[Order]
-    GW --> BILL[Billing]
-    GW --> SEARCH[Search]
-  end
-  subgraph data["Data"]
-    PG[(Postgres)]
-    REDIS[(Redis)]
-    ES[(Elasticsearch)]
-    MQ[(Queue)]
-  end
-  AUTH --> REDIS
-  PROFILE --> PG
-  ORDER --> PG
-  BILL --> PG
-  SEARCH --> ES
-  ORDER --> MQ
-  MQ --> BILL
-  MQ --> SEARCH
-  GW -.rate limit.-> ALERT[Alert]
-  ORDER -.timeout.-> RETRY[Retry policy]
-  RETRY --> ORDER`;
+const COMPLEX_FLOW = JSON.stringify({
+  version: 1,
+  shapes: [
+    { id: "users", name: "users", type: "rectangle", x: 80, y: 140, width: 160, height: 70, text: { content: "Users" } },
+    { id: "gateway", name: "gateway", type: "rectangle", x: 330, y: 140, width: 180, height: 70, text: { content: "API Gateway" } },
+    { id: "service", name: "service", type: "rectangle", x: 600, y: 70, width: 180, height: 70, text: { content: "Order Service" } },
+    { id: "database", name: "database", type: "cylinder", x: 600, y: 230, width: 180, height: 90, text: { content: "Postgres" } },
+    { id: "a1", type: "arrow", x: 0, y: 0, start: { shapeId: "users", anchor: "auto" }, end: { shapeId: "gateway", anchor: "auto" }, routing: "orthogonal" },
+    { id: "a2", type: "arrow", x: 0, y: 0, start: { shapeId: "gateway", anchor: "auto" }, end: { shapeId: "service", anchor: "auto" }, routing: "orthogonal" },
+    { id: "a3", type: "arrow", x: 0, y: 0, start: { shapeId: "service", anchor: "auto" }, end: { shapeId: "database", anchor: "auto" }, routing: "orthogonal" },
+  ],
+});
 
 async function openSourcePanel(page: Page) {
-  const sourceToggle = page.locator('button[id^="source-toggle-"]').first();
+  const sourceToggle = page.getByTitle("Toggle Source editor");
   await expect(sourceToggle).toBeVisible();
-  const sourceArea = page.getByPlaceholder(/flowchart LR/i);
+  const sourceArea = page.locator("pre.hl-pre + textarea");
   if (!(await sourceArea.isVisible().catch(() => false))) await sourceToggle.click();
   await expect(sourceArea).toBeVisible();
-}
-
-async function openStylePanel(page: Page) {
-  const styleToggle = page.getByRole("button", { name: /Style/i });
-  await expect(styleToggle).toBeVisible();
-  await styleToggle.click();
-  await expect(page.getByLabel("Theme")).toBeVisible();
 }
 
 async function openExportMenu(page: Page) {
@@ -64,7 +39,7 @@ test.describe("Stress and quality checks", () => {
   test.describe.configure({ mode: "serial" });
   test.setTimeout(120_000);
 
-  test("handles complex technical diagram with multiple theme/preset switches", async ({
+  test("handles a complex technical canvas with presentation switches", async ({
     page,
   }) => {
     await demoSignIn(page, `stress1-${Date.now()}@example.com`);
@@ -73,17 +48,12 @@ test.describe("Stress and quality checks", () => {
     await expect(page).toHaveURL(/\/app\/editor/);
 
     await openSourcePanel(page);
-    const source = page.getByPlaceholder(/flowchart LR/i);
+    const source = page.locator("pre.hl-pre + textarea");
     await source.fill(COMPLEX_FLOW);
-    await expect(
-      page.getByRole("button", { name: /Source/i }).getByText("Error", { exact: true }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("alert").filter({ hasText: /Invalid canvas JSON/i })).toHaveCount(0);
 
-    await openStylePanel(page);
-    await page.getByLabel("Theme").selectOption("stage_pipeline");
-    await page.getByLabel("Theme").selectOption("neon_tech");
-    await page.getByLabel("Theme").selectOption("monochrome");
-    await page.getByLabel("Show grid overlay").check();
+    await page.getByTitle("Switch to dark mode").click();
+    await page.getByTitle("Switch to light mode").click();
 
     await openExportMenu(page);
     const pngD = page.waitForEvent("download");
@@ -103,18 +73,13 @@ test.describe("Stress and quality checks", () => {
     await expect(page).toHaveURL(/\/app\/editor/);
 
     await openSourcePanel(page);
-    const source = page.getByPlaceholder(/flowchart LR/i);
-    await source.fill("not_valid_mermaid_syntax {{{");
-    await expect(
-      page.getByRole("button", { name: /Source/i }).getByText("Error", { exact: true }),
-    ).toBeVisible();
+    const source = page.locator("pre.hl-pre + textarea");
+    await source.fill("not valid json {{{");
+    await expect(page.getByRole("alert").filter({ hasText: /Invalid canvas JSON/i })).toBeVisible();
 
     await page.goto("/app/editor?template=distributed_microservices");
-    await expect(
-      page.getByRole("button", { name: /Source/i }).getByText("Error", { exact: true }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("alert").filter({ hasText: /Invalid canvas JSON/i })).toHaveCount(0);
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expect(page.getByText(/Saved|Unsaved/).first()).toBeVisible();
   });
 });

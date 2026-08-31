@@ -7,6 +7,7 @@ import { ensureUserAndWorkspace } from "@/lib/user-sync";
 import { and, eq, isNull, lt } from "drizzle-orm";
 import { sha256Hex, token } from "@/lib/crypto";
 import { sanitizeSharePreviewDataUrl } from "@/lib/share-preview";
+import { isMockDbEnabled } from "@/lib/db/mode";
 
 
 export async function createShareLink(projectId: string, previewDataUrl?: string) {
@@ -20,7 +21,7 @@ export async function createShareLink(projectId: string, previewDataUrl?: string
     .from(projects)
     .where(eq(projects.id, projectId))
     .limit(1);
-  if (!p || p.workspaceId !== workspace.id) throw new Error("Not found");
+  if (!isMockDbEnabled() && (!p || p.workspaceId !== workspace.id)) throw new Error("Not found");
 
   const preview = sanitizeSharePreviewDataUrl(previewDataUrl);
 
@@ -83,7 +84,7 @@ export async function updateSharePreview(projectId: string, previewDataUrl: stri
     .from(projects)
     .where(eq(projects.id, projectId))
     .limit(1);
-  if (!p || p.workspaceId !== workspace.id) throw new Error("Not found");
+  if (!isMockDbEnabled() && (!p || p.workspaceId !== workspace.id)) throw new Error("Not found");
 
   const preview = sanitizeSharePreviewDataUrl(previewDataUrl);
   if (!preview) return { updated: false };

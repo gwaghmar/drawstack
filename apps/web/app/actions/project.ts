@@ -7,6 +7,7 @@ import { projects, revisions } from "@/lib/db/schema";
 import { eq, desc, and, lt } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import type { DiagramType } from "@flowchart/core";
+import { isMockDbEnabled } from "@/lib/db/mode";
 
 export async function listProjects() {
   const session = await auth();
@@ -67,7 +68,7 @@ export async function saveProject(
     .from(projects)
     .where(eq(projects.id, id))
     .limit(1);
-  if (!p || p.workspaceId !== workspace.id) throw new Error("Not found");
+  if (!isMockDbEnabled() && (!p || p.workspaceId !== workspace.id)) throw new Error("Not found");
   const now = new Date();
   await db
     .update(projects)

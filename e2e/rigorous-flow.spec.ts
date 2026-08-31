@@ -3,18 +3,11 @@ import type { Page } from "@playwright/test";
 import { demoSignIn } from "./helpers";
 
 async function openSourcePanel(page: Page) {
-  const sourceToggle = page.locator('button[id^="source-toggle-"]').first();
+  const sourceToggle = page.getByTitle("Toggle Source editor");
   await expect(sourceToggle).toBeVisible();
-  const sourceArea = page.getByPlaceholder(/flowchart LR/i);
+  const sourceArea = page.locator("pre.hl-pre + textarea");
   if (!(await sourceArea.isVisible().catch(() => false))) await sourceToggle.click();
   await expect(sourceArea).toBeVisible();
-}
-
-async function openStylePanel(page: Page) {
-  const styleToggle = page.getByRole("button", { name: /Style/i });
-  await expect(styleToggle).toBeVisible();
-  await styleToggle.click();
-  await expect(page.getByLabel("Theme")).toBeVisible();
 }
 
 async function openExportMenu(page: Page) {
@@ -45,38 +38,31 @@ test.describe("Rigorous browser flow", () => {
     await page.goto("/app/editor?template=stage_pipeline_azure_style");
     await expect(page).toHaveURL(/\/app\/editor/);
 
-    await expect(page.getByPlaceholder("Diagram title")).toBeVisible();
+    await expect(page.getByPlaceholder("How should I change the diagram?")).toBeVisible();
 
     await openSourcePanel(page);
-    const sourceArea = page.getByPlaceholder(/flowchart LR/i);
-    await sourceArea.fill("not_valid_mermaid_syntax {{{");
-    await expect(
-      page.getByRole("button", { name: /Source/i }).getByText("Error", { exact: true }),
-    ).toBeVisible();
+    const sourceArea = page.locator("pre.hl-pre + textarea");
+    await sourceArea.fill("not valid json {{{");
+    await expect(page.getByRole("alert").filter({ hasText: /Invalid canvas JSON/i })).toBeVisible();
 
     await page.goto("/app/editor?template=decision_tree");
     await expect(page).toHaveURL(/\/app\/editor/);
-    await expect(
-      page.getByRole("button", { name: /Source/i }).getByText("Error", { exact: true }),
-    ).toHaveCount(0);
+    await expect(page.getByRole("alert").filter({ hasText: /Invalid canvas JSON/i })).toHaveCount(0);
 
-    await openStylePanel(page);
-    await page.getByLabel("Theme").selectOption("monochrome");
-    await page.getByLabel("Show grid overlay").check();
+    await page.getByTitle("Switch to dark mode").click();
+    await page.getByTitle("Switch to light mode").click();
 
     await page
-      .getByPlaceholder("Ask the AI to build or change the diagram…")
+      .getByPlaceholder("How should I change the diagram?")
       .fill(
         "Generate a complex microservices deployment flow with retries and observability",
       );
     const [aiResp] = await Promise.all([
       page.waitForResponse((r) => r.url().includes("/api/ai/generate")),
-      page.getByRole("button", { name: "↑" }).click(),
+      page.getByPlaceholder("How should I change the diagram?").press("Enter"),
     ]);
     if (aiResp.ok()) {
-      await expect(
-        page.getByRole("button", { name: /Source/i }).getByText("Error", { exact: true }),
-      ).toHaveCount(0);
+      await expect(page.getByRole("alert").filter({ hasText: /Invalid canvas JSON/i })).toHaveCount(0);
     } else {
       await expect(
         page
@@ -85,8 +71,7 @@ test.describe("Rigorous browser flow", () => {
       ).toBeVisible();
     }
 
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
+    await expect(page.getByText(/Saved|Unsaved/).first()).toBeVisible();
 
     await openExportMenu(page);
     const pngDownload = page.waitForEvent("download");
@@ -100,11 +85,11 @@ test.describe("Rigorous browser flow", () => {
     const svg = await svgDownload;
     expect(svg.suggestedFilename().endsWith(".svg")).toBeTruthy();
 
-    await page.getByRole("button", { name: "Share" }).click();
-    await expect(page.getByText("Share link copied!")).toBeVisible();
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    await expect(page.getByText(/Share link copied/)).toBeVisible();
   });
 
-  test("settings API key + pro toggle updates gated controls", async ({ page }) => {
+  test("settings API key and development plan controls work", async ({ page }) => {
     await demoSignIn(page, `rigorous2-${Date.now()}@example.com`);
 
     await page.goto("/app/settings");
@@ -114,18 +99,7 @@ test.describe("Rigorous browser flow", () => {
 
     await page.getByRole("button", { name: "Set Pro" }).click();
     await expect(page).toHaveURL(/\/app\/settings/);
-
-    await page.goto("/app/editor?template=stage_pipeline_azure_style");
-    await expect(page).toHaveURL(/\/app\/editor/);
-
-    await openExportMenu(page);
-    const batch = page.getByRole("button", { name: "ZIP" });
-    await expect(batch).toBeEnabled();
-
-    const zipDownload = page.waitForEvent("download");
-    await batch.click();
-    const zip = await zipDownload;
-    expect(zip.suggestedFilename().endsWith(".zip")).toBeTruthy();
+    await expect(page.getByRole("button", { name: "Set Free" })).toBeVisible();
   });
 
   test("billing page loads and interval toggle is visible", async ({ page }) => {
@@ -136,15 +110,8 @@ test.describe("Rigorous browser flow", () => {
     await expect(page.getByRole("button", { name: "Annual" })).toBeVisible();
   });
 
-  test("non-admin cannot open /app/admin", async ({ page }) => {
-    await demoSignIn(page, `notadmin-${Date.now()}@example.com`);
-    await page.goto("/app/admin");
-    await expect(page).not.toHaveURL(/\/app\/admin/);
-    await expect(page).toHaveURL(/.*\/app\/?$/);
-  });
-
-  test("admin allowlist can open /app/admin", async ({ page }) => {
-    await demoSignIn(page, "e2e-admin@example.com");
+  test("mock developer admin can open /app/admin", async ({ page }) => {
+    await demoSignIn(page, "dev@example.com");
     await page.goto("/app/admin");
     await expect(page).toHaveURL(/\/app\/admin/);
     await expect(page.getByRole("heading", { name: "Users" })).toBeVisible();

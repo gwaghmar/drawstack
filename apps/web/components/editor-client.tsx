@@ -205,6 +205,11 @@ export function EditorClient({
   const [backgroundPattern, setBackgroundPattern] = useState<"none" | "dots" | "grid" | "lines">(
     (parsedInitial.ui.backgroundPattern as "none" | "dots" | "grid" | "lines") ?? "none"
   );
+
+  useEffect(() => {
+    const { errors } = parseFreeformSource(source);
+    setParseError(errors.length > 0 ? errors.join("; ") : null);
+  }, [source]);
   /** Raw source hidden by default; power users expand. Opens automatically on parse errors. */
   const [sourceExpanded, setSourceExpanded] = useState(true);
   /** Tools / chat column — hide for focus on diagram (persisted). */
@@ -982,6 +987,21 @@ export function EditorClient({
       img.src = pngDataUrl;
     });
 
+  const dataUrlToBlob = (dataUrl: string): Blob => {
+    const comma = dataUrl.indexOf(",");
+    if (comma < 0) throw new Error("Invalid data URL");
+    const header = dataUrl.slice(0, comma);
+    const payload = dataUrl.slice(comma + 1);
+    const mime = header.match(/^data:([^;,]+)/)?.[1] ?? "application/octet-stream";
+    if (!header.includes(";base64")) {
+      return new Blob([decodeURIComponent(payload)], { type: mime });
+    }
+    const binary = atob(payload);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  };
+
   const capturePngDataUrl = useCallback(async (): Promise<string | null> => {
     const node = frameRef.current;
     if (!node) return null;
@@ -1052,10 +1072,10 @@ export function EditorClient({
       if (!node) return;
       if (format === "png") {
         const du = await toPng(node, { pixelRatio: pngScale, filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
-        downloadBlob(await (await fetch(du)).blob(), `${fn}.png`);
+        downloadBlob(dataUrlToBlob(du), `${fn}.png`);
       } else if (format === "svg") {
         const s = await toSvg(node, { filter: (n) => !(n as HTMLElement).hasAttribute?.("data-no-export") });
-        downloadBlob(await (await fetch(s)).blob(), `${fn}.svg`);
+        downloadBlob(dataUrlToBlob(s), `${fn}.svg`);
       }
     } finally {
       setIsExporting(false);
@@ -2140,6 +2160,11 @@ export function EditorClient({
                   </button>
                 </div>
               </div>
+              {parseError && (
+                <div role="alert" className="border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700 dark:border-red-900 dark:bg-red-950/60 dark:text-red-200">
+                  Invalid canvas JSON: {parseError}
+                </div>
+              )}
               {searchOpen && (
                 <div className="border-b border-slate-100 bg-slate-50/50 px-3 py-2 space-y-1.5 dark:border-slate-800 dark:bg-slate-800/50">
                   <div className="flex items-center gap-1.5">

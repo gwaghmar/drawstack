@@ -55,7 +55,7 @@ export default async function BillingPage({
         </div>
         {plan === "free" && (
           <p className="mt-3 text-sm text-slate-600">
-            Upgrade to Pro to unlock server-side export (PNG/SVG/PDF), batch ZIP, unlimited AI generations, and higher API rate limits.
+            Upgrade to Pro for unlimited hosted AI generations and watermark-free diagrams.
           </p>
         )}
         {plan === "pro" && hasStripeCustomer && (
@@ -77,10 +77,7 @@ export default async function BillingPage({
           <h2 className="text-base font-medium text-slate-900">Pro features included</h2>
           <ul className="mt-3 space-y-2 text-sm text-slate-600">
             {[
-              "Server-side PNG, SVG & PDF export",
-              "Batch ZIP with social presets",
               "Unlimited AI generations",
-              "Higher API rate limits",
               "No watermarks",
             ].map((feature) => (
               <li key={feature} className="flex items-center gap-2">
@@ -94,5 +91,4 @@ export default async function BillingPage({
     </main>
   );
 }
-
 
