@@ -160,6 +160,19 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
+      if (!modifier && !event.altKey && event.key === "Tab" && activePage && selectedNode && selectedNodeIds.size === 1) {
+        const target = event.target as HTMLElement | null;
+        if (target?.tagName === "BODY" || target?.closest("[data-node-id]")) {
+          const parent = selectedLocation?.parentId ? findEngineV3Node(document, activePage.id, selectedLocation.parentId)?.node : activePage.root;
+          if (parent?.type === "frame" && parent.children.length > 1) {
+            event.preventDefault();
+            const index = selectedLocation?.index ?? 0;
+            const nextIndex = (index + (event.shiftKey ? -1 : 1) + parent.children.length) % parent.children.length;
+            selectNode(parent.children[nextIndex].id);
+            return;
+          }
+        }
+      }
       if (!modifier && !event.altKey && (event.key === "+" || event.key === "=" || event.key === "-" || event.key === "0")) {
         event.preventDefault();
         if (event.key === "+" || event.key === "=") setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10));

@@ -448,6 +448,18 @@ test("engine v3 supports keyboard zoom shortcuts", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Reset zoom", exact: true })).toHaveText("100%");
 });
 
+test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  await title.focus();
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
+  await page.keyboard.press("Tab");
+  await expect(page.getByLabel("V3 node name")).not.toHaveValue("Report title");
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
+});
+
 test("engine v3 creates a bound connector from two selected objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
