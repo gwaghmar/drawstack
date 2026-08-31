@@ -5,7 +5,7 @@ import { projects, shareLinks, users, workspaces } from "@/lib/db/schema";
 import { sha256Hex } from "@/lib/crypto";
 import { rateLimit } from "@/lib/rate-limit";
 import { parseSharedEngineV3Document } from "@/lib/engine-v3/shared-document";
-import { createVercelBlobAssetStorage } from "@/lib/engine-v3/asset-storage";
+import { runtimeAssetStorage } from "@/lib/engine-v3/runtime-asset-storage";
 import type { EngineNode } from "@/lib/engine-v3/document";
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -39,7 +39,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ toke
   });
   if (!referenced) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
-  const stored = await createVercelBlobAssetStorage().get(record.ownerEmail, sha256);
+  const stored = await runtimeAssetStorage().get(record.ownerEmail, sha256);
   if (!stored) return NextResponse.json({ error: "Asset unavailable" }, { status: 404 });
   return new NextResponse(stored.content.buffer.slice(stored.content.byteOffset, stored.content.byteOffset + stored.content.byteLength) as ArrayBuffer, {
     headers: {

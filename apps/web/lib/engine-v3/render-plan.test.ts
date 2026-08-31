@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ENGINE_V2_SAMPLE } from "../engine-v2/document.ts";
 import { migrateV2ToV3 } from "./migration.ts";
 import { createEngineV3RenderPlan } from "./render-plan.ts";
+import { canvasAccessibilityLabel } from "./snapping.ts";
 
 describe("engine v3 resolved render plan", () => {
   it("resolves token aliases, inherited geometry, visibility, and assets deterministically", () => {
@@ -35,4 +36,18 @@ describe("engine v3 resolved render plan", () => {
     document.pages[0].background = "$a";
     assert.throws(() => createEngineV3RenderPlan(document), /cycle/);
   });
+});
+
+it("compiles and resolves large documents deterministically", () => {
+  const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+  const root = document.pages[0].root;
+  for (let index = 0; index < 200; index += 1) root.children.push({ id: `stress-${index}`, name: `Stress ${index}`, type: "text", content: String(index), variant: "caption" });
+  const first = createEngineV3RenderPlan(document);
+  const second = createEngineV3RenderPlan(document);
+  assert.equal(first.pages[0].records.length, second.pages[0].records.length);
+  assert.deepEqual(first, second);
+});
+
+it("exposes a useful keyboard and screen-reader canvas label", () => {
+  assert.equal(canvasAccessibilityLabel("Brief", 3, "Overview"), "Brief on page Overview, editable canvas with 3 visual elements. Use the layer tree to select an element.");
 });
