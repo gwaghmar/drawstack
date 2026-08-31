@@ -441,6 +441,7 @@ test("engine v3 edits artboard dimensions and background", async ({ page }) => {
 
 test("engine v3 allows keyboard selection of canvas objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
+  await expect(page.locator('div[role="region"][aria-label="Editable canvas"]')).toHaveAttribute("tabindex", "0");
   const status = page.locator('[data-node-id="status"]');
   await status.focus();
   await page.keyboard.press("Enter");
