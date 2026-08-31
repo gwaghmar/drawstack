@@ -216,8 +216,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const visit = (node: EngineNode) => { if (node.type === "path") paths.push(node); if (node.type === "frame") node.children.forEach(visit); };
     visit(page.root);
     return paths.filter((node): node is Extract<EngineNode, { type: "path" }> => node.type === "path" && (node.startNodeId === movedNodeId || node.endNodeId === movedNodeId)).map((path) => {
-      const points = path.points.map((point, index) => (path.startNodeId === movedNodeId && index === 0) || (path.endNodeId === movedNodeId && index === path.points.length - 1) ? { x: point.x + dx, y: point.y + dy } : point);
-      return { kind: "node", action: "patch", pageId, nodeId: path.id, changes: { points } };
+      const movedPoints = path.points.map((point, index) => (path.startNodeId === movedNodeId && index === 0) || (path.endNodeId === movedNodeId && index === path.points.length - 1) ? { x: point.x + dx, y: point.y + dy } : point);
+      const minX = Math.min(...movedPoints.map((point) => point.x)); const minY = Math.min(...movedPoints.map((point) => point.y));
+      const points = movedPoints.map((point) => ({ x: point.x - minX, y: point.y - minY }));
+      return { kind: "node", action: "patch", pageId, nodeId: path.id, changes: { points, transform: { ...(path.transform ?? {}), x: (path.transform?.x ?? 0) + minX, y: (path.transform?.y ?? 0) + minY } } };
     });
   };
   const beginNodeDrag = (nodeId: string, event: React.PointerEvent<HTMLElement>) => {
@@ -464,7 +466,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     if (selected.length !== 2) return;
     const center = (node: EngineNode) => ({ x: (node.transform?.x ?? 0) + (typeof node.style?.width === "number" ? node.style.width : 120) / 2, y: (node.transform?.y ?? 0) + (node.style?.minHeight ?? 60) / 2 });
     const start = center(selected[0]); const end = center(selected[1]); const id = `connector-${crypto.randomUUID()}`;
-    const node: EngineNode = { id, name: "Connector", type: "path", points: [{ x: 0, y: 0 }, { x: end.x - start.x, y: end.y - start.y }], lineStyle: "straight", arrowEnd: true, startNodeId: selected[0].id, endNodeId: selected[1].id, transform: { x: start.x, y: start.y }, style: { width: Math.max(Math.abs(end.x - start.x), 1), minHeight: Math.max(Math.abs(end.y - start.y), 24), color: "$cobalt", borderWidth: 3 } } as EngineNode;
+    const minX = Math.min(start.x, end.x); const minY = Math.min(start.y, end.y);
+    const node: EngineNode = { id, name: "Connector", type: "path", points: [{ x: start.x - minX, y: start.y - minY }, { x: end.x - minX, y: end.y - minY }], lineStyle: "straight", arrowEnd: true, startNodeId: selected[0].id, endNodeId: selected[1].id, transform: { x: minX, y: minY }, style: { width: Math.max(Math.abs(end.x - start.x), 1), minHeight: Math.max(Math.abs(end.y - start.y), 24), color: "$cobalt", borderWidth: 3 } } as EngineNode;
     if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node })) selectNode(id);
   };
   const saveDocument = async () => {
