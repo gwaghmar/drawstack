@@ -123,6 +123,25 @@ test("engine v2 multi-selects and edits sibling nodes in layout flow", async ({ 
   await expect(page.getByText("3 nodes selected", { exact: true })).toBeVisible();
 });
 
+test("engine v2 groups and ungroups sibling nodes losslessly", async ({ page }) => {
+  await page.goto("/app/engine-v2");
+  await page.locator('[data-tree-node-id="mrr"]').click();
+  await page.locator('[data-tree-node-id="retention"]').click({ modifiers: ["Shift"] });
+  await page.getByRole("button", { name: "Group selected nodes", exact: true }).click();
+
+  const group = page.locator('[data-tree-node-id="group"]');
+  await expect(group).toBeVisible();
+  const groupItem = group.locator("..");
+  await expect(groupItem.locator('[data-tree-node-id="mrr"]')).toBeVisible();
+  await expect(groupItem.locator('[data-tree-node-id="retention"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "Ungroup selected frame", exact: true }).click();
+  await expect(group).toHaveCount(0);
+  await expect(page.getByText("2 nodes selected", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator('[data-tree-node-id="group"]')).toBeVisible();
+});
+
 test("engine v2 inserts deterministic nodes and pastes fresh copies", async ({ page }) => {
   await page.goto("/app/engine-v2");
 

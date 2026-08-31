@@ -27,6 +27,7 @@ import { alignNodes, copyNodes, distributeNodes, duplicateNodes, findParent, ins
 import { createEngineV2JsonExport, createEngineV2PrintHtmlExport, createEngineV2ReactTsxExport, createEngineV2SvgExport, type EngineV2ExportPayload } from "@/lib/engine-v2/export";
 import { applyEngineDocumentTransaction, createEngineDocumentTransaction, type EngineTransactionOrigin } from "@/lib/engine-v2/transactions";
 import { approveEngineTransactionProposal, commitEngineTransactionProposal, createEngineTransactionProposal, rejectEngineTransactionProposal, type EngineTransactionProposal } from "@/lib/engine-v2/transaction-kernel";
+import { groupNodes, ungroupNode } from "@/lib/engine-v2/grouping";
 import { useEngineV2Collaboration } from "@/lib/hooks/use-engine-v2-collaboration";
 
 const EMPTY_SELECTION = new Set<string>();
@@ -784,6 +785,25 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
     });
   };
 
+  const groupSelection = () => {
+    const groupId = uniqueNodeId(document.children, "group");
+    const children = groupNodes(document.children, selectedIds, groupId);
+    if (children === document.children) return;
+    commitDocument({ ...document, children });
+    replaceSelection([groupId]);
+    focusTreeNode(groupId);
+  };
+
+  const ungroupSelection = () => {
+    if (!selected || selected.type !== "frame") return;
+    const childIds = selected.children.map((node) => node.id);
+    const children = ungroupNode(document.children, selected.id);
+    if (children === document.children) return;
+    commitDocument({ ...document, children });
+    replaceSelection(childIds);
+    if (childIds.length) focusTreeNode(childIds.at(-1)!);
+  };
+
   const selectionSharesFrame = useMemo(() => {
     if (selectedIds.length < 2) return false;
     const locations = selectedIds.map((id) => findParent(document.children, id));
@@ -1133,6 +1153,7 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
             {selectedIds.length > 1 ? (
               <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
                 <legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Align and distribute</legend>
+                <button type="button" onClick={groupSelection} className="mb-2 flex w-full items-center justify-center gap-2 rounded-md border border-[#D7DBD2] px-2 py-2 text-[10px] font-semibold hover:border-[#3157F6]" aria-label="Group selected nodes"><Layers3 size={13} />Group selection</button>
                 <div className="grid grid-cols-4 gap-1.5">
                   {(["start", "center", "end", "stretch"] as const).map((alignment) => (
                     <button key={alignment} type="button" disabled={!selectionSharesFrame} onClick={() => alignSelection(alignment)} className="rounded-md border border-[#D7DBD2] px-1.5 py-2 text-[10px] capitalize hover:border-[#3157F6] disabled:cursor-not-allowed disabled:opacity-35" aria-label={`Align selected nodes ${alignment}`}>{alignment}</button>
@@ -1145,6 +1166,10 @@ export function EngineCanvas({ initialDocument = ENGINE_V2_SAMPLE, initialProjec
                 </div>
                 {!selectionSharesFrame ? <p className="mt-2 text-[10px] leading-4 text-[#9A531C]">Choose nodes inside the same frame to align or distribute them.</p> : null}
               </fieldset>
+            ) : null}
+
+            {selectedIds.length === 1 && selected?.type === "frame" && selected.id !== document.children[0]?.id ? (
+              <button type="button" onClick={ungroupSelection} disabled={selected.locked} className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#D7DBD2] bg-white p-2.5 text-xs font-semibold hover:border-[#3157F6] disabled:cursor-not-allowed disabled:opacity-35" aria-label="Ungroup selected frame"><Layers3 size={14} />Ungroup frame</button>
             ) : null}
 
             <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3">
