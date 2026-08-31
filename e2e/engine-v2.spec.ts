@@ -618,6 +618,16 @@ test("engine v3 applies text spacing controls", async ({ page }) => {
   await expect(page.locator('[data-node-id="title"]')).toHaveCSS("letter-spacing", "2px");
 });
 
+test("engine v3 changes the selected text font family", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const family = page.getByLabel("Text font family");
+  await family.selectOption("Georgia, serif");
+  await expect(family).toHaveValue("Georgia, serif");
+  await expect(title).toHaveCSS("font-family", /Georgia/);
+});
+
 test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
