@@ -382,6 +382,17 @@ test("engine v3 exposes quick actions beside a selected object", async ({ page }
   await expect(page.getByRole("button", { name: "Quick delete selected" })).toBeVisible();
 });
 
+test("engine v3 adds editable filled vector shapes", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const before = await page.locator('[data-node-type="path"]').count();
+  await page.getByLabel("Add shape").selectOption("star");
+  await expect(page.locator('[data-node-type="path"]')).toHaveCount(before + 1);
+  const star = page.locator('[data-node-type="path"]').last();
+  await star.click();
+  await expect(page.getByRole("toolbar", { name: "Quick object actions" })).toBeVisible();
+  await expect(star.locator("path")).toHaveAttribute("d", /Z$/);
+});
+
 test("engine v3 allows keyboard selection of canvas objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const status = page.locator('[data-node-id="status"]');

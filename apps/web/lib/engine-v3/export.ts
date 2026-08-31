@@ -119,7 +119,8 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
       const markerId = `path-arrow-${record.id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
       const marker = source.arrowEnd === true ? ` marker-end="url(#${markerId})"` : "";
       const defs = source.arrowEnd === true ? `<defs><marker id="${markerId}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="${textColor(record)}"/></marker></defs>` : "";
-      return `<g data-node-id="${record.id}" transform="${transform}"${opacity}>${defs}<path d="${lineStyle}" fill="none" stroke="${textColor(record)}" stroke-width="${Number(record.style?.borderWidth ?? 3)}" stroke-linecap="round" stroke-linejoin="round"${marker}/></g>`;
+      const closed = source.closed === true;
+      return `<g data-node-id="${record.id}" transform="${transform}"${opacity}>${defs}<path d="${closed ? `${lineStyle} Z` : lineStyle}" fill="${closed ? fill(record) : "none"}" stroke="${stroke(record) === "#D7DBD2" ? textColor(record) : stroke(record)}" stroke-width="${Number(record.style?.borderWidth ?? 3)}" stroke-linecap="round" stroke-linejoin="round"${marker}/></g>`;
     }
     const graphic = record.type === "graph" ? graphSvg(record.node as never, view.tokens as never) : chartSvg(record.node as never, view.tokens as never);
     return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><rect width="${width}" height="${height}" rx="14" fill="${fill(record)}" stroke="${stroke(record)}"/><text x="20" y="28" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="15" font-weight="650" fill="#15171A">${String(source.title ?? "").replace(/[&<>]/g, "")}</text><g transform="translate(0 40)">${graphic.replace(/^<svg[^>]*>|<\/svg>$/g, "")}</g></g>`;

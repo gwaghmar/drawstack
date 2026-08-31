@@ -585,11 +585,14 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     commands.push({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node: { id: nodeId, name: "Image", type: "image", assetRef: asset.sha256, alt: "Uploaded image", style: { width: Math.min(asset.width ?? 420, 720) } } });
     if (runCommand({ kind: "batch", commands })) selectNode(nodeId);
   };
-  const addCanvasNode = (kind: "text" | "card" | "frame" | "circle" | "line" | "arrow") => {
+  const addCanvasNode = (kind: "text" | "card" | "frame" | "circle" | "line" | "arrow" | "triangle" | "diamond" | "star") => {
     if (!activePage) return;
     const id = `${kind}-${crypto.randomUUID()}`;
     const offset = 72 + activePage.root.children.length * 12;
-    const node: EngineNode = kind === "text"
+    const shapePoints = kind === "triangle" ? [{ x: 110, y: 0 }, { x: 220, y: 190 }, { x: 0, y: 190 }] : kind === "diamond" ? [{ x: 110, y: 0 }, { x: 220, y: 110 }, { x: 110, y: 220 }, { x: 0, y: 110 }] : [{ x: 110, y: 0 }, { x: 136, y: 76 }, { x: 210, y: 76 }, { x: 150, y: 122 }, { x: 174, y: 198 }, { x: 110, y: 152 }, { x: 46, y: 198 }, { x: 70, y: 122 }, { x: 10, y: 76 }, { x: 84, y: 76 }];
+    const node: EngineNode = ["triangle", "diamond", "star"].includes(kind)
+      ? { id, name: kind[0].toUpperCase() + kind.slice(1), type: "path", points: shapePoints, closed: true, lineStyle: "straight", transform: { x: offset, y: offset }, style: { width: kind === "star" ? 220 : 220, minHeight: kind === "triangle" ? 190 : 220, background: "$lime", borderColor: "$ink", color: "$ink", borderWidth: 2 } }
+      : kind === "text"
       ? { id, name: "Text", type: "text", content: "Double-click to edit", variant: "heading", transform: { x: offset, y: offset }, style: { width: 280, color: "$ink" } }
       : kind === "arrow"
         ? { id, name: "Arrow", type: "path", points: [{ x: 0, y: 0 }, { x: 120, y: 0 }], lineStyle: "straight", arrowEnd: true, transform: { x: offset, y: offset }, style: { width: 120, minHeight: 24, color: "$cobalt", borderWidth: 3 } }
@@ -920,6 +923,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <button type="button" onClick={() => addCanvasNode("card")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add card"><Square size={17} /><span>Card</span></button>
           <button type="button" onClick={() => addCanvasNode("frame")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add frame"><Frame size={17} /><span>Frame</span></button>
           <button type="button" onClick={() => addCanvasNode("circle")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add circle"><Circle size={17} /><span>Circle</span></button>
+          <label className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" title="Add vector shape"><select aria-label="Add shape" defaultValue="" onChange={(event) => { if (event.target.value) addCanvasNode(event.target.value as "triangle" | "diamond" | "star"); event.currentTarget.value = ""; }} className="h-6 w-8 cursor-pointer rounded border border-[#C8CEC4] bg-white text-[9px]"><option value="">◇</option><option value="triangle">Triangle</option><option value="diamond">Diamond</option><option value="star">Star</option></select><span>Shape</span></label>
           <button type="button" onClick={() => addCanvasNode("line")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add line"><Minus size={17} /><span>Line</span></button>
           <button type="button" onClick={() => addCanvasNode("arrow")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add arrow"><ArrowUpRight size={17} /><span>Arrow</span></button>
           <button type="button" onClick={() => assetInputRef.current?.click()} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add image"><ImageIcon size={17} /><span>Image</span></button>
