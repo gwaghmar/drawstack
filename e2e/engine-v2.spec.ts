@@ -364,6 +364,32 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await expect(title).toHaveText("Direct canvas edit");
 });
 
+test("engine v3 previews, rejects, applies, and undoes an AI proposal", async ({ page }) => {
+  await page.route("**/api/ai/engine-v3", async (route) => {
+    const request = route.request().postDataJSON() as { document: Record<string, unknown>; revision: number };
+    const preview = structuredClone(request.document) as { pages: Array<{ id: string; root: { children: Array<Record<string, unknown>> } }> };
+    const patch = (items: Array<Record<string, unknown>>) => items.map((item) => item.id === "title" ? { ...item, content: "AI preview title" } : item.type === "frame" ? { ...item, children: patch(item.children as Array<Record<string, unknown>>) } : item);
+    preview.pages[0].root.children = patch(preview.pages[0].root.children);
+    const command = { kind: "batch", commands: [{ kind: "node", action: "patch", pageId: preview.pages[0].id, nodeId: "title", changes: { content: "AI preview title" } }] };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ proposal: { envelope: { id: "ai-test", baseRevision: request.revision, actor: "agent", origin: "ai", timestamp: "2026-08-31T00:00:00.000Z", command }, preview, affectedIds: ["title"], explanation: "Updated the selected title" } }) });
+  });
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "text Report title", exact: true }).click();
+  const title = page.locator('[data-node-id="title"]');
+  const original = await title.textContent();
+  await page.getByLabel("AI edit prompt").fill("Make the title clearer");
+  await page.getByRole("button", { name: "Propose", exact: true }).click();
+  await expect(page.getByRole("status", { name: "AI change proposal" })).toBeVisible();
+  await expect(title).toHaveText("AI preview title");
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(title).toHaveText(original ?? "");
+  await page.getByRole("button", { name: "Propose", exact: true }).click();
+  await page.getByRole("button", { name: "Apply", exact: true }).click();
+  await expect(title).toHaveText("AI preview title");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(title).toHaveText(original ?? "");
+});
+
 test("engine v3 uploads and places a persistent image asset", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.getByLabel("Upload image asset").setInputFiles("apps/web/public/icons/cloud/aws/aws-s3.png");

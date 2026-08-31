@@ -57,6 +57,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
   const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
   const [editorError, setEditorError] = useState<string | null>(null);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiSafeMode, setAiSafeMode] = useState(true);
+  const [aiProposal, setAiProposal] = useState<{ envelope: { command: EngineV3Command }; preview: EngineDocumentV3; affectedIds: string[]; explanation: string } | null>(null);
+  const [aiState, setAiState] = useState<"idle" | "loading" | "error">("idle");
   const [assets, setAssets] = useState<StoredAsset[]>([]);
   const [assetState, setAssetState] = useState<"loading" | "ready" | "uploading" | "unavailable" | "error">("loading");
   const [assetError, setAssetError] = useState<string | null>(null);
@@ -97,12 +101,12 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     if (conflicts.length) setCollaborationConflicts((current) => [...current, ...conflicts].slice(-20));
     acceptHistory(state);
   });
-  const runCommand = (command: EngineV3Command) => {
+  const runCommand = (command: EngineV3Command, origin: "local" | "ai" = "local") => {
     try {
       const before = historyRef.current!.snapshot();
       const id = crypto.randomUUID();
-      acceptHistory(historyRef.current!.apply(command, "local", collaborationActorRef.current, id));
-      collaboration.publish({ id, baseRevision: before.revision, actor: collaborationActorRef.current, origin: "local", timestamp: new Date().toISOString(), command });
+      acceptHistory(historyRef.current!.apply(command, origin, collaborationActorRef.current, id));
+      collaboration.publish({ id, baseRevision: before.revision, actor: collaborationActorRef.current, origin, timestamp: new Date().toISOString(), command });
       setEditorError(null);
       return true;
     } catch (error) {
@@ -110,6 +114,18 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       return false;
     }
   };
+  const requestAiProposal = async () => {
+    if (!aiPrompt.trim() || !activePage) return;
+    setAiState("loading"); setEditorError(null);
+    try {
+      const response = await fetch("/api/ai/engine-v3", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: aiPrompt.trim(), document, revision: historyState.revision, selectedNodeIds: [...selectedNodeIds], safeMode: aiSafeMode }) });
+      const payload = await response.json() as { proposal?: NonNullable<typeof aiProposal>; error?: string; diagnostics?: Array<{ reason?: string }> };
+      if (!response.ok || !payload.proposal) throw new Error(payload.error ?? payload.diagnostics?.map((item) => item.reason).filter(Boolean).join("; ") ?? "The AI proposal could not be created");
+      setAiProposal(payload.proposal); setDocument(payload.proposal.preview); setAiState("idle");
+    } catch (error) { setAiState("error"); setEditorError(error instanceof Error ? error.message : "The AI proposal could not be created"); }
+  };
+  const applyAiProposal = () => { if (!aiProposal) return; if (runCommand(aiProposal.envelope.command, "ai")) { setAiProposal(null); setAiPrompt(""); } };
+  const rejectAiProposal = () => { setAiProposal(null); setDocument(historyRef.current!.snapshot().document); };
   const undo = () => acceptHistory(historyRef.current!.undo());
   const redo = () => acceptHistory(historyRef.current!.redo());
   const loadAssets = async () => {
@@ -347,6 +363,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         <div className="flex items-center gap-1"><button type="button" onClick={undo} disabled={!historyState.canUndo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Undo" title="Undo"><Undo2 size={15} /></button><button type="button" onClick={redo} disabled={!historyState.canRedo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Redo" title="Redo"><Redo2 size={15} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={15} /></button><button type="button" onClick={saveDocument} disabled={saveState === "saving" || saveState === "conflict"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Save document" title={saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : saveState === "saved" ? "Saved" : "Save"}><Save size={15} /></button><button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Share document" title={shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}><Share2 size={15} /></button><button type="button" onClick={() => void exportActivePage("svg")} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Export active page as SVG" title="Export active page as SVG"><Download size={15} /></button>{(["html", "tsx"] as const).map((kind) => <button key={kind} type="button" onClick={() => void exportActivePage(kind)} className="hidden rounded-md px-2 py-2 font-mono text-[9px] font-semibold uppercase hover:bg-[#E4E7E1] sm:block" aria-label={`Export active page as ${kind.toUpperCase()}`}>{kind}</button>)}<button type="button" onClick={() => download(createEngineV3JsonExport(document))} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold hover:bg-[#E4E7E1]" aria-label="Export document JSON">JSON</button></div>
       </header>
       {collaborationConflicts.length ? <div role="alert" className="flex items-center justify-between border-b border-[#D98A76] bg-[#FFF0EB] px-4 py-2 text-xs text-[#8B2D13]"><span>Concurrent edits touched the same item. Review the current result before saving.</span><button type="button" className="rounded border border-[#D98A76] bg-white px-2 py-1 font-semibold" onClick={() => setCollaborationConflicts([])}>Dismiss</button></div> : null}
+      <section className="border-b border-[#D7DBD2] bg-[#15171A] px-4 py-3 text-white" aria-label="AI proposal editor"><form className="mx-auto flex max-w-[1080px] flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); void requestAiProposal(); }}><input aria-label="AI edit prompt" value={aiPrompt} onChange={(event) => setAiPrompt(event.target.value)} placeholder={selectedNodeIds.size ? "Describe an edit to the selected nodes" : "Describe what to create"} disabled={Boolean(aiProposal)} className="min-w-[220px] flex-1 rounded-md border border-white/20 bg-white/10 px-3 py-2 text-sm outline-none placeholder:text-white/50 focus:border-[#B7FF4A] disabled:opacity-50" /><label className="flex items-center gap-2 px-1 text-xs"><input type="checkbox" checked={aiSafeMode} onChange={(event) => setAiSafeMode(event.target.checked)} disabled={Boolean(aiProposal)} /> Safe mode</label><button type="submit" disabled={!aiPrompt.trim() || aiState === "loading" || Boolean(aiProposal)} className="rounded-md bg-[#B7FF4A] px-3 py-2 text-xs font-semibold text-[#15171A] disabled:opacity-40">{aiState === "loading" ? "Thinking…" : "Propose"}</button></form>{aiProposal ? <div className="mx-auto mt-3 flex max-w-[1080px] flex-wrap items-center justify-between gap-3 rounded-md border border-[#B7FF4A]/40 bg-white/10 px-3 py-2 text-xs" role="status" aria-label="AI change proposal"><span><strong>Preview:</strong> {aiProposal.explanation || "Review proposed changes"} ({aiProposal.affectedIds.length} affected)</span><span className="flex gap-2"><button type="button" onClick={applyAiProposal} className="rounded bg-[#B7FF4A] px-3 py-1.5 font-semibold text-[#15171A]">Apply</button><button type="button" onClick={rejectAiProposal} className="rounded border border-white/30 px-3 py-1.5">Reject</button></span></div> : null}</section>
       <div className="flex min-h-0 flex-1">
         <aside className={`w-[188px] shrink-0 border-r border-[#D7DBD2] bg-[#EEF0EA] p-3 max-lg:fixed max-lg:inset-y-14 max-lg:left-0 max-lg:z-30 max-lg:shadow-xl ${drawer === "pages" ? "max-lg:block" : "max-lg:hidden"}`} aria-label="Pages">
           <div className="mb-3 flex items-center justify-between"><span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Pages</span><button type="button" aria-label="Close pages" className="rounded p-1 hover:bg-[#DDE1D9] lg:hidden" onClick={() => setDrawer(null)}><X size={14} /></button></div>
