@@ -509,6 +509,16 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (handle.includes("w")) { width = Math.max(4, startWidth - dx); x = startX + startWidth - width; }
       if (handle.includes("s")) height = Math.max(4, startHeight + dy);
       if (handle.includes("n")) { height = Math.max(4, startHeight - dy); y = startY + startHeight - height; }
+      if (pointer.shiftKey && startWidth > 0 && startHeight > 0) {
+        const ratio = startWidth / startHeight;
+        if (handle.includes("e") || handle.includes("w")) {
+          height = Math.max(4, width / ratio);
+          if (handle.includes("n")) y = startY + startHeight - height;
+        } else {
+          width = Math.max(4, height * ratio);
+          if (handle.includes("w")) x = startX + startWidth - width;
+        }
+      }
       changed = true;
       const changes: Partial<EngineNode> = { style: { ...selectedNode.style, width: Math.round(width), minHeight: Math.round(height) } };
       if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x - parentOffset.x), y: Math.round(y - parentOffset.y) };
