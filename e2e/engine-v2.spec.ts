@@ -462,6 +462,18 @@ test("engine v3 resizes a selected object with modifier arrows", async ({ page }
   await expect(width).toHaveValue("271");
 });
 
+test("engine v3 edits text inline on double click", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.dblclick();
+  const editor = page.getByLabel("Inline text editor");
+  await expect(editor).toBeVisible();
+  await editor.fill("Edited directly on canvas");
+  await editor.press("Control+Enter");
+  await expect(editor).toBeHidden();
+  await expect(page.locator('[data-node-id="title"]')).toContainText("Edited directly on canvas");
+});
+
 test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');

@@ -72,6 +72,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [gestureGuides, setGestureGuides] = useState<SnapGuide[]>([]);
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [editingTextValue, setEditingTextValue] = useState("");
   const [zoom, setZoom] = useState(1);
   const [penMode, setPenMode] = useState(false);
   const penPointsRef = useRef<Array<{ x: number; y: number }>>([]);
@@ -93,6 +95,19 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       return next;
     });
     setSelectedNodeId(id);
+  };
+  const beginTextEdit = (id: string) => {
+    const location = activePage ? findEngineV3Node(document, activePage.id, id) : null;
+    if (!location || location.node.type !== "text" || location.node.locked) return;
+    selectNode(id);
+    setEditingTextId(id);
+    setEditingTextValue(location.node.content);
+  };
+  const finishTextEdit = () => {
+    if (!editingTextId || !activePage) return;
+    const location = findEngineV3Node(document, activePage.id, editingTextId);
+    if (location?.node.type === "text" && editingTextValue !== location.node.content) patchSelected({ content: editingTextValue } as Partial<EngineNode>);
+    setEditingTextId(null);
   };
   useEffect(() => {
     const measure = () => { const element = canvasRef.current?.querySelector<HTMLElement>(`[data-node-id="${selectedNodeId}"]`); const canvas = canvasRef.current; if (!element || !canvas) return setSelectedBounds(null); const a = element.getBoundingClientRect(); const b = canvas.getBoundingClientRect(); setSelectedBounds({ left: a.left - b.left, top: a.top - b.top, width: a.width, height: a.height }); };
@@ -706,7 +721,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             <button type="button" onClick={() => setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom in" title="Zoom in"><Plus size={13} /></button>
           </div>
           <div className="mx-auto max-sm:min-w-[720px]" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={handleCanvasPointerDown} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
-          <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} />
+          <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} onDoubleClick={beginTextEdit} />
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? ([
@@ -719,6 +734,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             ["sw", selectedBounds.left - 6, selectedBounds.top + selectedBounds.height - 6, "nesw-resize"],
             ["w", selectedBounds.left - 5, selectedBounds.top + selectedBounds.height / 2 - 10, "ew-resize"],
           ] as const).map(([handle, left, top, cursor]) => <button key={handle} type="button" aria-label={`Resize selected node ${handle}`} onPointerDown={(event) => beginNodeResize(event, handle)} className={`absolute z-30 border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6] ${handle.length === 1 ? handle === "n" || handle === "s" ? "h-3 w-5 rounded-full" : "h-5 w-3 rounded-full" : "h-3 w-3 rounded-sm"}`} style={{ left, top, cursor }} />) : null}
+          {editingTextId === selectedNode?.id && selectedBounds ? <textarea aria-label="Inline text editor" autoFocus value={editingTextValue} onChange={(event) => setEditingTextValue(event.target.value)} onBlur={finishTextEdit} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setEditingTextId(null); } if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); finishTextEdit(); } }} className="absolute z-40 resize-none overflow-hidden rounded border-2 border-[#3157F6] bg-white/95 p-2 text-inherit outline-none shadow-lg" style={{ left: selectedBounds.left, top: selectedBounds.top, width: Math.max(selectedBounds.width, 120), minHeight: Math.max(selectedBounds.height, 48) }} /> : null}
           {selectedBounds && selectedNode?.type === "path" ? selectedNode.points.map((point, index) => { const maxX = Math.max(...selectedNode.points.map((item) => item.x), 1); const maxY = Math.max(...selectedNode.points.map((item) => item.y), 1); return <button key={`point-${index}`} type="button" aria-label={`Edit pen point ${index + 1}`} onPointerDown={(event) => beginPathPointDrag(event, index)} className="absolute z-40 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + point.x / maxX * selectedBounds.width, top: selectedBounds.top + point.y / maxY * selectedBounds.height, cursor: "move" }} />; }) : null}
           {gestureGuides.map((guide, index) => guide.axis === "x" ? <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[#3157F6]" style={{ left: `${guide.position / activePage.width * 100}%` }} /> : activePage.height === "auto" ? null : <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[#3157F6]" style={{ top: `${guide.position / activePage.height * 100}%` }} />)}
           </div></div>

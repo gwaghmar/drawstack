@@ -32,7 +32,7 @@ import { useEngineV2Collaboration } from "@/lib/hooks/use-engine-v2-collaboratio
 
 const EMPTY_SELECTION = new Set<string>();
 
-function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void }) {
+function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown, onDoubleClick }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void }) {
   const layout = node.layout;
   const layoutStyle = layout.mode === "grid"
     ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify }
@@ -47,20 +47,21 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointe
       onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } }}
       onPointerDown={(event) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } }}
+      onDoubleClick={(event) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } }}
       tabIndex={0}
       aria-label={node.name}
       style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined }}
       className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
-        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} />
+        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />
       ))}
     </div>
   );
 }
 
-function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void }) {
-  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} />;
+function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown, onDoubleClick }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void }) {
+  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />;
 
   const selected = selectedIds.has(node.id);
   const shared = {
@@ -69,6 +70,7 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
     onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } },
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } },
+    onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } },
     tabIndex: 0,
     "aria-label": node.name,
     style: { ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
@@ -102,11 +104,11 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
   if (node.type === "path") {
     const maxX = Math.max(...node.points.map((point) => point.x), 1);
     const maxY = Math.max(...node.points.map((point) => point.y), 1);
-    const { onPointerDown: _onPointerDown, ...svgShared } = shared;
+    const { onPointerDown: _onPointerDown, onDoubleClick: _onDoubleClick, ...svgShared } = shared;
     const first = node.points[0]; const last = node.points.at(-1)!;
     const d = node.lineStyle === "curve" ? `M ${first.x} ${first.y} C ${(first.x + last.x) / 2} ${first.y}, ${(first.x + last.x) / 2} ${last.y}, ${last.x} ${last.y}` : node.lineStyle === "elbow" ? `M ${first.x} ${first.y} L ${(first.x + last.x) / 2} ${first.y} L ${(first.x + last.x) / 2} ${last.y} L ${last.x} ${last.y}` : `M ${node.points.map((point) => `${point.x} ${point.y}`).join(" L ")}`;
     const markerId = `path-arrow-${node.id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
-    return <svg {...svgShared} onPointerDown={(event) => { event.stopPropagation(); if (onPointerDown) onPointerDown(node.id, event as unknown as React.PointerEvent<HTMLElement>); }} viewBox={`0 0 ${maxX} ${maxY}`} width={maxX} height={maxY} className={`${shared.className} block overflow-visible`} aria-label={node.name}><defs>{node.arrowEnd ? <marker id={markerId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill={resolveToken(node.style?.color ?? "$ink", tokens)} /></marker> : null}</defs><path d={d} fill="none" stroke={resolveToken(node.style?.color ?? "$ink", tokens)} strokeWidth={node.style?.borderWidth ?? 3} strokeLinecap="round" strokeLinejoin="round" markerEnd={node.arrowEnd ? `url(#${markerId})` : undefined} /></svg>;
+    return <svg {...svgShared} onPointerDown={(event) => { event.stopPropagation(); if (onPointerDown) onPointerDown(node.id, event as unknown as React.PointerEvent<HTMLElement>); }} onDoubleClick={(event) => { event.stopPropagation(); if (onDoubleClick) onDoubleClick(node.id, event); }} viewBox={`0 0 ${maxX} ${maxY}`} width={maxX} height={maxY} className={`${shared.className} block overflow-visible`} aria-label={node.name}><defs>{node.arrowEnd ? <marker id={markerId} viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill={resolveToken(node.style?.color ?? "$ink", tokens)} /></marker> : null}</defs><path d={d} fill="none" stroke={resolveToken(node.style?.color ?? "$ink", tokens)} strokeWidth={node.style?.borderWidth ?? 3} strokeLinecap="round" strokeLinejoin="round" markerEnd={node.arrowEnd ? `url(#${markerId})` : undefined} /></svg>;
   }
 
   if (node.type === "graph") {
@@ -269,10 +271,10 @@ function Tree({ nodes, selectedId, selectedIds = EMPTY_SELECTION, draggedId, dro
   );
 }
 
-export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {}, onPointerDown }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void }) {
+export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {}, onPointerDown, onDoubleClick }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void }) {
   return (
     <div className={className} data-engine-document="v2" style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}>
-      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} />)}
+      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />)}
     </div>
   );
 }
