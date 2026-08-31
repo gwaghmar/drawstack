@@ -45,7 +45,6 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointe
       data-layout={layout.mode}
       data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
-      onFocus={(event) => { if (event.currentTarget === event.target) onSelect(node.id, false); }}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } }}
       onPointerDown={(event) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } }}
       onDoubleClick={(event) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } }}
@@ -69,7 +68,6 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
     "data-node-id": node.id,
     "data-node-type": node.type,
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
-    onFocus: (event: React.FocusEvent<Element>) => { if (event.currentTarget === event.target) onSelect(node.id, false); },
     onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); if (event.key === "Enter" && node.type === "text") onEditText?.(node.id); } },
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } },
     onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } },

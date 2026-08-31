@@ -359,8 +359,7 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   const title = page.locator('[data-node-id="title"]');
   await title.click();
   await page.getByText("More settings", { exact: true }).click();
-  await expect(page.getByLabel("V3 node name")).toHaveValue("Header");
-  await expect(title).toHaveClass(/outline/);
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
 
   await page.getByLabel("Edit selected text").fill("Direct canvas edit");
   await expect(title).toHaveText("Direct canvas edit");

@@ -605,6 +605,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       const target = event.target as Element | null;
       if (!target?.closest("[data-node-id]") && canvasRef.current) {
         event.preventDefault();
+        selectNode(activePage.root.id);
         if (spacePressedRef.current && canvasViewportRef.current) {
           const viewport = canvasViewportRef.current;
           const start = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
