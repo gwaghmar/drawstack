@@ -34,6 +34,17 @@ describe("engine-v3 command envelopes", () => {
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.code, "invalid-command");
   });
+  it("defines and removes content-addressed assets through reversible commands", () => {
+    const { document } = migrateV2ToV3(ENGINE_V2_SAMPLE);
+    const sha256 = "a".repeat(64);
+    const applied = applyEngineV3Command(document, 0, envelope({ kind: "asset", action: "define", asset: { sha256, mime: "image/png", source: `/api/engine-v3/assets?sha256=${sha256}` }, precondition: { exists: false } }));
+    assert.equal(applied.ok, true);
+    if (!applied.ok) return;
+    assert.equal(applied.document.assets[sha256]?.mime, "image/png");
+    const restored = applyEngineV3Command(applied.document, applied.revision, applied.inverse);
+    assert.equal(restored.ok, true);
+    if (restored.ok) assert.equal(restored.document.assets[sha256], undefined);
+  });
   it("restores nested removals and batches exactly through its inverse", () => {
     const { document } = migrateV2ToV3(ENGINE_V2_SAMPLE);
     const pageId = document.pages[0].id;

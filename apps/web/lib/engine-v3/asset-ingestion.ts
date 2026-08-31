@@ -11,7 +11,7 @@ export type AssetIngestionInput = {
   width?: number;
   height?: number;
 };
-export type IngestedAsset = { asset: AssetRef; previewSource: string };
+export type IngestedAsset = { asset: AssetRef; content: Uint8Array; previewSource: string };
 
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif", "image/avif", "image/svg+xml"]);
 const bytesOf = (content: string | ArrayBuffer | Uint8Array): Uint8Array => typeof content === "string" ? new TextEncoder().encode(content) : content instanceof Uint8Array ? content : new Uint8Array(content);
@@ -49,5 +49,5 @@ export async function ingestAsset(input: AssetIngestionInput): Promise<IngestedA
   const safeBytes = input.mime === "image/svg+xml" ? new TextEncoder().encode(sanitizeSvg(raw)) : bytes;
   const sha256 = await sha256Hex(safeBytes.slice().buffer as ArrayBuffer);
   const asset: AssetRef = { sha256, mime: input.mime, source: input.source, ...(input.license ? { license: input.license } : {}), ...(input.width ? { width: input.width } : {}), ...(input.height ? { height: input.height } : {}) };
-  return { asset, previewSource: "data:" + input.mime + ";base64," + base64(safeBytes) };
+  return { asset, content: new Uint8Array(safeBytes), previewSource: "data:" + input.mime + ";base64," + base64(safeBytes) };
 }

@@ -1,19 +1,21 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Download, Menu, PanelRight, Plus, Save, Share2, Trash2, X } from "lucide-react";
+import { Copy, Download, Menu, PanelRight, Plus, Redo2, Save, Share2, Trash2, Undo2, X } from "lucide-react";
 import { createEngineV2Project, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { EngineDocumentView } from "@/components/engine-v2/engine-canvas";
 import type { EngineDocumentV3, Page } from "@/lib/engine-v3/document";
 import type { EngineNode } from "@/lib/engine-v3/document";
-import { addPage as addV3Page, duplicatePage as duplicateV3Page, removePage as removeV3Page } from "@/lib/engine-v3/operations";
-import { findEngineV3Node, patchEngineV3Node } from "@/lib/engine-v3/node-operations";
+import { duplicatePage as duplicateV3Page, removePage as removeV3Page } from "@/lib/engine-v3/operations";
+import { findEngineV3Node } from "@/lib/engine-v3/node-operations";
 import { defineComponent } from "@/lib/engine-v3/components";
 import { createEngineV3JsonExport, createEngineV3PageExports, type EngineV3ExportPayload } from "@/lib/engine-v3/export";
 import { serializeEngineV3Document } from "@/lib/engine-v3/serialization";
 import { createEngineV3PageView } from "@/lib/engine-v3/view-adapter";
+import { EngineV3HistoryController } from "@/lib/engine-v3/history";
+import type { EngineV3Command } from "@/lib/engine-v3/commands";
 
 export type EngineV3CanvasProps = {
   initialDocument: EngineDocumentV3;
@@ -36,7 +38,10 @@ function LayerTree({ nodes, selectedId, onSelect, depth = 0 }: { nodes: EngineNo
 
 export function EngineV3Canvas({ initialDocument, initialProjectId = null, initialUpdatedAt = null, onDocumentChange }: EngineV3CanvasProps) {
   const router = useRouter();
+  const historyRef = useRef<EngineV3HistoryController | null>(null);
+  if (!historyRef.current) historyRef.current = new EngineV3HistoryController(initialDocument);
   const [document, setDocument] = useState(initialDocument);
+  const [historyState, setHistoryState] = useState(() => historyRef.current!.snapshot());
   const [projectId, setProjectId] = useState(initialProjectId);
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const [activePageId, setActivePageId] = useState(initialDocument.pages[0]?.id ?? "");
@@ -50,27 +55,44 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const selectedNode = useMemo(() => activePage ? findEngineV3Node(document, activePage.id, selectedNodeId)?.node ?? activePage.root : null, [activePage, document, selectedNodeId]);
   const tokenEntries = useMemo(() => Object.entries(document.tokens.colors), [document.tokens.colors]);
   const activePageView = useMemo(() => activePage ? createEngineV3PageView(document, activePage.id) : null, [activePage, document]);
+  const selectedNodeIds = useMemo(() => new Set(selectedNode ? [selectedNode.id] : []), [selectedNode]);
 
-  const commit = (next: EngineDocumentV3) => {
-    setDocument(next);
-    onDocumentChange?.(next);
+  const acceptHistory = (next: ReturnType<EngineV3HistoryController["snapshot"]>) => {
+    setHistoryState(next);
+    setDocument(next.document);
+    onDocumentChange?.(next.document);
   };
-  const commitWithTimestamp = (next: EngineDocumentV3) => commit({ ...next, metadata: { ...next.metadata, updatedAt: new Date().toISOString() } });
-  const patchSelected = (changes: Partial<EngineNode>) => {
-    if (!activePage || !selectedNode) return;
+  const runCommand = (command: EngineV3Command) => {
     try {
-      commitWithTimestamp(patchEngineV3Node(document, activePage.id, selectedNode.id, changes));
+      acceptHistory(historyRef.current!.apply(command));
       setEditorError(null);
+      return true;
     } catch (error) {
-      setEditorError(error instanceof Error ? error.message : "The node could not be changed");
+      setEditorError(error instanceof Error ? error.message : "The change could not be applied");
+      return false;
     }
   };
-  const updatePage = (pageId: string, update: (page: Page) => Page) => commit({ ...document, pages: document.pages.map((page) => page.id === pageId ? update(page) : page), metadata: { ...document.metadata, updatedAt: new Date().toISOString() } });
+  const undo = () => acceptHistory(historyRef.current!.undo());
+  const redo = () => acceptHistory(historyRef.current!.redo());
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.matches("input, textarea, [contenteditable=true]")) return;
+      if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return;
+      event.preventDefault();
+      if (event.shiftKey) redo(); else undo();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  });
+  const patchSelected = (changes: Partial<EngineNode>) => {
+    if (!activePage || !selectedNode) return;
+    runCommand({ kind: "node", action: "patch", pageId: activePage.id, nodeId: selectedNode.id, changes: changes as Record<string, unknown> });
+  };
   const addPage = () => {
     const id = "page-" + crypto.randomUUID();
     const page: Page = { id, name: pageName(document.pages, "Untitled page"), width: 1080, height: 720, background: "#F7F8F4", root: { id: id + "-root", name: "Page", type: "frame", layout: { mode: "flex", direction: "column", gap: 0, padding: 32 }, children: [] } };
-    const result = addV3Page(document, page, document.pages.length, activePageId);
-    commit({ ...result.document, metadata: { ...result.document.metadata, updatedAt: new Date().toISOString() } });
+    if (!runCommand({ kind: "page", action: "add", page, index: document.pages.length })) return;
     setActivePageId(id);
     setSelectedNodeId(page.root.id);
   };
@@ -81,7 +103,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const next = duplicateV3Page(document, activePage.id, id, index + 1);
     const pageIndex = next.pages.findIndex((page) => page.id === id);
     next.pages[pageIndex] = { ...next.pages[pageIndex], name: pageName(document.pages, activePage.name + " copy") };
-    commit({ ...next, metadata: { ...next.metadata, updatedAt: new Date().toISOString() } });
+    if (!runCommand({ kind: "page", action: "add", page: next.pages[pageIndex], index: pageIndex })) return;
     setActivePageId(id);
     setSelectedNodeId(next.pages[pageIndex].root.id);
   };
@@ -89,16 +111,16 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     if (!activePage || document.pages.length <= 1) return;
     const index = document.pages.findIndex((page) => page.id === activePage.id);
     const result = removeV3Page(document, activePage.id, activePage.id);
-    commit({ ...result.document, metadata: { ...result.document.metadata, updatedAt: new Date().toISOString() } });
+    if (!runCommand({ kind: "page", action: "remove", page: { id: activePage.id } })) return;
     setActivePageId(result.activePageId || result.document.pages[Math.max(0, index - 1)]?.id);
     setSelectedNodeId(result.document.pages.find((page) => page.id === result.activePageId)?.root.id ?? result.document.pages[0].root.id);
   };
   const renamePage = (name: string) => {
-    if (activePage && name.trim()) updatePage(activePage.id, (page) => ({ ...page, name: name.trim() }));
+    if (activePage && name.trim()) runCommand({ kind: "page", action: "rename", page: { id: activePage.id, name: name.trim() } });
   };
   const updateColorToken = (key: string, value: string) => {
     const colors = { ...document.tokens.colors, [key]: { ...document.tokens.colors[key], value } };
-    commit({ ...document, tokens: { ...document.tokens, colors }, metadata: { ...document.metadata, updatedAt: new Date().toISOString() } });
+    runCommand({ kind: "tokens", tokens: { ...document.tokens, colors } });
   };
   const commitColorToken = (key: string) => {
     const value = colorDrafts[key];
@@ -113,9 +135,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     while (document.components[id]) id = `${selectedNode.id}-component-${suffix++}`;
     try {
       const defined = defineComponent(document.components, id, selectedNode.name, selectedNode);
-      const next = patchEngineV3Node({ ...document, components: defined.components }, activePage.id, selectedNode.id, { componentRef: id, instanceOverrides: {} });
-      commitWithTimestamp(next);
-      setEditorError(null);
+      runCommand({ kind: "batch", commands: [
+        { kind: "component", action: "define", component: defined.components[id] },
+        { kind: "node", action: "patch", pageId: activePage.id, nodeId: selectedNode.id, changes: { componentRef: id, instanceOverrides: {} } },
+      ] });
     } catch (error) {
       setEditorError(error instanceof Error ? error.message : "The component could not be created");
     }
@@ -185,7 +208,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     <main className="flex min-h-[680px] flex-col overflow-hidden bg-[#F7F8F4] text-[#15171A]">
       <header className="flex min-h-14 items-center justify-between border-b border-[#D7DBD2] bg-[#F7F8F4] px-3 sm:px-5">
         <div className="flex min-w-0 items-center gap-3"><button type="button" className="rounded-md p-2 hover:bg-[#E4E7E1] lg:hidden" aria-label="Open pages" onClick={() => setDrawer("pages")}><Menu size={16} /></button><div className="truncate text-sm font-semibold">{document.metadata.name}</div><span className="hidden font-mono text-[9px] uppercase tracking-[0.14em] text-[#667067] sm:inline">Engine v3</span></div>
-        <div className="flex items-center gap-1"><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={15} /></button><button type="button" onClick={saveDocument} disabled={saveState === "saving" || saveState === "conflict"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Save document" title={saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : saveState === "saved" ? "Saved" : "Save"}><Save size={15} /></button><button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Share document" title={shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}><Share2 size={15} /></button><button type="button" onClick={exportActivePage} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Export active page as SVG" title="Export active page as SVG"><Download size={15} /></button><button type="button" onClick={() => download(createEngineV3JsonExport(document))} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold hover:bg-[#E4E7E1]" aria-label="Export document JSON">JSON</button></div>
+        <div className="flex items-center gap-1"><button type="button" onClick={undo} disabled={!historyState.canUndo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Undo" title="Undo"><Undo2 size={15} /></button><button type="button" onClick={redo} disabled={!historyState.canRedo} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-30" aria-label="Redo" title="Redo"><Redo2 size={15} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md p-2 hover:bg-[#E4E7E1] xl:hidden" aria-label="Open inspector"><PanelRight size={15} /></button><button type="button" onClick={saveDocument} disabled={saveState === "saving" || saveState === "conflict"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Save document" title={saveState === "conflict" ? "Reload required" : saveState === "error" ? "Save failed" : saveState === "saved" ? "Saved" : "Save"}><Save size={15} /></button><button type="button" onClick={shareDocument} disabled={shareState === "sharing"} className="rounded-md p-2 hover:bg-[#E4E7E1] disabled:opacity-40" aria-label="Share document" title={shareState === "copied" ? "Link copied" : shareState === "error" ? "Share failed" : "Share"}><Share2 size={15} /></button><button type="button" onClick={exportActivePage} className="rounded-md p-2 hover:bg-[#E4E7E1]" aria-label="Export active page as SVG" title="Export active page as SVG"><Download size={15} /></button><button type="button" onClick={() => download(createEngineV3JsonExport(document))} className="rounded-md px-2 py-2 font-mono text-[9px] font-semibold hover:bg-[#E4E7E1]" aria-label="Export document JSON">JSON</button></div>
       </header>
       <div className="flex min-h-0 flex-1">
         <aside className={`w-[188px] shrink-0 border-r border-[#D7DBD2] bg-[#EEF0EA] p-3 max-lg:fixed max-lg:inset-y-14 max-lg:left-0 max-lg:z-30 max-lg:shadow-xl ${drawer === "pages" ? "max-lg:block" : "max-lg:hidden"}`} aria-label="Pages">
@@ -194,7 +217,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <div className="mt-3 grid grid-cols-4 gap-1"><button type="button" onClick={addPage} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6]" aria-label="Add page"><Plus size={13} /></button><button type="button" onClick={duplicatePage} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6]" aria-label="Duplicate page"><Copy size={13} /></button><button type="button" onClick={deletePage} disabled={document.pages.length <= 1} className="rounded-md border border-[#C8CEC4] bg-white p-2 text-[#B93815] hover:border-[#B93815] disabled:opacity-35" aria-label="Delete page"><Trash2 size={13} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6] lg:hidden" aria-label="Open inspector">i</button></div>
           <div className="mt-5 border-t border-[#D7DBD2] pt-3"><div className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Layers</div><LayerTree nodes={[activePage.root]} selectedId={selectedNode?.id ?? ""} onSelect={setSelectedNodeId} /></div>
         </aside>
-        <section className="min-w-0 flex-1 overflow-auto p-4 sm:p-8" aria-label="Canvas preview"><div className="mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}><EngineDocumentView document={activePageView} /></div></section>
+        <section className="min-w-0 flex-1 overflow-auto p-4 sm:p-8" aria-label="Editable canvas"><div className="mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}><EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={(id) => setSelectedNodeId(id)} /></div></section>
         <aside className={`w-[272px] shrink-0 overflow-y-auto border-l border-[#D7DBD2] bg-[#EEF0EA] p-4 max-xl:fixed max-xl:inset-y-14 max-xl:right-0 max-xl:z-30 max-xl:shadow-xl ${drawer === "inspector" ? "max-xl:block" : "max-xl:hidden"}`} aria-label="Inspector">
           <div className="mb-4 flex items-center justify-between"><span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Page inspector</span><button type="button" aria-label="Close inspector" className="rounded p-1 hover:bg-[#DDE1D9] xl:hidden" onClick={() => setDrawer(null)}><X size={14} /></button></div>
           <label className="mb-4 block"><span className="mb-2 block text-xs text-[#667067]">Page name</span><input aria-label="Page name" value={activePage.name} onChange={(event) => renamePage(event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label>

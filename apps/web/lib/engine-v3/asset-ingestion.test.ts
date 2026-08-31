@@ -9,6 +9,7 @@ describe("engine-v3 asset ingestion", () => {
     assert.equal(result.asset.source, "upload");
     assert.equal(result.asset.license, "CC0");
     assert.match(result.previewSource, /^data:image\/svg\+xml;base64,/);
+    assert.equal(new TextDecoder().decode(result.content), '<svg><rect width="10" height="10"/></svg>');
   });
   it("rejects unsupported, oversized, and dangerous content", async () => {
     await assert.rejects(() => ingestAsset({ content: "x", mime: "text/html", source: "x" }), /MIME/);

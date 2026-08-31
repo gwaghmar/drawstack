@@ -349,3 +349,17 @@ test("engine v3 edits nested nodes and reusable components", async ({ page }) =>
   await page.getByRole("button", { name: "Detach component", exact: true }).click();
   await expect(page.getByRole("button", { name: "Create component", exact: true })).toBeVisible();
 });
+
+test("engine v3 selects canvas elements and undoes document commands", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
+
+  await page.getByLabel("V3 text content").fill("Direct canvas edit");
+  await expect(title).toHaveText("Direct canvas edit");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(title).not.toHaveText("Direct canvas edit");
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect(title).toHaveText("Direct canvas edit");
+});

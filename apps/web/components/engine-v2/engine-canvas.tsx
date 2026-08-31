@@ -249,10 +249,10 @@ function Tree({ nodes, selectedId, selectedIds = EMPTY_SELECTION, draggedId, dro
   );
 }
 
-export function EngineDocumentView({ document, className = "" }: { document: EngineDocument; className?: string }) {
+export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {} }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void }) {
   return (
     <div className={className} data-engine-document="v2" style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}>
-      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={EMPTY_SELECTION} onSelect={() => {}} />)}
+      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} />)}
     </div>
   );
 }

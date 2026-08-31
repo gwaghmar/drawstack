@@ -30,6 +30,7 @@
     "@supabase/supabase-js": "^2.107.0",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.0",
+    "@vercel/blob": "^2.8.0",
     "@vercel/functions": "^3.9.3",
     "ai": "^6.0.194",
     "drizzle-orm": "^0.45.2",

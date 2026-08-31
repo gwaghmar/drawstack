@@ -1,4 +1,4 @@
-import type { ComponentDefinition, EngineDocumentV3, EngineNode, Page, TokenSet } from "./document.ts";
+import type { AssetRef, ComponentDefinition, EngineDocumentV3, EngineNode, Page, TokenSet } from "./document.ts";
 import { validateEngineV3Document } from "./compiler.ts";
 
 export type CommandOrigin = "local" | "ai" | "import" | "undo" | "redo";
@@ -7,6 +7,7 @@ export type EngineV3Command =
   | { kind: "batch"; commands: EngineV3Command[] }
   | { kind: "page"; action: "add" | "remove" | "rename"; page: Page | { id: string; name?: string }; index?: number; precondition?: CommandPrecondition }
   | { kind: "tokens"; tokens: TokenSet; precondition?: CommandPrecondition }
+  | { kind: "asset"; action: "define" | "remove"; asset: AssetRef | { sha256: string }; precondition?: CommandPrecondition }
   | { kind: "component"; action: "define" | "remove"; component: ComponentDefinition | { id: string }; precondition?: CommandPrecondition }
   | { kind: "node"; action: "add" | "patch" | "remove"; pageId: string; node?: EngineNode; nodeId?: string; parentId?: string | null; index?: number; changes?: Record<string, unknown>; unset?: string[]; precondition?: CommandPrecondition };
 export type EngineV3CommandEnvelope = { id: string; baseRevision: number; actor: string; origin: CommandOrigin; timestamp: string; command: EngineV3Command };
@@ -25,6 +26,21 @@ function locate(root: EngineNode, id: string, parentId: string | null = null, in
 function findNode(page: Page, id: string): EngineNode | null {
   const visit = (node: EngineNode): EngineNode | null => node.id === id ? node : node.type === "frame" ? node.children.map(visit).find(Boolean) ?? null : null;
   return visit(page.root);
+}
+function lockedPath(page: Page, id: string): EngineNode[] | null {
+  const visit = (node: EngineNode, path: EngineNode[]): EngineNode[] | null => {
+    const next = [...path, node];
+    if (node.id === id) return next;
+    if (node.type === "frame") for (const child of node.children) { const found = visit(child, next); if (found) return found; }
+    return null;
+  };
+  return visit(page.root, []);
+}
+function assertNodeEditable(page: Page, id: string, allowSelfUnlock = false): void {
+  const path = lockedPath(page, id);
+  if (!path) return;
+  const blocker = path.find((node, index) => node.locked && !(allowSelfUnlock && index === path.length - 1));
+  if (blocker) throw new Error(`Node is locked: ${blocker.id}`);
 }
 function mapNode(node: EngineNode, id: string, update: (node: EngineNode) => EngineNode | null): EngineNode | null {
   if (node.id === id) return update(node);
@@ -77,6 +93,15 @@ export function applyEngineV3Command(document: EngineDocumentV3, revision: numbe
       affectedIds.push(id);
     } else if (command.kind === "tokens") {
       const old = next.tokens; next.tokens = copy(command.tokens); inverse = { kind: "tokens", tokens: old }; affectedIds.push("tokens");
+    } else if (command.kind === "asset") {
+      const id = command.asset.sha256;
+      const old = next.assets[id];
+      if (command.precondition?.revision !== undefined && command.precondition.revision !== revision) return { ok: false, code: "precondition-failed", message: "Asset revision precondition failed", affectedIds: [id] };
+      if (command.precondition?.exists === true && !old) return { ok: false, code: "missing-target", message: "Asset does not exist", affectedIds: [id] };
+      if (command.precondition?.exists === false && old) return { ok: false, code: "precondition-failed", message: "Asset already exists", affectedIds: [id] };
+      if (command.action === "define") { if (old || !("mime" in command.asset)) throw new Error("Invalid asset"); next.assets[id] = copy(command.asset as AssetRef); inverse = { kind: "asset", action: "remove", asset: { sha256: id } }; }
+      else { if (!old) throw new Error("Missing asset"); delete next.assets[id]; inverse = { kind: "asset", action: "define", asset: old }; }
+      affectedIds.push(id);
     } else if (command.kind === "component") {
       const id = command.component.id; const old = next.components[id]; const failure = check(command.precondition, old?.root ?? null, revision, id); if (failure) return failure;
       if (command.action === "define") { if (old) throw new Error("Component exists"); next.components[id] = copy(command.component as ComponentDefinition); inverse = { kind: "component", action: "remove", component: { id } }; }
@@ -85,9 +110,9 @@ export function applyEngineV3Command(document: EngineDocumentV3, revision: numbe
     } else {
       const page = next.pages.find((item) => item.id === command.pageId); if (!page) return { ok: false, code: "missing-page", message: "Page does not exist", affectedIds: [command.pageId] };
       const id = command.nodeId ?? command.node?.id ?? ""; const target = findNode(page, id); const failure = check(command.precondition, target, revision, id); if (failure) return failure;
-      if (command.action === "add") { if (!command.node || target) throw new Error("Invalid node"); const parentId = command.parentId ?? null; next.pages = next.pages.map((item) => { if (item.id !== page.id) return item; return parentId === null ? { ...item, root: { ...item.root, children: insertAt(item.root.children, copy(command.node!), command.index) } } : replacePageNode(item, parentId, (parent) => parent.type === "frame" ? { ...parent, children: insertAt(parent.children, copy(command.node!), command.index) } : parent); }); inverse = { kind: "node", action: "remove", pageId: page.id, nodeId: id, parentId, index: command.index }; }
-      else if (command.action === "remove") { if (!target) throw new Error("Missing node"); const location = locate(page.root, id); if (!location) throw new Error("Missing node"); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, () => null) : item); inverse = { kind: "node", action: "add", pageId: page.id, node: target, parentId: location.parentId, index: location.index }; }
-      else { if (!target || !command.changes) throw new Error("Invalid node"); const old = copy(target); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, (node) => { const patched = { ...node, ...copy(command.changes) } as Record<string, unknown>; for (const key of command.unset ?? []) delete patched[key]; return patched as EngineNode; }) : item); const previousKeys = new Set(Object.keys(old)); inverse = { kind: "node", action: "patch", pageId: page.id, nodeId: id, changes: old as unknown as Record<string, unknown>, unset: Object.keys(command.changes).filter((key) => !previousKeys.has(key)) }; }
+      if (command.action === "add") { if (!command.node || target) throw new Error("Invalid node"); const parentId = command.parentId ?? null; assertNodeEditable(page, parentId ?? page.root.id); next.pages = next.pages.map((item) => { if (item.id !== page.id) return item; return parentId === null ? { ...item, root: { ...item.root, children: insertAt(item.root.children, copy(command.node!), command.index) } } : replacePageNode(item, parentId, (parent) => parent.type === "frame" ? { ...parent, children: insertAt(parent.children, copy(command.node!), command.index) } : parent); }); inverse = { kind: "node", action: "remove", pageId: page.id, nodeId: id, parentId, index: command.index }; }
+      else if (command.action === "remove") { if (!target) throw new Error("Missing node"); assertNodeEditable(page, id); const location = locate(page.root, id); if (!location) throw new Error("Missing node"); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, () => null) : item); inverse = { kind: "node", action: "add", pageId: page.id, node: target, parentId: location.parentId, index: location.index }; }
+      else { if (!target || !command.changes) throw new Error("Invalid node"); assertNodeEditable(page, id, command.changes.locked === false); const old = copy(target); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, (node) => { const patched = { ...node, ...copy(command.changes) } as Record<string, unknown>; for (const key of command.unset ?? []) delete patched[key]; return patched as EngineNode; }) : item); const previousKeys = new Set(Object.keys(old)); inverse = { kind: "node", action: "patch", pageId: page.id, nodeId: id, changes: old as unknown as Record<string, unknown>, unset: Object.keys(command.changes).filter((key) => !previousKeys.has(key)) }; }
       affectedIds.push(id);
     }
   } catch (error) { return { ok: false, code: "invalid-command", message: error instanceof Error ? error.message : "Invalid command", affectedIds }; }
