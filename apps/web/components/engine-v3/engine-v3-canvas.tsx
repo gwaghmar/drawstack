@@ -327,6 +327,23 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       return { kind: "node", action: "patch", pageId, nodeId: path.id, changes: { points, transform: { ...(path.transform ?? {}), x: (path.transform?.x ?? 0) + minX, y: (path.transform?.y ?? 0) + minY } } };
     });
   };
+  const connectorPatchesForMoves = (source: EngineDocumentV3, pageId: string, moves: ReadonlyMap<string, { dx: number; dy: number }>): EngineV3Command[] => {
+    const page = source.pages.find((candidate) => candidate.id === pageId); if (!page) return [];
+    const paths: Extract<EngineNode, { type: "path" }>[] = [];
+    const visit = (node: EngineNode) => { if (node.type === "path") paths.push(node); if (node.type === "frame") node.children.forEach(visit); };
+    visit(page.root);
+    return paths.flatMap((path) => {
+      const ownMove = moves.get(path.id);
+      if (ownMove) return [{ kind: "node", action: "patch", pageId, nodeId: path.id, changes: { transform: { ...(path.transform ?? {}), x: (path.transform?.x ?? 0) + ownMove.dx, y: (path.transform?.y ?? 0) + ownMove.dy } } } satisfies EngineV3Command];
+      if (!moves.has(path.startNodeId ?? "") && !moves.has(path.endNodeId ?? "")) return [];
+      const movedPoints = path.points.map((point, index) => {
+        const move = index === 0 ? moves.get(path.startNodeId ?? "") : index === path.points.length - 1 ? moves.get(path.endNodeId ?? "") : undefined;
+        return move ? { x: point.x + move.dx, y: point.y + move.dy } : point;
+      });
+      const minX = Math.min(...movedPoints.map((point) => point.x)); const minY = Math.min(...movedPoints.map((point) => point.y));
+      return [{ kind: "node", action: "patch", pageId, nodeId: path.id, changes: { points: movedPoints.map((point) => ({ x: point.x - minX, y: point.y - minY })), transform: { ...(path.transform ?? {}), x: (path.transform?.x ?? 0) + minX, y: (path.transform?.y ?? 0) + minY } } } satisfies EngineV3Command];
+    });
+  };
   const beginNodeDrag = (nodeId: string, event: React.PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || !activePage) return;
     if (penMode) {
@@ -367,11 +384,13 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       const finish = () => {
         window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
         if (moved) {
+          const moves = new Map<string, { dx: number; dy: number }>();
           const commands: EngineV3Command[] = sessions.map((session) => {
             const next = findEngineV3Node(previewDocument, pageId, session.id)?.node;
+            moves.set(session.id, { dx: (next?.transform?.x ?? session.node.transform?.x ?? 0) - (session.node.transform?.x ?? 0), dy: (next?.transform?.y ?? session.node.transform?.y ?? 0) - (session.node.transform?.y ?? 0) });
             return { kind: "node", action: "patch", pageId, nodeId: session.id, changes: { transform: { ...(session.node.transform ?? {}), ...(next?.transform ?? {}) } } };
           });
-          runCommand({ kind: "batch", commands });
+          runCommand({ kind: "batch", commands: [...commands, ...connectorPatchesForMoves(baseDocument, pageId, moves)] });
           window.setTimeout(() => setSelectedNodeIds(new Set(dragIds)), 0);
         } else setDocument(historyRef.current!.snapshot().document);
       };
