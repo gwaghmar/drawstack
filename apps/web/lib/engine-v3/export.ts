@@ -89,7 +89,7 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
   const fill = (record: typeof records[number]) => color(record.style?.background, "transparent");
   const stroke = (record: typeof records[number]) => color(record.style?.borderColor, "#D7DBD2");
   const textColor = (record: typeof records[number]) => color(record.style?.color, "#15171A");
-  const text = (value: string, x: number, y: number, size: number, colorValue: string, weight = 400) => `<text x="${x}" y="${y}" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="${size}" font-weight="${weight}" fill="${colorValue}">${value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>`;
+  const text = (value: string, x: number, y: number, size: number, colorValue: string, weight = 400, anchor: "start" | "middle" | "end" = "start") => `<text x="${x}" y="${y}" text-anchor="${anchor}" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="${size}" font-weight="${weight}" fill="${colorValue}">${value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>`;
   const markup = records.filter((record) => record.id !== page.root.id && record.visible).map((record) => {
     const source = record.node as unknown as Record<string, unknown>;
     const { width, height } = sizes.get(record.id) ?? dimensions(record, record.parentId ? dimensions(recordById.get(record.parentId)!).width : planned.width);
@@ -101,7 +101,10 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
     if (record.type === "text") {
       const variant = String(source.variant ?? "body");
       const size = variant === "display" ? 58 : variant === "heading" ? 24 : variant === "caption" ? 11 : 15;
-      return `<g data-node-id="${record.id}" transform="${transform}"${opacity}>${text(String(source.content ?? ""), 0, size, size, textColor(record), variant === "body" ? 400 : 650)}</g>`;
+      const alignment = source.style && typeof source.style === "object" && "textAlign" in source.style ? source.style.textAlign : "left";
+      const anchor = alignment === "center" ? "middle" : alignment === "right" ? "end" : "start";
+      const textX = anchor === "middle" ? width / 2 : anchor === "end" ? width : 0;
+      return `<g data-node-id="${record.id}" transform="${transform}"${opacity}>${text(String(source.content ?? ""), textX, size, size, textColor(record), variant === "body" ? 400 : 650, anchor)}</g>`;
     }
     if (record.type === "metric") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><rect width="${width}" height="${height}" rx="${Number(record.style?.borderRadius ?? 14)}" fill="${fill(record)}" stroke="${stroke(record)}" stroke-width="${Number(record.style?.borderWidth ?? 1)}"/>${text(String(source.label ?? ""), 20, 28, 10, "#667067", 600)}${text(String(source.value ?? ""), 20, 70, 32, source.tone === "warning" ? "#FF5D2E" : "#3157F6", 650)}${text(String(source.detail ?? ""), 20, 102, 12, "#667067")}</g>`;
     if (record.type === "image") return `<g data-node-id="${record.id}" transform="${transform}"${opacity}><image href="${record.asset?.ref.source ?? String(source.src ?? "")}" width="${width}" height="${height}" preserveAspectRatio="${imagePreserveAspectRatio(record.style)}"/></g>`;

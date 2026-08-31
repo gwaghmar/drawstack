@@ -521,6 +521,19 @@ test("engine v3 changes text style from the inspector", async ({ page }) => {
   await expect(style).toHaveValue("display");
 });
 
+test("engine v3 aligns text from the inspector and undoes it", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const alignment = page.getByLabel("Text alignment");
+  await expect(alignment).toHaveValue("left");
+  await alignment.selectOption("center");
+  await expect(alignment).toHaveValue("center");
+  await expect(title).toHaveCSS("text-align", "center");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(alignment).toHaveValue("left");
+});
+
 test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();

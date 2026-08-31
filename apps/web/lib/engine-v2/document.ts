@@ -17,6 +17,7 @@ export type EngineStyle = {
   boxShadow?: string;
   objectFit?: CSSProperties["objectFit"];
   objectPosition?: string;
+  textAlign?: CSSProperties["textAlign"];
   minHeight?: number;
   width?: number | string;
   flex?: number;
@@ -159,6 +160,7 @@ export function nodeStyle(style: EngineStyle | undefined, tokens: EngineTokens):
     boxShadow: style.boxShadow,
     objectFit: style.objectFit,
     objectPosition: style.objectPosition,
+    textAlign: style.textAlign,
     minHeight: style.minHeight,
     width: style.width,
     flex: style.flex,
