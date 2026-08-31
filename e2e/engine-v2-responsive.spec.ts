@@ -36,3 +36,15 @@ for (const viewport of [
     await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });
 }
+
+test("engine v3 stays usable on a phone viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app/engine-v2?mode=v3");
+  await expect(page.getByRole("button", { name: "Open layers" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open inspector" })).toBeVisible();
+  await page.getByRole("button", { name: "Draw with pen" }).click();
+  await expect(page.getByRole("button", { name: "Draw with pen" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Open inspector" }).click();
+  await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
