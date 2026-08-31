@@ -525,6 +525,30 @@ test("engine v3 resizes and groups layers through reversible commands", async ({
   await expect(page.getByRole("button", { name: "metric Net retention", exact: true })).toBeVisible();
 });
 
+test("engine v3 exposes independent corner resize handles", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const handles = page.getByRole("button", { name: /^Resize selected node / });
+  await expect(handles).toHaveCount(8);
+  const before = await title.boundingBox();
+  const northwest = page.getByRole("button", { name: "Resize selected node nw", exact: true });
+  const handleBounds = await northwest.boundingBox();
+  if (!before || !handleBounds) throw new Error("Northwest resize geometry is unavailable");
+  await page.mouse.move(handleBounds.x + 4, handleBounds.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(handleBounds.x + 24, handleBounds.y + 18, { steps: 3 });
+  await page.mouse.up();
+  const after = await title.boundingBox();
+  expect(after?.width).toBeLessThan(before.width);
+  expect(after?.x).toBeGreaterThan(before.x);
+  expect(after?.y).toBeGreaterThan(before.y);
+  await expect(page.getByLabel("V3 node width")).not.toHaveValue("");
+  await expect(page.getByLabel("V3 node height")).not.toHaveValue("");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect.poll(async () => (await title.boundingBox())?.width).toBeCloseTo(before.width, 0);
+});
+
 test("engine v3 rotates a selected node with the canvas handle", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
