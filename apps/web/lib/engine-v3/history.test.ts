@@ -3,6 +3,7 @@ import test from "node:test";
 import { ENGINE_V2_SAMPLE } from "../engine-v2/document.ts";
 import { migrateV2ToV3 } from "./migration.ts";
 import { EngineV3HistoryController } from "./history.ts";
+import { findEngineV3Node } from "./node-operations.ts";
 
 test("batches are one undo step and redo is invalidated by a new edit", () => {
   const doc = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
@@ -29,4 +30,14 @@ test("rejects stale application without changing history", () => {
   assert.throws(() => history.apply({ kind: "node", action: "patch", pageId, nodeId: "title", changes: { name: "X" }, precondition: { revision: 3 } }));
   assert.equal(history.snapshot().revision, 4);
   assert.equal(history.snapshot().canUndo, false);
+});
+
+test("bounds retained history for large editing sessions", () => {
+  const doc = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+  const pageId = doc.pages[0].id;
+  const history = new EngineV3HistoryController(doc, 0, 2);
+  for (const name of ["A", "B", "C"]) history.apply({ kind: "node", action: "patch", pageId, nodeId: "title", changes: { name } });
+  history.undo(); history.undo();
+  assert.equal(history.snapshot().canUndo, false);
+  assert.equal(findEngineV3Node(history.snapshot().document, pageId, "title")?.node.name, "A");
 });

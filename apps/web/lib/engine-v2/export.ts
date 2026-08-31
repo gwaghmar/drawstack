@@ -595,6 +595,7 @@ function nodeHtml(node: EngineNode, tokens: EngineTokens): string {
     return `<div class="engine-frame" data-node-id="${escapeMarkup(node.id)}" data-layout="${node.layout.mode}" data-direction="${node.layout.direction ?? ""}" style="${escapeMarkup(frameStyle(node, tokens))}">${node.children.map((child) => nodeHtml(child, tokens)).join("")}</div>`;
   }
   if (node.type === "text") return `<div class="engine-text-${node.variant}" data-node-id="${escapeMarkup(node.id)}"${styleAttribute}>${escapeMarkup(node.content)}</div>`;
+  if (node.type === "image") return `<img data-node-id="${escapeMarkup(node.id)}" src="${escapeMarkup(node.src)}" alt="${escapeMarkup(node.alt)}"${styleAttribute}/>`;
   if (node.type === "metric") {
     const accent = node.tone === "positive" ? color(tokens, "cobalt") : node.tone === "warning" ? color(tokens, "orange") : color(tokens, "ink");
     return `<section class="engine-card" data-node-id="${escapeMarkup(node.id)}"${styleAttribute}><div class="engine-metric-label">${escapeMarkup(node.label)}</div><div class="engine-metric-value" style="color:${escapeMarkup(accent)}">${escapeMarkup(node.value)}</div><div class="engine-metric-detail">${escapeMarkup(node.detail)}</div></section>`;
@@ -695,6 +696,7 @@ function reactNode(node: EngineNode, tokens: EngineTokens, depth: number): strin
   if (node.type === "text") {
     return `${padding}<div className="engine-text-${node.variant}" data-node-id={${id}} style={${style}}>{${JSON.stringify(node.content)}}</div>`;
   }
+  if (node.type === "image") return `${padding}<img data-node-id={${id}} src={${JSON.stringify(node.src)}} alt={${JSON.stringify(node.alt)}} style={${style}} />`;
   if (node.type === "metric") {
     const accent = node.tone === "positive" ? color(tokens, "cobalt") : node.tone === "warning" ? color(tokens, "orange") : color(tokens, "ink");
     return `${padding}<section className="engine-card" data-node-id={${id}} style={${style}}>\n${padding}  <div className="engine-metric-label">{${JSON.stringify(node.label)}}</div>\n${padding}  <div className="engine-metric-value" style={${JSON.stringify({ color: accent })}}>{${JSON.stringify(node.value)}}</div>\n${padding}  <div className="engine-metric-detail">{${JSON.stringify(node.detail)}}</div>\n${padding}</section>`;

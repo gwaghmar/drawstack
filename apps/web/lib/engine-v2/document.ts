@@ -59,6 +59,7 @@ export type EngineMetricNode = EngineNodeState & {
   tone: "neutral" | "positive" | "warning";
   style?: EngineStyle;
 };
+export type EngineImageNode = EngineNodeState & { id: string; name: string; type: "image"; src: string; alt: string; style?: EngineStyle };
 
 export type EngineChartDatum = DeterministicChartDatum;
 
@@ -95,6 +96,7 @@ export type EngineFrameNode = EngineNodeState & {
 export type EngineNode =
   | EngineTextNode
   | EngineMetricNode
+  | EngineImageNode
   | EngineChartNode
   | EngineGraphNode
   | EngineFrameNode;

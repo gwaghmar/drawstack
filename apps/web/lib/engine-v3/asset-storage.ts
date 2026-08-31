@@ -1,5 +1,5 @@
 import type { AssetRef } from "./document.ts";
-import { ingestAsset, type AssetIngestionInput } from "./asset-ingestion.ts";
+import { ingestAsset, sanitizeSvg, type AssetIngestionInput } from "./asset-ingestion.ts";
 import { del, get, list, put } from "@vercel/blob";
 import { sha256Hex } from "./components.ts";
 
@@ -20,7 +20,7 @@ export type ExternalAssetStore = {
 };
 
 export function createMemoryAssetStorage(): AssetStorage {
-  const records = new Map<string, { asset: StoredAsset; content: Uint8Array }>();
+const records = new Map<string, { asset: StoredAsset; content: Uint8Array }>();
   return {
     status: { available: true, mode: "memory" },
     async put(input, ownerId) {
@@ -29,7 +29,7 @@ export function createMemoryAssetStorage(): AssetStorage {
       const existing = records.get(key);
       if (existing) return { asset: existing.asset, previewSource: result.previewSource, created: false };
       const bytes = result.content;
-      const asset: StoredAsset = { ...result.asset, ownerId, byteLength: bytes.byteLength, createdAt: new Date().toISOString() };
+      const asset: StoredAsset = { ...result.asset, source: `/api/engine-v3/assets?sha256=${result.asset.sha256}`, ownerId, byteLength: bytes.byteLength, createdAt: new Date().toISOString() };
       records.set(key, { asset, content: bytes });
       return { asset, previewSource: result.previewSource, created: true };
     },
@@ -56,7 +56,7 @@ export function createAssetStorage(external?: ExternalAssetStore): AssetStorage 
       const existing = metadata.get(key);
       if (existing) return { asset: existing, previewSource: result.previewSource, created: false };
       const bytes = result.content;
-      const asset: StoredAsset = { ...result.asset, ownerId, byteLength: bytes.byteLength, createdAt: new Date().toISOString() };
+      const asset: StoredAsset = { ...result.asset, source: `/api/engine-v3/assets?sha256=${result.asset.sha256}`, ownerId, byteLength: bytes.byteLength, createdAt: new Date().toISOString() };
       await external.put(key, bytes, asset);
       metadata.set(key, asset);
       return { asset, previewSource: result.previewSource, created: true };

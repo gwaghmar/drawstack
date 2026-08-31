@@ -89,6 +89,8 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node:
     );
   }
 
+  if (node.type === "image") return <img {...shared} src={node.src} alt={node.alt} className={`${shared.className} block max-w-full object-contain`} />;
+
   if (node.type === "graph") {
     return (
       <section {...shared} className={`${shared.className} min-w-0 rounded-[14px] border border-[#D7DBD2] bg-white p-5`}>

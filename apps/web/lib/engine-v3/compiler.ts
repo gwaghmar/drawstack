@@ -8,7 +8,7 @@ export type EngineV3ValidationResult =
 const idPattern = /^[A-Za-z][A-Za-z0-9_-]{0,79}$/;
 const sha256Pattern = /^[a-f0-9]{64}$/;
 const mimePattern = /^[a-z][a-z0-9.+-]*\/[a-z0-9.+-]+$/;
-const nodeTypes = new Set(["frame", "text", "metric", "chart", "graph"]);
+const nodeTypes = new Set(["frame", "text", "metric", "chart", "graph", "image"]);
 const safeString = (value: unknown, max = 240): value is string => typeof value === "string" && value.length > 0 && value.length <= max && !/[<>`]/.test(value);
 const finite = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value);
 
@@ -65,6 +65,7 @@ export function validateEngineV3Document(input: unknown): EngineV3ValidationResu
     }
     for (const ref of ["styleRef", "assetRef", "componentRef"]) if (node[ref] !== undefined && !safeString(node[ref])) add(`${path}.${ref}`, "Invalid reference");
     if (node.assetRef !== undefined && (!record(input.assets) || !Object.hasOwn(input.assets, String(node.assetRef)))) add(`${path}.assetRef`, "Unknown asset");
+    if (node.type === "image" && node.assetRef === undefined && !safeString(node.src, 2000)) add(`${path}.src`, "Image requires a safe source or asset reference");
     if (node.componentRef !== undefined) {
       const componentRef = String(node.componentRef);
       if (!components.has(componentRef)) add(`${path}.componentRef`, "Unknown component");

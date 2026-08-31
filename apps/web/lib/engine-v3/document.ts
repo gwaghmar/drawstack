@@ -1,4 +1,4 @@
-import type { EngineFrameNode as EngineV2FrameNode, EngineNode as EngineV2Node, EngineTokens as EngineV2Tokens } from "../engine-v2/document.ts";
+import type { EngineFrameNode as EngineV2FrameNode, EngineImageNode as EngineV2ImageNode, EngineNode as EngineV2Node, EngineTokens as EngineV2Tokens } from "../engine-v2/document.ts";
 
 export type Paint = string;
 export type TokenValue<T> = { value: T; alias?: string; fallback?: T };
@@ -53,9 +53,10 @@ type EngineNodeAdditions = {
   instanceOverrides?: Record<string, unknown>;
   assetRef?: string;
 };
+export type EngineImageNode = Omit<EngineV2ImageNode, "src"> & EngineNodeAdditions & { type: "image"; src?: string };
 type EngineV2LeafNode = Exclude<EngineV2Node, EngineV2FrameNode>;
 export type EngineFrameNode = Omit<EngineV2FrameNode, "children"> & EngineNodeAdditions & { children: EngineNode[] };
-export type EngineNode = (EngineV2LeafNode & EngineNodeAdditions) | EngineFrameNode;
+export type EngineNode = (Exclude<EngineV2LeafNode, EngineV2ImageNode> & EngineNodeAdditions) | EngineImageNode | EngineFrameNode;
 
 export type EngineDocumentV3 = {
   version: 3;

@@ -363,3 +363,14 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect(title).toHaveText("Direct canvas edit");
 });
+
+test("engine v3 uploads and places a persistent image asset", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByLabel("Upload image asset").setInputFiles("apps/web/public/icons/cloud/aws/aws-s3.png");
+  const image = page.locator('[data-node-type="image"]');
+  await expect(image).toBeVisible();
+  await expect(image).toHaveAttribute("src", /\/api\/engine-v3\/assets\?sha256=/);
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Image");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(image).toHaveCount(0);
+});
