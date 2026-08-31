@@ -35,6 +35,16 @@ describe("engine v3 canvas gestures", () => {
     assert.deepEqual(after.node.transform, { x: 120, y: 80 });
   });
 
+  it("converts page drag coordinates to local coordinates inside transformed frames", () => {
+    const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+    const pageId = document.pages[0].id;
+    const header = findEngineV3Node(document, pageId, "header")!;
+    header.node.transform = { x: 80, y: 40 };
+    const result = dragEngineV3Node(document, pageId, "title", 130, 100);
+    const title = findEngineV3Node(result.document, pageId, "title")!;
+    assert.deepEqual({ x: title.node.transform?.x, y: title.node.transform?.y }, { x: 50, y: 60 });
+  });
+
   it("resizes width and height independently", () => {
     const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
     const pageId = document.pages[0].id;

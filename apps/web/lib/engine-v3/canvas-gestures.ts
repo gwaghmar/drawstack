@@ -4,6 +4,15 @@ import { buildSnapGuides, snapRect, type SnapGuide, type SnapRect } from "./snap
 
 export type GestureResult = { document: EngineDocumentV3; guides: SnapGuide[] };
 
+export function engineV3NodeParentOffset(document: EngineDocumentV3, pageId: string, nodeId: string): { x: number; y: number } {
+  const location = findEngineV3Node(document, pageId, nodeId);
+  if (!location) return { x: 0, y: 0 };
+  return location.ancestorIds.reduce((offset, ancestorId) => {
+    const ancestor = findEngineV3Node(document, pageId, ancestorId)?.node;
+    return { x: offset.x + (ancestor?.transform?.x ?? 0), y: offset.y + (ancestor?.transform?.y ?? 0) };
+  }, { x: 0, y: 0 });
+}
+
 function rects(document: EngineDocumentV3, pageId: string, excludedIds: ReadonlySet<string>): SnapRect[] {
   const page = document.pages.find((item) => item.id === pageId); if (!page) return [];
   const result: SnapRect[] = [];
@@ -21,7 +30,8 @@ export function dragEngineV3Node(document: EngineDocumentV3, pageId: string, nod
   const location = findEngineV3Node(document, pageId, nodeId); if (!location) throw new Error(`Node not found: ${nodeId}`);
   const node = location.node; const width = typeof node.style?.width === "number" ? node.style.width : 0; const height = typeof node.style?.minHeight === "number" ? node.style.minHeight : 0;
   const snapped = snapRect({ id: nodeId, x, y, width, height }, buildSnapGuides(rects(document, pageId, subtreeIds(node))));
-  return { document: patchEngineV3Node(document, pageId, nodeId, { transform: { ...(node.transform ?? {}), x: snapped.x, y: snapped.y } }), guides: snapped.guides };
+  const parent = engineV3NodeParentOffset(document, pageId, nodeId);
+  return { document: patchEngineV3Node(document, pageId, nodeId, { transform: { ...(node.transform ?? {}), x: snapped.x - parent.x, y: snapped.y - parent.y } }), guides: snapped.guides };
 }
 
 export function resizeEngineV3Node(document: EngineDocumentV3, pageId: string, nodeId: string, width: number, height?: number): GestureResult {

@@ -17,7 +17,7 @@ import { createEngineV3PageView } from "@/lib/engine-v3/view-adapter";
 import { EngineV3HistoryController } from "@/lib/engine-v3/history";
 import type { EngineV3Command } from "@/lib/engine-v3/commands";
 import type { StoredAsset } from "@/lib/engine-v3/asset-storage";
-import { dragEngineV3Node } from "@/lib/engine-v3/canvas-gestures";
+import { dragEngineV3Node, engineV3NodeParentOffset } from "@/lib/engine-v3/canvas-gestures";
 import type { SnapGuide } from "@/lib/engine-v3/snapping";
 import { useEngineV3Collaboration } from "@/lib/hooks/use-engine-v3-collaboration";
 import { reconcileRemoteCommand, type ReconciliationConflict } from "@/lib/engine-v3/reconciliation";
@@ -234,20 +234,21 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const startX = event.clientX; const startY = event.clientY;
     const visual = visualNodeTransform(nodeId);
     const originalX = visual?.x ?? location.node.transform?.x ?? 0; const originalY = visual?.y ?? location.node.transform?.y ?? 0;
+    const originalLocalX = location.node.transform?.x ?? 0; const originalLocalY = location.node.transform?.y ?? 0;
     const pageId = activePage.id; const baseDocument = historyRef.current!.snapshot().document;
-    let finalX = originalX; let finalY = originalY; let moved = false;
+    let finalX = originalLocalX; let finalY = originalLocalY; let finalGlobalX = originalX; let finalGlobalY = originalY; let moved = false;
     const move = (pointer: PointerEvent) => {
       const scale = visual?.scale ?? 1;
-      finalX = originalX + (pointer.clientX - startX) * scale; finalY = originalY + (pointer.clientY - startY) * scale;
+      const desiredGlobalX = originalX + (pointer.clientX - startX) * scale; const desiredGlobalY = originalY + (pointer.clientY - startY) * scale;
       if (Math.abs(pointer.clientX - startX) + Math.abs(pointer.clientY - startY) < 3) return;
       moved = true;
-      try { const preview = dragEngineV3Node(baseDocument, pageId, nodeId, finalX, finalY); finalX = findEngineV3Node(preview.document, pageId, nodeId)?.node.transform?.x ?? finalX; finalY = findEngineV3Node(preview.document, pageId, nodeId)?.node.transform?.y ?? finalY; setDocument(preview.document); setGestureGuides(preview.guides); } catch { /* The committed command reports the actionable error. */ }
+      try { const preview = dragEngineV3Node(baseDocument, pageId, nodeId, desiredGlobalX, desiredGlobalY); const previewNode = findEngineV3Node(preview.document, pageId, nodeId)?.node; finalX = previewNode?.transform?.x ?? finalX; finalY = previewNode?.transform?.y ?? finalY; const parent = engineV3NodeParentOffset(preview.document, pageId, nodeId); finalGlobalX = finalX + parent.x; finalGlobalY = finalY + parent.y; setDocument(preview.document); setGestureGuides(preview.guides); } catch { /* The committed command reports the actionable error. */ }
     };
     const finish = () => {
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
       setGestureGuides([]);
       if (moved) {
-        const dx = finalX - originalX; const dy = finalY - originalY;
+        const dx = finalGlobalX - originalX; const dy = finalGlobalY - originalY;
         runCommand({ kind: "batch", commands: [{ kind: "node", action: "patch", pageId, nodeId, changes: { transform: { ...(location.node.transform ?? {}), x: finalX, y: finalY } } }, ...connectorPatchesForMove(pageId, nodeId, dx, dy)] });
         window.setTimeout(() => selectNode(nodeId), 0);
       }
