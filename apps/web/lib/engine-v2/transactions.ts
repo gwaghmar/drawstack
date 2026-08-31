@@ -4,6 +4,7 @@ import type {
   EngineFrameNode,
   EngineGraphNode,
   EngineImageNode,
+  EnginePathNode,
   EngineMetricNode,
   EngineNode,
   EngineTextNode,
@@ -15,6 +16,7 @@ export type EngineNodeRecord =
   | EngineChartNode
   | EngineGraphNode
   | EngineImageNode
+  | EnginePathNode
   | Omit<EngineFrameNode, "children">;
 
 export type EngineDocumentOperation =

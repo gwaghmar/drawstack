@@ -596,6 +596,7 @@ function nodeHtml(node: EngineNode, tokens: EngineTokens): string {
   }
   if (node.type === "text") return `<div class="engine-text-${node.variant}" data-node-id="${escapeMarkup(node.id)}"${styleAttribute}>${escapeMarkup(node.content)}</div>`;
   if (node.type === "image") return `<img data-node-id="${escapeMarkup(node.id)}" src="${escapeMarkup(node.src)}" alt="${escapeMarkup(node.alt)}"${styleAttribute}/>`;
+  if (node.type === "path") return `<svg data-node-id="${escapeMarkup(node.id)}" viewBox="0 0 ${Math.max(...node.points.map((point) => point.x), 1)} ${Math.max(...node.points.map((point) => point.y), 1)}"${styleAttribute}><polyline points="${node.points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${escapeMarkup(color(tokens, "ink"))}" stroke-width="${node.style?.borderWidth ?? 3}" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   if (node.type === "metric") {
     const accent = node.tone === "positive" ? color(tokens, "cobalt") : node.tone === "warning" ? color(tokens, "orange") : color(tokens, "ink");
     return `<section class="engine-card" data-node-id="${escapeMarkup(node.id)}"${styleAttribute}><div class="engine-metric-label">${escapeMarkup(node.label)}</div><div class="engine-metric-value" style="color:${escapeMarkup(accent)}">${escapeMarkup(node.value)}</div><div class="engine-metric-detail">${escapeMarkup(node.detail)}</div></section>`;
@@ -697,6 +698,7 @@ function reactNode(node: EngineNode, tokens: EngineTokens, depth: number): strin
     return `${padding}<div className="engine-text-${node.variant}" data-node-id={${id}} style={${style}}>{${JSON.stringify(node.content)}}</div>`;
   }
   if (node.type === "image") return `${padding}<img data-node-id={${id}} src={${JSON.stringify(node.src)}} alt={${JSON.stringify(node.alt)}} style={${style}} />`;
+  if (node.type === "path") return `${padding}<svg data-node-id={${id}} viewBox="0 0 ${Math.max(...node.points.map((point) => point.x), 1)} ${Math.max(...node.points.map((point) => point.y), 1)}" style={${style}}><polyline points="${node.points.map((point) => `${point.x},${point.y}`).join(" ")}" fill="none" stroke="${color(tokens, "ink")}" strokeWidth={${node.style?.borderWidth ?? 3}} strokeLinecap="round" strokeLinejoin="round" /></svg>`;
   if (node.type === "metric") {
     const accent = node.tone === "positive" ? color(tokens, "cobalt") : node.tone === "warning" ? color(tokens, "orange") : color(tokens, "ink");
     return `${padding}<section className="engine-card" data-node-id={${id}} style={${style}}>\n${padding}  <div className="engine-metric-label">{${JSON.stringify(node.label)}}</div>\n${padding}  <div className="engine-metric-value" style={${JSON.stringify({ color: accent })}}>{${JSON.stringify(node.value)}}</div>\n${padding}  <div className="engine-metric-detail">{${JSON.stringify(node.detail)}}</div>\n${padding}</section>`;

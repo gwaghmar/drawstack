@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowUpRight, Circle, Copy, Download, Frame, Image as ImageIcon, Layers3, Minus, MousePointer2, PanelRight, Plus, Redo2, Save, Share2, Square, Trash2, Type, Undo2, Upload, X } from "lucide-react";
+import { ArrowUpRight, Circle, Copy, Download, Frame, Image as ImageIcon, Layers3, Minus, MousePointer2, PanelRight, Pen, Plus, Redo2, Save, Share2, Square, Trash2, Type, Undo2, Upload, X } from "lucide-react";
 import { createEngineV2Project, saveEngineV2Project } from "@/app/actions/engine-v2";
 import { createShareLink } from "@/app/actions/share";
 import { EngineDocumentView } from "@/components/engine-v2/engine-canvas";
@@ -71,6 +71,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [zoom, setZoom] = useState(1);
+  const [penMode, setPenMode] = useState(false);
+  const penPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const activePage = document.pages.find((page) => page.id === activePageId) ?? document.pages[0];
   const selectedNode = useMemo(() => activePage ? findEngineV3Node(document, activePage.id, selectedNodeId)?.node ?? activePage.root : null, [activePage, document, selectedNodeId]);
   const tokenEntries = useMemo(() => Object.entries(document.tokens.colors), [document.tokens.colors]);
@@ -368,6 +370,25 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       runCommand({ kind: "batch", commands: targets.map((node) => ({ kind: "node" as const, action: "patch" as const, pageId: activePage.id, nodeId: node.id, changes: { style: { ...node.style, ...changes } } })) });
     } else patchSelected({ style: { ...selectedNode.style, ...changes } });
   };
+  const beginPen = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (!penMode || event.button !== 0 || !activePage || !canvasRef.current) return;
+    event.preventDefault();
+    const bounds = canvasRef.current.getBoundingClientRect();
+    const point = (clientX: number, clientY: number) => ({ x: Math.max(0, Math.round((clientX - bounds.left) * activePage.width / bounds.width)), y: Math.max(0, Math.round((clientY - bounds.top) * (activePage.height === "auto" ? 720 : activePage.height) / bounds.height)) });
+    penPointsRef.current = [point(event.clientX, event.clientY)];
+    const move = (pointer: PointerEvent) => { const next = point(pointer.clientX, pointer.clientY); const previous = penPointsRef.current.at(-1); if (!previous || Math.hypot(next.x - previous.x, next.y - previous.y) >= 3) penPointsRef.current.push(next); };
+    const finish = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
+      const points = penPointsRef.current; penPointsRef.current = [];
+      if (points.length < 2) return;
+      const minX = Math.min(...points.map((item) => item.x)); const minY = Math.min(...points.map((item) => item.y));
+      const nodeId = `path-${crypto.randomUUID()}`;
+      const node: EngineNode = { id: nodeId, name: "Pen path", type: "path", transform: { x: minX, y: minY }, points: points.map((item) => ({ x: item.x - minX, y: item.y - minY })), style: { width: Math.max(...points.map((item) => item.x)) - minX || 1, minHeight: Math.max(...points.map((item) => item.y)) - minY || 1, color: "$ink", borderWidth: 3 } } as EngineNode;
+      if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node })) selectNode(nodeId);
+    };
+    const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); penPointsRef.current = []; };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
+  };
   const makeComponent = () => {
     if (!selectedNode || selectedNode.componentRef || !activePage) return;
     let id = `${selectedNode.id}-component`;
@@ -491,6 +512,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[68px] shrink-0 flex-col items-center gap-1 border-r border-[#D7DBD2] bg-white px-2 py-3" aria-label="Create tools">
           <button type="button" className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[#15171A] text-white" aria-label="Select tool" title="Select"><MousePointer2 size={17} /></button>
+          <button type="button" onClick={() => setPenMode((value) => !value)} className={`flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] ${penMode ? "bg-[#B7FF4A] text-[#15171A]" : "text-[#4F5850] hover:bg-[#EEF0EA]"}`} aria-label="Draw with pen" aria-pressed={penMode}><Pen size={17} /><span>Pen</span></button>
           <button type="button" onClick={() => addCanvasNode("text")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add text"><Type size={17} /><span>Text</span></button>
           <button type="button" onClick={() => addCanvasNode("card")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add card"><Square size={17} /><span>Card</span></button>
           <button type="button" onClick={() => addCanvasNode("frame")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add frame"><Frame size={17} /><span>Frame</span></button>
@@ -512,7 +534,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             <button type="button" onClick={() => setZoom(1)} className="min-w-12 rounded-full px-2 py-1 font-mono text-[10px] font-semibold text-[#566057] hover:bg-[#EEF0EA]" aria-label="Reset zoom">{Math.round(zoom * 100)}%</button>
             <button type="button" onClick={() => setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom in" title="Zoom in"><Plus size={13} /></button>
           </div>
-          <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} className="relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
+          <div className="mx-auto" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={beginPen} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
           <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} />
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}

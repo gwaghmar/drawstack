@@ -60,6 +60,7 @@ export type EngineMetricNode = EngineNodeState & {
   style?: EngineStyle;
 };
 export type EngineImageNode = EngineNodeState & { id: string; name: string; type: "image"; src: string; alt: string; style?: EngineStyle };
+export type EnginePathNode = EngineNodeState & { id: string; name: string; type: "path"; points: Array<{ x: number; y: number }>; style?: EngineStyle };
 
 export type EngineChartDatum = DeterministicChartDatum;
 
@@ -97,6 +98,7 @@ export type EngineNode =
   | EngineTextNode
   | EngineMetricNode
   | EngineImageNode
+  | EnginePathNode
   | EngineChartNode
   | EngineGraphNode
   | EngineFrameNode;
