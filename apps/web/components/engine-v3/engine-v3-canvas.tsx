@@ -549,6 +549,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const beginNodeRotate = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (!activePage || !selectedNode || selectedNode.locked || !selectedBounds) return;
     event.preventDefault(); event.stopPropagation();
+    event.currentTarget.setPointerCapture(event.pointerId);
     const canvasBounds = canvasRef.current?.getBoundingClientRect();
     if (!canvasBounds) return;
     const centerX = canvasBounds.left + selectedBounds.left + selectedBounds.width / 2;
@@ -969,7 +970,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             </div>;
           })() : null}
           {marquee ? <div aria-label="Marquee selection" className="pointer-events-none absolute z-40 border border-[#3157F6] bg-[#3157F6]/10" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} /> : null}
-          {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
+          {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-[60] h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? ([
             ["nw", selectedBounds.left - 6, selectedBounds.top - 6, "nwse-resize"],
             ["n", selectedBounds.left + selectedBounds.width / 2 - 10, selectedBounds.top - 5, "ns-resize"],
