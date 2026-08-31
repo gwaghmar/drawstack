@@ -606,6 +606,18 @@ test("engine v3 applies a custom text font size", async ({ page }) => {
   await expect(size).toHaveValue("");
 });
 
+test("engine v3 applies text spacing controls", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  const lineHeight = page.getByLabel("Text line height");
+  await lineHeight.fill("1.2");
+  await expect(lineHeight).toHaveValue("1.2");
+  const letterSpacing = page.getByLabel("Text letter spacing");
+  await letterSpacing.fill("2");
+  await expect(letterSpacing).toHaveValue("2");
+  await expect(page.locator('[data-node-id="title"]')).toHaveCSS("letter-spacing", "2px");
+});
+
 test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
