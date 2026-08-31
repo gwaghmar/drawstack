@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { ENGINE_V2_SAMPLE } from "../engine-v2/document.ts";
 import { migrateV2ToV3 } from "./migration.ts";
 import { applyEngineV3Command, type EngineV3CommandEnvelope } from "./commands.ts";
+import { serializeEngineV3Document } from "./serialization.ts";
 
 const envelope = (command: EngineV3CommandEnvelope["command"], baseRevision = 0): EngineV3CommandEnvelope => ({ id: "command-1", baseRevision, actor: "test", origin: "local", timestamp: "2026-08-31T00:00:00.000Z", command });
 
@@ -32,5 +33,19 @@ describe("engine-v3 command envelopes", () => {
     const result = applyEngineV3Command(document, 0, envelope({ kind: "page", action: "remove", page: { id: pageId } }));
     assert.equal(result.ok, false);
     if (!result.ok) assert.equal(result.code, "invalid-command");
+  });
+  it("restores nested removals and batches exactly through its inverse", () => {
+    const { document } = migrateV2ToV3(ENGINE_V2_SAMPLE);
+    const pageId = document.pages[0].id;
+    const applied = applyEngineV3Command(document, 0, envelope({ kind: "batch", commands: [
+      { kind: "node", action: "remove", pageId, nodeId: "title" },
+      { kind: "page", action: "rename", page: { id: pageId, name: "Renamed page" } },
+    ] }));
+    assert.equal(applied.ok, true);
+    if (!applied.ok) return;
+    const restored = applyEngineV3Command(applied.document, applied.revision, applied.inverse);
+    assert.equal(restored.ok, true);
+    if (!restored.ok) return;
+    assert.equal(serializeEngineV3Document(restored.document), serializeEngineV3Document(document));
   });
 });

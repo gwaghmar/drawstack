@@ -4,16 +4,24 @@ import { validateEngineV3Document } from "./compiler.ts";
 export type CommandOrigin = "local" | "ai" | "import" | "undo" | "redo";
 export type CommandPrecondition = { exists?: boolean; type?: EngineNode["type"]; revision?: number };
 export type EngineV3Command =
-  | { kind: "page"; action: "add" | "remove" | "rename"; page: Page | { id: string; name?: string }; precondition?: CommandPrecondition }
+  | { kind: "batch"; commands: EngineV3Command[] }
+  | { kind: "page"; action: "add" | "remove" | "rename"; page: Page | { id: string; name?: string }; index?: number; precondition?: CommandPrecondition }
   | { kind: "tokens"; tokens: TokenSet; precondition?: CommandPrecondition }
   | { kind: "component"; action: "define" | "remove"; component: ComponentDefinition | { id: string }; precondition?: CommandPrecondition }
-  | { kind: "node"; action: "add" | "patch" | "remove"; pageId: string; node?: EngineNode; nodeId?: string; changes?: Record<string, unknown>; precondition?: CommandPrecondition };
+  | { kind: "node"; action: "add" | "patch" | "remove"; pageId: string; node?: EngineNode; nodeId?: string; parentId?: string | null; index?: number; changes?: Record<string, unknown>; unset?: string[]; precondition?: CommandPrecondition };
 export type EngineV3CommandEnvelope = { id: string; baseRevision: number; actor: string; origin: CommandOrigin; timestamp: string; command: EngineV3Command };
 export type CommandFailure = { ok: false; code: "revision-conflict" | "missing-page" | "missing-target" | "precondition-failed" | "invalid-command"; message: string; affectedIds: string[] };
 export type CommandSuccess = { ok: true; document: EngineDocumentV3; revision: number; inverse: EngineV3CommandEnvelope; affectedIds: string[] };
 export type ApplyCommandResult = CommandSuccess | CommandFailure;
 
 const copy = <T>(value: T): T => structuredClone(value);
+function insertAt<T>(items: T[], value: T, index?: number): T[] { const next = [...items]; next.splice(index === undefined ? next.length : Math.max(0, Math.min(index, next.length)), 0, value); return next; }
+function locate(root: EngineNode, id: string, parentId: string | null = null, index = 0): { parentId: string | null; index: number } | null {
+  if (root.id === id) return { parentId, index };
+  if (root.type !== "frame") return null;
+  for (let i = 0; i < root.children.length; i += 1) { const found = locate(root.children[i], id, root.id, i); if (found) return found; }
+  return null;
+}
 function findNode(page: Page, id: string): EngineNode | null {
   const visit = (node: EngineNode): EngineNode | null => node.id === id ? node : node.type === "frame" ? node.children.map(visit).find(Boolean) ?? null : null;
   return visit(page.root);
@@ -22,7 +30,7 @@ function mapNode(node: EngineNode, id: string, update: (node: EngineNode) => Eng
   if (node.id === id) return update(node);
   if (node.type !== "frame") return node;
   const children = node.children.map((child) => mapNode(child, id, update)).filter((child): child is EngineNode => child !== null);
-  return children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
+  return children.length === node.children.length && children.every((child, index) => child === node.children[index]) ? node : { ...node, children };
 }
 function replacePageNode(page: Page, id: string, update: (node: EngineNode) => EngineNode | null): Page {
   const root = mapNode(page.root, id, update);
@@ -44,13 +52,27 @@ export function applyEngineV3Command(document: EngineDocumentV3, revision: numbe
   const affectedIds: string[] = [];
   let inverse: EngineV3Command;
   try {
-    if (command.kind === "page") {
+    if (command.kind === "batch") {
+      let working = next;
+      const inverses: EngineV3Command[] = [];
+      const ids: string[] = [];
+      for (const [index, child] of command.commands.entries()) {
+        const result = applyEngineV3Command(working, revision + index, { ...envelope, id: `${envelope.id}:${index}`, baseRevision: revision + index, command: child });
+        if (!result.ok) return result;
+        working = result.document;
+        inverses.unshift(result.inverse.command);
+        ids.push(...result.affectedIds);
+      }
+      next = working;
+      affectedIds.push(...ids);
+      inverse = { kind: "batch", commands: inverses };
+    } else if (command.kind === "page") {
       const id = command.page.id;
       const index = next.pages.findIndex((page) => page.id === id);
       const failure = check(command.precondition, index >= 0 ? next.pages[index].root : null, revision, id);
       if (failure) return failure;
-      if (command.action === "add") { if (index >= 0 || !("width" in command.page)) throw new Error("Invalid page"); next.pages.push(copy(command.page as Page)); inverse = { kind: "page", action: "remove", page: { id } }; }
-      else if (command.action === "remove") { if (index < 0) throw new Error("Missing page"); const removed = next.pages.splice(index, 1)[0]; inverse = { kind: "page", action: "add", page: removed }; }
+      if (command.action === "add") { if (index >= 0 || !("width" in command.page)) throw new Error("Invalid page"); next.pages.splice(command.index === undefined ? next.pages.length : Math.max(0, Math.min(command.index, next.pages.length)), 0, copy(command.page as Page)); inverse = { kind: "page", action: "remove", page: { id } }; }
+      else if (command.action === "remove") { if (index < 0) throw new Error("Missing page"); const removed = next.pages.splice(index, 1)[0]; inverse = { kind: "page", action: "add", page: removed, index }; }
       else { if (index < 0 || !command.page.name) throw new Error("Missing page"); const old = next.pages[index].name; next.pages[index] = { ...next.pages[index], name: command.page.name }; inverse = { kind: "page", action: "rename", page: { id, name: old } }; }
       affectedIds.push(id);
     } else if (command.kind === "tokens") {
@@ -63,9 +85,9 @@ export function applyEngineV3Command(document: EngineDocumentV3, revision: numbe
     } else {
       const page = next.pages.find((item) => item.id === command.pageId); if (!page) return { ok: false, code: "missing-page", message: "Page does not exist", affectedIds: [command.pageId] };
       const id = command.nodeId ?? command.node?.id ?? ""; const target = findNode(page, id); const failure = check(command.precondition, target, revision, id); if (failure) return failure;
-      if (command.action === "add") { if (!command.node || target) throw new Error("Invalid node"); next.pages = next.pages.map((item) => item.id === page.id ? { ...item, root: { ...item.root, children: [...item.root.children, copy(command.node!)] } } : item); inverse = { kind: "node", action: "remove", pageId: page.id, nodeId: id }; }
-      else if (command.action === "remove") { if (!target) throw new Error("Missing node"); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, () => null) : item); inverse = { kind: "node", action: "add", pageId: page.id, node: target }; }
-      else { if (!target || !command.changes) throw new Error("Invalid node"); const old = copy(target); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, (node) => ({ ...node, ...copy(command.changes) })) : item); inverse = { kind: "node", action: "patch", pageId: page.id, nodeId: id, changes: old as unknown as Record<string, unknown> }; }
+      if (command.action === "add") { if (!command.node || target) throw new Error("Invalid node"); const parentId = command.parentId ?? null; next.pages = next.pages.map((item) => { if (item.id !== page.id) return item; return parentId === null ? { ...item, root: { ...item.root, children: insertAt(item.root.children, copy(command.node!), command.index) } } : replacePageNode(item, parentId, (parent) => parent.type === "frame" ? { ...parent, children: insertAt(parent.children, copy(command.node!), command.index) } : parent); }); inverse = { kind: "node", action: "remove", pageId: page.id, nodeId: id, parentId, index: command.index }; }
+      else if (command.action === "remove") { if (!target) throw new Error("Missing node"); const location = locate(page.root, id); if (!location) throw new Error("Missing node"); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, () => null) : item); inverse = { kind: "node", action: "add", pageId: page.id, node: target, parentId: location.parentId, index: location.index }; }
+      else { if (!target || !command.changes) throw new Error("Invalid node"); const old = copy(target); next.pages = next.pages.map((item) => item.id === page.id ? replacePageNode(item, id, (node) => { const patched = { ...node, ...copy(command.changes) } as Record<string, unknown>; for (const key of command.unset ?? []) delete patched[key]; return patched as EngineNode; }) : item); const previousKeys = new Set(Object.keys(old)); inverse = { kind: "node", action: "patch", pageId: page.id, nodeId: id, changes: old as unknown as Record<string, unknown>, unset: Object.keys(command.changes).filter((key) => !previousKeys.has(key)) }; }
       affectedIds.push(id);
     }
   } catch (error) { return { ok: false, code: "invalid-command", message: error instanceof Error ? error.message : "Invalid command", affectedIds }; }

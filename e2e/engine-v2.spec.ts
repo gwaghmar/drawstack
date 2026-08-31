@@ -324,3 +324,28 @@ test("engine v3 upgrade preview manages pages and committed color tokens", async
   await paper.press("Enter");
   await expect(page.locator("[data-engine-document='v2']")).toHaveCSS("background-color", "rgb(255, 240, 0)");
 });
+
+test("engine v3 edits nested nodes and reusable components", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "text Report title", exact: true }).click();
+  const title = page.locator('[data-node-id="title"]');
+  await page.getByLabel("V3 text content").fill("Editable across pages");
+  await expect(title).toHaveText("Editable across pages");
+
+  await page.getByLabel("V3 node X").fill("18");
+  await page.getByLabel("V3 node Y").fill("24");
+  await page.getByLabel("V3 node opacity").fill("0.6");
+  await expect(title).toHaveCSS("left", "18px");
+  await expect(title).toHaveCSS("top", "24px");
+  await expect(title).toHaveCSS("opacity", "0.6");
+
+  await page.getByLabel("V3 node locked").check();
+  await page.getByLabel("V3 text content").fill("Blocked edit");
+  await expect(title).toHaveText("Editable across pages");
+  await expect(page.getByRole("alert").filter({ hasText: "locked" })).toBeVisible();
+  await page.getByLabel("V3 node locked").uncheck();
+  await page.getByRole("button", { name: "Create component", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Detach component", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Detach component", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Create component", exact: true })).toBeVisible();
+});

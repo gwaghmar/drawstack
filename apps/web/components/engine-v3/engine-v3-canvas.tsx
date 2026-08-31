@@ -7,7 +7,10 @@ import { createEngineV2Project, saveEngineV2Project } from "@/app/actions/engine
 import { createShareLink } from "@/app/actions/share";
 import { EngineDocumentView } from "@/components/engine-v2/engine-canvas";
 import type { EngineDocumentV3, Page } from "@/lib/engine-v3/document";
+import type { EngineNode } from "@/lib/engine-v3/document";
 import { addPage as addV3Page, duplicatePage as duplicateV3Page, removePage as removeV3Page } from "@/lib/engine-v3/operations";
+import { findEngineV3Node, patchEngineV3Node } from "@/lib/engine-v3/node-operations";
+import { defineComponent } from "@/lib/engine-v3/components";
 import { createEngineV3JsonExport, createEngineV3PageExports, type EngineV3ExportPayload } from "@/lib/engine-v3/export";
 import { serializeEngineV3Document } from "@/lib/engine-v3/serialization";
 import { createEngineV3PageView } from "@/lib/engine-v3/view-adapter";
@@ -27,23 +30,40 @@ const pageName = (pages: Page[], base: string) => {
   return base + " " + index;
 };
 
+function LayerTree({ nodes, selectedId, onSelect, depth = 0 }: { nodes: EngineNode[]; selectedId: string; onSelect: (id: string) => void; depth?: number }) {
+  return <div role={depth ? "group" : "tree"} aria-label={depth ? undefined : "Page layers"}>{nodes.map((node) => <div key={node.id} role="treeitem" aria-selected={node.id === selectedId} aria-expanded={node.type === "frame" ? true : undefined}><button type="button" onClick={() => onSelect(node.id)} style={{ paddingLeft: 8 + depth * 12 }} className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[11px] ${node.id === selectedId ? "bg-[#DCE3FF] text-[#2448D8]" : "text-[#566057] hover:bg-white"}`}><span className="w-10 shrink-0 font-mono text-[8px] uppercase opacity-65">{node.type}</span><span className="truncate">{node.name}</span></button>{node.type === "frame" ? <LayerTree nodes={node.children} selectedId={selectedId} onSelect={onSelect} depth={depth + 1} /> : null}</div>)}</div>;
+}
+
 export function EngineV3Canvas({ initialDocument, initialProjectId = null, initialUpdatedAt = null, onDocumentChange }: EngineV3CanvasProps) {
   const router = useRouter();
   const [document, setDocument] = useState(initialDocument);
   const [projectId, setProjectId] = useState(initialProjectId);
   const [updatedAt, setUpdatedAt] = useState(initialUpdatedAt);
   const [activePageId, setActivePageId] = useState(initialDocument.pages[0]?.id ?? "");
+  const [selectedNodeId, setSelectedNodeId] = useState(initialDocument.pages[0]?.root.id ?? "");
   const [drawer, setDrawer] = useState<"pages" | "inspector" | null>(null);
   const [saveState, setSaveState] = useState<"idle" | "saving" | "saved" | "error" | "conflict">("idle");
   const [shareState, setShareState] = useState<"idle" | "sharing" | "copied" | "error">("idle");
   const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
+  const [editorError, setEditorError] = useState<string | null>(null);
   const activePage = document.pages.find((page) => page.id === activePageId) ?? document.pages[0];
+  const selectedNode = useMemo(() => activePage ? findEngineV3Node(document, activePage.id, selectedNodeId)?.node ?? activePage.root : null, [activePage, document, selectedNodeId]);
   const tokenEntries = useMemo(() => Object.entries(document.tokens.colors), [document.tokens.colors]);
   const activePageView = useMemo(() => activePage ? createEngineV3PageView(document, activePage.id) : null, [activePage, document]);
 
   const commit = (next: EngineDocumentV3) => {
     setDocument(next);
     onDocumentChange?.(next);
+  };
+  const commitWithTimestamp = (next: EngineDocumentV3) => commit({ ...next, metadata: { ...next.metadata, updatedAt: new Date().toISOString() } });
+  const patchSelected = (changes: Partial<EngineNode>) => {
+    if (!activePage || !selectedNode) return;
+    try {
+      commitWithTimestamp(patchEngineV3Node(document, activePage.id, selectedNode.id, changes));
+      setEditorError(null);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "The node could not be changed");
+    }
   };
   const updatePage = (pageId: string, update: (page: Page) => Page) => commit({ ...document, pages: document.pages.map((page) => page.id === pageId ? update(page) : page), metadata: { ...document.metadata, updatedAt: new Date().toISOString() } });
   const addPage = () => {
@@ -52,6 +72,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const result = addV3Page(document, page, document.pages.length, activePageId);
     commit({ ...result.document, metadata: { ...result.document.metadata, updatedAt: new Date().toISOString() } });
     setActivePageId(id);
+    setSelectedNodeId(page.root.id);
   };
   const duplicatePage = () => {
     if (!activePage) return;
@@ -62,6 +83,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     next.pages[pageIndex] = { ...next.pages[pageIndex], name: pageName(document.pages, activePage.name + " copy") };
     commit({ ...next, metadata: { ...next.metadata, updatedAt: new Date().toISOString() } });
     setActivePageId(id);
+    setSelectedNodeId(next.pages[pageIndex].root.id);
   };
   const deletePage = () => {
     if (!activePage || document.pages.length <= 1) return;
@@ -69,6 +91,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const result = removeV3Page(document, activePage.id, activePage.id);
     commit({ ...result.document, metadata: { ...result.document.metadata, updatedAt: new Date().toISOString() } });
     setActivePageId(result.activePageId || result.document.pages[Math.max(0, index - 1)]?.id);
+    setSelectedNodeId(result.document.pages.find((page) => page.id === result.activePageId)?.root.id ?? result.document.pages[0].root.id);
   };
   const renamePage = (name: string) => {
     if (activePage && name.trim()) updatePage(activePage.id, (page) => ({ ...page, name: name.trim() }));
@@ -83,6 +106,21 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     if (value.trim() && !/[<>`]/.test(value)) updateColorToken(key, value.trim());
     setColorDrafts((current) => { const next = { ...current }; delete next[key]; return next; });
   };
+  const makeComponent = () => {
+    if (!selectedNode || selectedNode.componentRef || !activePage) return;
+    let id = `${selectedNode.id}-component`;
+    let suffix = 2;
+    while (document.components[id]) id = `${selectedNode.id}-component-${suffix++}`;
+    try {
+      const defined = defineComponent(document.components, id, selectedNode.name, selectedNode);
+      const next = patchEngineV3Node({ ...document, components: defined.components }, activePage.id, selectedNode.id, { componentRef: id, instanceOverrides: {} });
+      commitWithTimestamp(next);
+      setEditorError(null);
+    } catch (error) {
+      setEditorError(error instanceof Error ? error.message : "The component could not be created");
+    }
+  };
+  const detachComponent = () => patchSelected({ componentRef: undefined, instanceOverrides: undefined });
   const saveDocument = async () => {
     setSaveState("saving");
     try {
@@ -152,13 +190,15 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       <div className="flex min-h-0 flex-1">
         <aside className={`w-[188px] shrink-0 border-r border-[#D7DBD2] bg-[#EEF0EA] p-3 max-lg:fixed max-lg:inset-y-14 max-lg:left-0 max-lg:z-30 max-lg:shadow-xl ${drawer === "pages" ? "max-lg:block" : "max-lg:hidden"}`} aria-label="Pages">
           <div className="mb-3 flex items-center justify-between"><span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Pages</span><button type="button" aria-label="Close pages" className="rounded p-1 hover:bg-[#DDE1D9] lg:hidden" onClick={() => setDrawer(null)}><X size={14} /></button></div>
-          <div className="space-y-2" role="tablist" aria-label="Document pages">{document.pages.map((page) => <button key={page.id} type="button" role="tab" aria-selected={page.id === activePage.id} onClick={() => { setActivePageId(page.id); setDrawer(null); }} className={`w-full rounded-lg border p-2 text-left ${page.id === activePage.id ? "border-[#3157F6] bg-white shadow-sm" : "border-[#D7DBD2] bg-[#F7F8F4] hover:border-[#3157F6]"}`}><div className="mb-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded border border-[#D7DBD2] bg-white text-[10px] text-[#667067]"><span aria-hidden="true">{page.name.slice(0, 1).toUpperCase()}</span></div><span className="block truncate text-xs font-medium">{page.name}</span></button>)}</div>
+          <div className="space-y-2" role="tablist" aria-label="Document pages">{document.pages.map((page) => <button key={page.id} type="button" role="tab" aria-selected={page.id === activePage.id} onClick={() => { setActivePageId(page.id); setSelectedNodeId(page.root.id); setDrawer(null); }} className={`w-full rounded-lg border p-2 text-left ${page.id === activePage.id ? "border-[#3157F6] bg-white shadow-sm" : "border-[#D7DBD2] bg-[#F7F8F4] hover:border-[#3157F6]"}`}><div className="mb-2 flex aspect-[4/3] items-center justify-center overflow-hidden rounded border border-[#D7DBD2] bg-white text-[10px] text-[#667067]"><span aria-hidden="true">{page.name.slice(0, 1).toUpperCase()}</span></div><span className="block truncate text-xs font-medium">{page.name}</span></button>)}</div>
           <div className="mt-3 grid grid-cols-4 gap-1"><button type="button" onClick={addPage} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6]" aria-label="Add page"><Plus size={13} /></button><button type="button" onClick={duplicatePage} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6]" aria-label="Duplicate page"><Copy size={13} /></button><button type="button" onClick={deletePage} disabled={document.pages.length <= 1} className="rounded-md border border-[#C8CEC4] bg-white p-2 text-[#B93815] hover:border-[#B93815] disabled:opacity-35" aria-label="Delete page"><Trash2 size={13} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6] lg:hidden" aria-label="Open inspector">i</button></div>
+          <div className="mt-5 border-t border-[#D7DBD2] pt-3"><div className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Layers</div><LayerTree nodes={[activePage.root]} selectedId={selectedNode?.id ?? ""} onSelect={setSelectedNodeId} /></div>
         </aside>
         <section className="min-w-0 flex-1 overflow-auto p-4 sm:p-8" aria-label="Canvas preview"><div className="mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}><EngineDocumentView document={activePageView} /></div></section>
         <aside className={`w-[272px] shrink-0 overflow-y-auto border-l border-[#D7DBD2] bg-[#EEF0EA] p-4 max-xl:fixed max-xl:inset-y-14 max-xl:right-0 max-xl:z-30 max-xl:shadow-xl ${drawer === "inspector" ? "max-xl:block" : "max-xl:hidden"}`} aria-label="Inspector">
           <div className="mb-4 flex items-center justify-between"><span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Page inspector</span><button type="button" aria-label="Close inspector" className="rounded p-1 hover:bg-[#DDE1D9] xl:hidden" onClick={() => setDrawer(null)}><X size={14} /></button></div>
           <label className="mb-4 block"><span className="mb-2 block text-xs text-[#667067]">Page name</span><input aria-label="Page name" value={activePage.name} onChange={(event) => renamePage(event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label>
+          {selectedNode ? <fieldset className="mb-4 rounded-lg border border-[#D7DBD2] bg-white p-3"><legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Selected node</legend><div className="space-y-3"><label className="block"><span className="mb-1 block text-xs text-[#667067]">Name</span><input aria-label="V3 node name" value={selectedNode.name} onChange={(event) => patchSelected({ name: event.target.value })} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label>{selectedNode.type === "text" ? <label className="block"><span className="mb-1 block text-xs text-[#667067]">Text</span><textarea aria-label="V3 text content" value={selectedNode.content} onChange={(event) => patchSelected({ content: event.target.value } as Partial<EngineNode>)} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label> : null}{selectedNode.type === "metric" ? <><label className="block"><span className="mb-1 block text-xs text-[#667067]">Value</span><input aria-label="V3 metric value" value={selectedNode.value} onChange={(event) => patchSelected({ value: event.target.value } as Partial<EngineNode>)} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label><label className="block"><span className="mb-1 block text-xs text-[#667067]">Detail</span><input aria-label="V3 metric detail" value={selectedNode.detail} onChange={(event) => patchSelected({ detail: event.target.value } as Partial<EngineNode>)} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label></> : null}<div className="grid grid-cols-2 gap-2"><label className="flex items-center gap-2 text-xs"><input aria-label="V3 node visible" type="checkbox" checked={selectedNode.visible !== false} onChange={(event) => patchSelected({ visible: event.target.checked })} />Visible</label><label className="flex items-center gap-2 text-xs"><input aria-label="V3 node locked" type="checkbox" checked={selectedNode.locked === true} onChange={(event) => patchSelected({ locked: event.target.checked })} />Locked</label><label><span className="mb-1 block text-xs text-[#667067]">X</span><input aria-label="V3 node X" type="number" value={selectedNode.transform?.x ?? 0} onChange={(event) => patchSelected({ transform: { ...selectedNode.transform, x: Number(event.target.value) || 0 } })} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label><label><span className="mb-1 block text-xs text-[#667067]">Y</span><input aria-label="V3 node Y" type="number" value={selectedNode.transform?.y ?? 0} onChange={(event) => patchSelected({ transform: { ...selectedNode.transform, y: Number(event.target.value) || 0 } })} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label><label><span className="mb-1 block text-xs text-[#667067]">Rotation</span><input aria-label="V3 node rotation" type="number" value={selectedNode.transform?.rotation ?? 0} onChange={(event) => patchSelected({ transform: { ...selectedNode.transform, rotation: Number(event.target.value) || 0 } })} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label><label><span className="mb-1 block text-xs text-[#667067]">Opacity</span><input aria-label="V3 node opacity" type="number" min="0" max="1" step="0.05" value={selectedNode.opacity ?? 1} onChange={(event) => patchSelected({ opacity: Math.max(0, Math.min(1, Number(event.target.value))) })} className="w-full rounded-md border border-[#C8CEC4] px-2 py-1.5 text-xs" /></label></div>{selectedNode.componentRef ? <button type="button" onClick={detachComponent} className="w-full rounded-md border border-[#C8CEC4] px-2 py-2 text-xs font-semibold hover:border-[#3157F6]">Detach component</button> : <button type="button" onClick={makeComponent} className="w-full rounded-md border border-[#C8CEC4] px-2 py-2 text-xs font-semibold hover:border-[#3157F6]">Create component</button>}{editorError ? <p role="alert" className="text-[11px] text-[#B93815]">{editorError}</p> : null}</div></fieldset> : null}
           <fieldset className="rounded-lg border border-[#D7DBD2] bg-white p-3"><legend className="px-1 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Color tokens</legend><div className="space-y-3">{tokenEntries.map(([key, token]) => <label key={key} className="block"><span className="mb-1 block text-xs text-[#667067]">{key}</span><input aria-label={`Color token ${key}`} type="text" value={colorDrafts[key] ?? String(token.value)} onChange={(event) => setColorDrafts((current) => ({ ...current, [key]: event.target.value }))} onBlur={() => commitColorToken(key)} onKeyDown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2 text-xs outline-none focus:border-[#3157F6]" /></label>)}</div></fieldset>
         </aside>
       </div>
