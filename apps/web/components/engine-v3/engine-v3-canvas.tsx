@@ -72,6 +72,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [gestureGuides, setGestureGuides] = useState<SnapGuide[]>([]);
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const [selectedGroupBounds, setSelectedGroupBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextValue, setEditingTextValue] = useState("");
@@ -116,7 +117,25 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const observer = new ResizeObserver(measure);
     if (canvasRef.current) observer.observe(canvasRef.current);
     return () => observer.disconnect();
-  }, [selectedNodeId, document, activePageId]);
+  }, [selectedNodeId, selectedNodeIds, document, activePageId]);
+  useEffect(() => {
+    const measure = () => {
+      const canvas = canvasRef.current;
+      if (!canvas || selectedNodeIds.size < 2) { setSelectedGroupBounds(null); return; }
+      const canvasBounds = canvas.getBoundingClientRect();
+      const rects = [...selectedNodeIds].map((id) => canvas.querySelector<HTMLElement>(`[data-node-id="${id}"]`)?.getBoundingClientRect()).filter((rect): rect is DOMRect => Boolean(rect));
+      if (!rects.length) { setSelectedGroupBounds(null); return; }
+      const left = Math.min(...rects.map((rect) => rect.left)) - canvasBounds.left;
+      const top = Math.min(...rects.map((rect) => rect.top)) - canvasBounds.top;
+      const right = Math.max(...rects.map((rect) => rect.right)) - canvasBounds.left;
+      const bottom = Math.max(...rects.map((rect) => rect.bottom)) - canvasBounds.top;
+      setSelectedGroupBounds({ left, top, width: right - left, height: bottom - top });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    if (canvasRef.current) observer.observe(canvasRef.current);
+    return () => observer.disconnect();
+  }, [selectedNodeIds, document, activePageId]);
 
   const acceptHistory = (next: ReturnType<EngineV3HistoryController["snapshot"]>) => {
     setHistoryState(next);
@@ -789,6 +808,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           </div>
           <div className="mx-auto max-sm:min-w-[720px]" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={handleCanvasPointerDown} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
           <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} onDoubleClick={beginTextEdit} />
+          {selectedGroupBounds ? <div data-selection-group aria-label="Group selection bounds" className="pointer-events-none absolute z-20 border border-dashed border-[#3157F6]" style={{ left: selectedGroupBounds.left - 6, top: selectedGroupBounds.top - 6, width: selectedGroupBounds.width + 12, height: selectedGroupBounds.height + 12 }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
           {marquee ? <div aria-label="Marquee selection" className="pointer-events-none absolute z-40 border border-[#3157F6] bg-[#3157F6]/10" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}

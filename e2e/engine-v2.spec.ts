@@ -592,6 +592,7 @@ test("engine v3 drags Shift-selected nodes together", async ({ page }) => {
   await page.getByRole("button", { name: "Show layers", exact: true }).click();
   await page.getByLabel("Include Monthly revenue in group selection").check();
   await page.getByRole("button", { name: "Close layers", exact: true }).click();
+  await expect(page.getByLabel("Group selection bounds")).toBeVisible();
   const titleBefore = await title.boundingBox();
   const revenueBefore = await revenue.boundingBox();
   if (!titleBefore || !revenueBefore) throw new Error("Multi-selection geometry is unavailable");
