@@ -220,6 +220,25 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
   };
+  const beginNodeRotate = (event: React.PointerEvent<HTMLButtonElement>) => {
+    if (!activePage || !selectedNode || selectedNode.locked || !selectedBounds) return;
+    event.preventDefault(); event.stopPropagation();
+    const canvasBounds = canvasRef.current?.getBoundingClientRect();
+    if (!canvasBounds) return;
+    const centerX = canvasBounds.left + selectedBounds.left + selectedBounds.width / 2;
+    const centerY = canvasBounds.top + selectedBounds.top + selectedBounds.height / 2;
+    const startAngle = Math.atan2(event.clientY - centerY, event.clientX - centerX);
+    const startRotation = selectedNode.transform?.rotation ?? 0;
+    const pageId = activePage.id; const nodeId = selectedNode.id; const base = historyRef.current!.snapshot().document; let rotation = startRotation; let changed = false;
+    const move = (pointer: PointerEvent) => {
+      rotation = Math.round(startRotation + (Math.atan2(pointer.clientY - centerY, pointer.clientX - centerX) - startAngle) * 180 / Math.PI);
+      changed = true;
+      try { setDocument(patchEngineV3Node(base, pageId, nodeId, { transform: { ...selectedNode.transform, rotation } })); } catch { /* commit below reports failures */ }
+    };
+    const finish = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); if (changed) runCommand({ kind: "node", action: "patch", pageId, nodeId, changes: { transform: { ...selectedNode.transform, rotation } } }); };
+    const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
+  };
   const placeAsset = (asset: StoredAsset) => {
     if (!activePage) return;
     const nodeId = `image-${crypto.randomUUID()}`;
@@ -433,6 +452,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         <section className="min-w-0 flex-1 overflow-auto bg-[#E9EBE6] p-4 sm:p-8" aria-label="Editable canvas"><div ref={canvasRef} className="relative mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
           <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} />
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
+          {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <button type="button" aria-label="Rotate selected node" onPointerDown={beginNodeRotate} className="absolute z-30 h-4 w-4 -translate-x-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + selectedBounds.width / 2, top: selectedBounds.top - 28, cursor: "grab" }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? ([
             ["nw", selectedBounds.left - 6, selectedBounds.top - 6, "nwse-resize"],
             ["n", selectedBounds.left + selectedBounds.width / 2 - 10, selectedBounds.top - 5, "ns-resize"],

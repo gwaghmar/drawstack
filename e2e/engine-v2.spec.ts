@@ -451,3 +451,19 @@ test("engine v3 resizes and groups layers through reversible commands", async ({
   await expect(page.getByRole("button", { name: "metric Monthly revenue", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "metric Net retention", exact: true })).toBeVisible();
 });
+
+test("engine v3 rotates a selected node with the canvas handle", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const handle = page.getByRole("button", { name: "Rotate selected node", exact: true });
+  await expect(handle).toBeVisible();
+  const bounds = await handle.boundingBox();
+  if (!bounds) throw new Error("Rotation geometry is unavailable");
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + 48, bounds.y + 18, { steps: 4 });
+  await page.mouse.up();
+  await page.getByText("More settings", { exact: true }).click();
+  await expect(page.getByLabel("V3 node rotation")).not.toHaveValue("0");
+});
