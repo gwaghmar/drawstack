@@ -14,6 +14,7 @@ export type EngineStyle = {
   borderColor?: string;
   borderWidth?: number;
   borderRadius?: number;
+  boxShadow?: string;
   minHeight?: number;
   width?: number | string;
   flex?: number;
@@ -153,6 +154,7 @@ export function nodeStyle(style: EngineStyle | undefined, tokens: EngineTokens):
     borderWidth: style.borderWidth,
     borderStyle: style.borderWidth ? "solid" : undefined,
     borderRadius: style.borderRadius,
+    boxShadow: style.boxShadow,
     minHeight: style.minHeight,
     width: style.width,
     flex: style.flex,
