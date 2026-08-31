@@ -214,6 +214,45 @@ test("engine v2 applies direct-editing state without breaking responsive flow", 
   await expect(node).toHaveCSS("visibility", "visible");
 });
 
+test("engine v2 previews AI changes before explicit approval", async ({ page }) => {
+  await page.route("**/api/ai/engine-v2", async (route) => {
+    const request = route.request().postDataJSON() as { currentDocument: { children: Array<{ id: string; type: string; children?: Array<Record<string, unknown>> }> } };
+    const proposed = structuredClone(request.currentDocument);
+    const find = (nodes: Array<Record<string, unknown>>): Record<string, unknown> | undefined => {
+      for (const node of nodes) {
+        if (node.id === "title") return node;
+        if (Array.isArray(node.children)) {
+          const nested = find(node.children as Array<Record<string, unknown>>);
+          if (nested) return nested;
+        }
+      }
+      return undefined;
+    };
+    const title = find(proposed.children as Array<Record<string, unknown>>);
+    if (title) title.content = "AI proposed title";
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ document: proposed, changeSummary: { changedNodeIds: ["title"], operationCount: 1 } }),
+    });
+  });
+  await page.goto("/app/engine-v2");
+  await page.getByRole("button", { name: "Open AI composer" }).click();
+  await page.getByLabel("Describe what to build").fill("Improve the selected title");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+
+  await expect(page.locator("[data-ai-preview='true']")).toBeVisible();
+  await expect(page.locator('[data-node-id="title"]')).toHaveText("AI proposed title");
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(page.locator("[data-ai-preview='true']")).toHaveCount(0);
+  await expect(page.locator('[data-node-id="title"]')).toHaveText("Growth without the noise.");
+
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "Apply changes", exact: true }).click();
+  await expect(page.locator('[data-node-id="title"]')).toHaveText("AI proposed title");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator('[data-node-id="title"]')).toHaveText("Growth without the noise.");
+});
+
 test("engine v2 exposes document controls and persistent validation errors", async ({ page }) => {
   await page.goto("/app/engine-v2");
 

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { ENGINE_V2_SAMPLE } from "./document";
-import { applyAiScope } from "./ai-scope";
+import { ENGINE_V2_SAMPLE } from "./document.ts";
+import { applyAiScope } from "./ai-scope.ts";
 
 describe("engine-v2 AI scope", () => {
   it("edits only selected nodes and returns a transaction summary", () => {
