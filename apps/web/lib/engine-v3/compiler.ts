@@ -71,6 +71,7 @@ export function validateEngineV3Document(input: unknown): EngineV3ValidationResu
       else node.points.forEach((point: unknown, index: number) => { if (!record(point) || !finite(point.x) || !finite(point.y)) add(`${path}.points[${index}]`, "Path points must contain finite coordinates"); });
       if (node.lineStyle !== undefined && !["straight", "elbow", "curve"].includes(String(node.lineStyle))) add(`${path}.lineStyle`, "Unsupported path line style");
       if (node.arrowEnd !== undefined && typeof node.arrowEnd !== "boolean") add(`${path}.arrowEnd`, "Path arrowEnd must be boolean");
+      for (const ref of ["startNodeId", "endNodeId"]) if (node[ref] !== undefined && !idPattern.test(String(node[ref]))) add(`${path}.${ref}`, "Invalid connector node reference");
     }
     if (node.componentRef !== undefined) {
       const componentRef = String(node.componentRef);
