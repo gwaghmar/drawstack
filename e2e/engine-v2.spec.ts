@@ -486,6 +486,18 @@ test("engine v3 starts inline text editing from the keyboard", async ({ page }) 
   await expect(page.getByLabel("Inline text editor")).toBeVisible();
 });
 
+test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  const before = await page.locator('[data-node-type="text"]').count();
+  await page.keyboard.press("Control+c");
+  await page.keyboard.press("Control+v");
+  await expect(page.locator('[data-node-type="text"]')).toHaveCount(before + 1);
+  await expect(page.getByRole("button", { name: "Undo", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator('[data-node-type="text"]')).toHaveCount(before);
+});
+
 test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');

@@ -41,6 +41,23 @@ function LayerTree({ nodes, selectedId, selectedIds, onSelect, onToggle, depth =
   return <div role={depth ? "group" : "tree"} aria-label={depth ? undefined : "Page layers"}>{nodes.map((node) => <div key={node.id} role="treeitem" aria-selected={node.id === selectedId} aria-expanded={node.type === "frame" ? true : undefined}><div className="flex items-center"><input type="checkbox" checked={selectedIds.has(node.id)} onChange={(event) => onToggle(node.id, event.target.checked)} aria-label={`Include ${node.name} in group selection`} className="ml-1" /><button type="button" onClick={() => onSelect(node.id)} style={{ paddingLeft: 5 + depth * 12 }} className={`flex min-w-0 flex-1 items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[11px] ${node.id === selectedId ? "bg-[#DCE3FF] text-[#2448D8]" : "text-[#566057] hover:bg-white"}`}><span className="w-10 shrink-0 font-mono text-[8px] uppercase opacity-65">{node.type}</span><span className="truncate">{node.name}</span></button></div>{node.type === "frame" ? <LayerTree nodes={node.children} selectedId={selectedId} selectedIds={selectedIds} onSelect={onSelect} onToggle={onToggle} depth={depth + 1} /> : null}</div>)}</div>;
 }
 
+function cloneForClipboard(node: EngineNode): EngineNode {
+  const idMap = new Map<string, string>();
+  const collect = (current: EngineNode) => { idMap.set(current.id, `paste-${crypto.randomUUID()}`); if (current.type === "frame") current.children.forEach(collect); };
+  collect(node);
+  const remap = (current: EngineNode): EngineNode => {
+    const next = structuredClone(current);
+    next.id = idMap.get(current.id)!;
+    if (next.type === "frame") next.children = next.children.map(remap);
+    if (next.type === "path") {
+      if (next.startNodeId) next.startNodeId = idMap.get(next.startNodeId) ?? next.startNodeId;
+      if (next.endNodeId) next.endNodeId = idMap.get(next.endNodeId) ?? next.endNodeId;
+    }
+    return next;
+  };
+  return remap(node);
+}
+
 export function EngineV3Canvas({ initialDocument, initialProjectId = null, initialUpdatedAt = null, onDocumentChange }: EngineV3CanvasProps) {
   const router = useRouter();
   const historyRef = useRef<EngineV3HistoryController | null>(null);
@@ -73,6 +90,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [selectedGroupBounds, setSelectedGroupBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
+  const clipboardNodeRef = useRef<EngineNode | null>(null);
   const [marquee, setMarquee] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
   const [editingTextValue, setEditingTextValue] = useState("");
@@ -240,6 +258,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         if (nodeId !== activePage.root.id) runCommand({ kind: "node", action: "duplicate", pageId: activePage.id, nodeId, precondition: { exists: true } });
         return;
       }
+      if (modifier && key === "c" && selectedNodeIds.size === 1) { event.preventDefault(); copySelected(); return; }
+      if (modifier && key === "v" && selectedNodeIds.size === 1) { event.preventDefault(); pasteSelected(); return; }
       if (event.key === "Escape" && activePage) {
         event.preventDefault();
         selectNode(selectedLocation?.parentId ?? activePage.root.id);
@@ -651,6 +671,12 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   };
   const detachComponent = () => patchSelected({ componentRef: undefined, instanceOverrides: undefined });
   const duplicateSelected = () => { if (activePage && selectedNode && selectedNode.id !== activePage.root.id) runCommand({ kind: "node", action: "duplicate", pageId: activePage.id, nodeId: selectedNode.id, precondition: { exists: true } }); };
+  const copySelected = () => { if (selectedNode && selectedNode.id !== activePage?.root.id) clipboardNodeRef.current = cloneForClipboard(selectedNode); };
+  const pasteSelected = () => {
+    if (!activePage || !selectedLocation || !clipboardNodeRef.current) return;
+    const node = cloneForClipboard(clipboardNodeRef.current);
+    if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: selectedLocation.parentId, index: selectedLocation.index + 1, node })) selectNode(node.id);
+  };
   const removeSelected = () => { if (activePage && selectedNode && selectedNode.id !== activePage.root.id) runCommand({ kind: "node", action: "remove", pageId: activePage.id, nodeId: selectedNode.id, precondition: { exists: true } }); };
   const ungroupSelected = () => { if (activePage && selectedNode?.type === "frame" && selectedNode.id !== activePage.root.id) runCommand({ kind: "node", action: "ungroup", pageId: activePage.id, nodeId: selectedNode.id }); };
   const reorderSelected = (offset: -1 | 1) => { if (activePage && selectedLocation && selectedLocation.parentId !== null) runCommand({ kind: "node", action: "reorder", pageId: activePage.id, nodeId: selectedLocation.node.id, toIndex: selectedLocation.index + offset }); };
