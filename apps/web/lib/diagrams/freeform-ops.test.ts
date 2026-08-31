@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyCanvasOps, type CanvasOp } from "./freeform-ops.ts";
+import { applyCanvasOps, CanvasOpSchema, type CanvasOp } from "./freeform-ops.ts";
 import {
   createEmptyDocument,
   validateFreeformRefs,
@@ -224,6 +224,24 @@ describe("connect", () => {
     assert.deepEqual(arrow.start, { shapeId: "s_a", anchor: "auto" });
     assert.deepEqual(arrow.end, { shapeId: "s_b", anchor: "auto" });
     assert.equal(arrow.label, "reads");
+  });
+
+  it("creates a routed connector with waypoints and junction markers", () => {
+    const parsed = CanvasOpSchema.parse({
+      op: "connect",
+      from: "s_a",
+      to: "s_b",
+      routing: "orthogonal",
+      waypoints: [{ x: 280.4, y: 140.6 }],
+      showJunctions: true,
+    }) as CanvasOp;
+    const result = applyCanvasOps(docNoDupNames(), [parsed]);
+    const arrow = result.doc.shapes.find((shape) => shape.type === "arrow") as ArrowShape;
+
+    assert.equal(result.applied, 1);
+    assert.equal(arrow.routing, "orthogonal");
+    assert.deepEqual(arrow.waypoints, [{ x: 280, y: 141 }]);
+    assert.equal(arrow.showJunctions, true);
   });
 
   it("refuses to connect from/to an arrow", () => {

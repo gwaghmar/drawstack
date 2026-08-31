@@ -74,6 +74,9 @@ export const CanvasOpSchema = z.union([
     id: z.string().optional(),
     name: z.string().optional(),
     kind: z.enum(["arrow", "line"]).optional(),
+    routing: z.enum(["straight", "curved", "orthogonal"]).optional(),
+    waypoints: z.array(z.object({ x: z.number(), y: z.number() })).optional(),
+    showJunctions: z.boolean().optional(),
     arrowHeadStart: ArrowHeadStyleSchema.optional(),
     arrowHeadEnd: ArrowHeadStyleSchema.optional(),
     labelStyle: z.enum(["pill", "plain"]).optional(),
@@ -117,6 +120,8 @@ export type CanvasOp =
       name?: string;
       kind?: "arrow" | "line";
       routing?: "straight" | "curved" | "orthogonal";
+      waypoints?: { x: number; y: number }[];
+      showJunctions?: boolean;
       arrowStart?: boolean;
       arrowEnd?: boolean;
       arrowHeadStart?: ArrowHeadStyle;
@@ -311,6 +316,8 @@ function applyConnect(
     name?: string;
     kind?: "arrow" | "line";
     routing?: "straight" | "curved" | "orthogonal";
+    waypoints?: { x: number; y: number }[];
+    showJunctions?: boolean;
     arrowStart?: boolean;
     arrowEnd?: boolean;
     arrowHeadStart?: ArrowHeadStyle;
@@ -334,6 +341,8 @@ function applyConnect(
     ...(op.label ? { label: op.label } : {}),
     ...(op.name ? { name: op.name } : {}),
     ...(op.routing ? { routing: op.routing } : {}),
+    ...(op.waypoints ? { waypoints: op.waypoints.map((point) => ({ x: round(point.x), y: round(point.y) })) } : {}),
+    ...(op.showJunctions !== undefined ? { showJunctions: op.showJunctions } : {}),
     ...(op.arrowStart !== undefined ? { arrowStart: op.arrowStart } : {}),
     ...(op.arrowEnd !== undefined ? { arrowEnd: op.arrowEnd } : {}),
     ...(op.arrowHeadStart ? { arrowHeadStart: op.arrowHeadStart } : {}),
