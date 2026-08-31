@@ -534,6 +534,23 @@ test("engine v3 aligns text from the inspector and undoes it", async ({ page }) 
   await expect(alignment).toHaveValue("left");
 });
 
+test("engine v3 toggles text formatting from the inspector", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.click();
+  const bold = page.getByRole("button", { name: "Toggle bold text" });
+  await expect(bold).toHaveAttribute("aria-pressed", "false");
+  await bold.click();
+  await expect(bold).toHaveAttribute("aria-pressed", "true");
+  await expect(title).toHaveCSS("font-weight", "700");
+  await page.getByRole("button", { name: "Toggle italic text" }).click();
+  await expect(title).toHaveCSS("font-style", "italic");
+  await page.getByRole("button", { name: "Toggle underline text" }).click();
+  await expect(title).toHaveCSS("text-decoration-line", "underline");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(title).not.toHaveCSS("text-decoration-line", "underline");
+});
+
 test("engine v3 copies and pastes a selected node with a fresh identity", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
