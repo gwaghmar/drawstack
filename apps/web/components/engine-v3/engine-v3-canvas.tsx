@@ -315,6 +315,50 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     }
     const location = findEngineV3Node(document, activePage.id, nodeId);
     if (!location || location.node.locked) return;
+    const dragIds = selectedNodeIds.has(nodeId)
+      ? [...selectedNodeIds].filter((id) => id !== activePage.root.id && !findEngineV3Node(document, activePage.id, id)?.node.locked)
+      : [nodeId];
+    if (dragIds.length > 1) {
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const pageId = activePage.id;
+      const baseDocument = historyRef.current!.snapshot().document;
+      const sessions = dragIds.map((id) => {
+        const item = findEngineV3Node(baseDocument, pageId, id);
+        if (!item) return null;
+        const parent = engineV3NodeParentOffset(baseDocument, pageId, id);
+        const localX = item.node.transform?.x ?? 0;
+        const localY = item.node.transform?.y ?? 0;
+        return { id, node: item.node, parent, globalX: localX + parent.x, globalY: localY + parent.y };
+      }).filter((item): item is NonNullable<typeof item> => Boolean(item));
+      let moved = false;
+      let previewDocument = baseDocument;
+      const move = (pointer: PointerEvent) => {
+        const scale = visualNodeTransform(nodeId)?.scale ?? 1;
+        const dx = (pointer.clientX - startX) * scale;
+        const dy = (pointer.clientY - startY) * scale;
+        if (Math.abs(pointer.clientX - startX) + Math.abs(pointer.clientY - startY) < 3) return;
+        moved = true;
+        try {
+          previewDocument = sessions.reduce((current, session) => patchEngineV3Node(current, pageId, session.id, { transform: { ...(session.node.transform ?? {}), x: Math.round(session.globalX + dx - session.parent.x), y: Math.round(session.globalY + dy - session.parent.y) } }), baseDocument);
+          setDocument(previewDocument);
+        } catch { /* The committed command reports the actionable error. */ }
+      };
+      const finish = () => {
+        window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
+        if (moved) {
+          const commands: EngineV3Command[] = sessions.map((session) => {
+            const next = findEngineV3Node(previewDocument, pageId, session.id)?.node;
+            return { kind: "node", action: "patch", pageId, nodeId: session.id, changes: { transform: { ...(session.node.transform ?? {}), ...(next?.transform ?? {}) } } };
+          });
+          runCommand({ kind: "batch", commands });
+          window.setTimeout(() => setSelectedNodeIds(new Set(dragIds)), 0);
+        } else setDocument(historyRef.current!.snapshot().document);
+      };
+      const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
+      window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
+      return;
+    }
     selectNode(nodeId, event.shiftKey || event.metaKey || event.ctrlKey);
     const startX = event.clientX; const startY = event.clientY;
     const visual = visualNodeTransform(nodeId);

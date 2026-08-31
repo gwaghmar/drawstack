@@ -583,6 +583,28 @@ test("engine v3 drags a canvas node as one undoable gesture", async ({ page }) =
   await expect(page.getByLabel("V3 node Y")).toHaveValue("0");
 });
 
+test("engine v3 drags Shift-selected nodes together", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  const revenue = page.locator('[data-node-id="mrr"]');
+  await title.click();
+  await page.getByRole("button", { name: "Show layers", exact: true }).click();
+  await page.getByLabel("Include Monthly revenue in group selection").check();
+  await page.getByRole("button", { name: "Close layers", exact: true }).click();
+  const titleBefore = await title.boundingBox();
+  const revenueBefore = await revenue.boundingBox();
+  if (!titleBefore || !revenueBefore) throw new Error("Multi-selection geometry is unavailable");
+  await page.mouse.move(titleBefore.x + titleBefore.width / 2, titleBefore.y + titleBefore.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(titleBefore.x + titleBefore.width / 2 + 40, titleBefore.y + titleBefore.height / 2 + 24, { steps: 4 });
+  await page.mouse.up();
+  const titleAfter = await title.boundingBox();
+  const revenueAfter = await revenue.boundingBox();
+  expect(titleAfter?.x ?? 0).toBeGreaterThan(titleBefore.x);
+  expect(revenueAfter?.x ?? 0).toBeGreaterThan(revenueBefore.x);
+  expect((titleAfter?.x ?? 0) - titleBefore.x).toBeCloseTo((revenueAfter?.x ?? 0) - revenueBefore.x, 0);
+});
+
 test("engine v3 resizes and groups layers through reversible commands", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
