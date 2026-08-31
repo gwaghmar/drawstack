@@ -26,10 +26,10 @@ function subtreeIds(node: EngineNode): Set<string> {
   visit(node); return ids;
 }
 
-export function dragEngineV3Node(document: EngineDocumentV3, pageId: string, nodeId: string, x: number, y: number): GestureResult {
+export function dragEngineV3Node(document: EngineDocumentV3, pageId: string, nodeId: string, x: number, y: number, snap = true): GestureResult {
   const location = findEngineV3Node(document, pageId, nodeId); if (!location) throw new Error(`Node not found: ${nodeId}`);
   const node = location.node; const width = typeof node.style?.width === "number" ? node.style.width : 0; const height = typeof node.style?.minHeight === "number" ? node.style.minHeight : 0;
-  const snapped = snapRect({ id: nodeId, x, y, width, height }, buildSnapGuides(rects(document, pageId, subtreeIds(node))));
+  const snapped = snap ? snapRect({ id: nodeId, x, y, width, height }, buildSnapGuides(rects(document, pageId, subtreeIds(node)))) : { x, y, guides: [] };
   const parent = engineV3NodeParentOffset(document, pageId, nodeId);
   return { document: patchEngineV3Node(document, pageId, nodeId, { transform: { ...(node.transform ?? {}), x: snapped.x - parent.x, y: snapped.y - parent.y } }), guides: snapped.guides };
 }

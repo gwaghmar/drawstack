@@ -551,6 +551,14 @@ test("engine v3 supports keyboard zoom shortcuts", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Reset zoom", exact: true })).toHaveText("100%");
 });
 
+test("engine v3 lets users turn snapping off for free placement", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const snap = page.getByRole("button", { name: "Disable snapping" });
+  await expect(snap).toHaveAttribute("aria-pressed", "true");
+  await snap.click();
+  await expect(page.getByRole("button", { name: "Enable snapping" })).toHaveAttribute("aria-pressed", "false");
+});
+
 test("engine v3 can focus the canvas by hiding editor panels", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await expect(page.getByLabel("Create tools")).toBeVisible();
