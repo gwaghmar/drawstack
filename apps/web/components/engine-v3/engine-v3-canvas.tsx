@@ -58,9 +58,10 @@ function cloneForClipboard(node: EngineNode): EngineNode {
   return remap(node);
 }
 
-function collectEditableNodeIds(node: EngineNode, rootId: string, ids: string[] = []): string[] {
-  if (node.id !== rootId && !node.locked) ids.push(node.id);
-  if (node.type === "frame") node.children.forEach((child) => collectEditableNodeIds(child, rootId, ids));
+function collectEditableNodeIds(node: EngineNode, rootId: string, ids: string[] = [], inheritedLocked = false): string[] {
+  const locked = inheritedLocked || node.locked === true;
+  if (node.id !== rootId && !locked) ids.push(node.id);
+  if (node.type === "frame") node.children.forEach((child) => collectEditableNodeIds(child, rootId, ids, locked));
   return ids;
 }
 

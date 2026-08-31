@@ -391,6 +391,18 @@ test("engine v3 selects all editable objects with Control+A", async ({ page }) =
   await expect(page.locator('[data-node-id].outline')).toHaveCount(allObjects - 1);
 });
 
+test("engine v3 excludes descendants of locked frames from select all", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await page.getByRole("button", { name: "Show layers", exact: true }).click();
+  await page.getByRole("button", { name: "frame Title stack", exact: true }).click();
+  await page.getByRole("button", { name: "Close layers", exact: true }).click();
+  await page.getByText("More settings", { exact: true }).click();
+  await page.getByLabel("V3 node locked").check();
+  await page.keyboard.press("Control+A");
+  await expect(title).not.toHaveClass(/outline/);
+});
+
 test("engine v3 draws editable pen paths and connector styles", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.getByRole("button", { name: "Draw with pen" }).click();
