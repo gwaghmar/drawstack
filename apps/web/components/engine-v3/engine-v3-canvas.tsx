@@ -160,6 +160,12 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
+      if (!modifier && !event.altKey && activePage && !aiProposal) {
+        const shortcutKind = key === "t" ? "text" : key === "r" ? "card" : key === "f" ? "frame" : null;
+        if (shortcutKind) { event.preventDefault(); addCanvasNode(shortcutKind); return; }
+        if (key === "p") { event.preventDefault(); setPenMode(true); return; }
+        if (key === "v") { event.preventDefault(); setPenMode(false); return; }
+      }
       if (modifier && key === "a" && activePage && selectedNode) {
         event.preventDefault();
         const location = findEngineV3Node(document, activePage.id, selectedNode.id);

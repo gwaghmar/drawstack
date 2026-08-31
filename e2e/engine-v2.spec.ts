@@ -420,6 +420,21 @@ test("engine v3 provides a visible clear-selection control", async ({ page }) =>
   await expect(page.getByLabel("V3 node name")).toHaveValue("Report");
 });
 
+test("engine v3 supports Paper-style creation shortcuts", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "Select tool", exact: true }).focus();
+  await page.keyboard.press("t");
+  await expect(page.locator('[data-node-id^="text-"]')).toHaveCount(1);
+  await page.keyboard.press("r");
+  await expect(page.locator('[data-node-id^="card-"]')).toHaveCount(1);
+  await page.keyboard.press("f");
+  await expect(page.locator('[data-node-id^="frame-"]')).toHaveCount(1);
+  await page.keyboard.press("p");
+  await expect(page.getByRole("button", { name: "Draw with pen" })).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("v");
+  await expect(page.getByRole("button", { name: "Draw with pen" })).toHaveAttribute("aria-pressed", "false");
+});
+
 test("engine v3 creates a bound connector from two selected objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
