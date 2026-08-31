@@ -692,9 +692,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
       const points = penPointsRef.current; penPointsRef.current = [];
       if (points.length < 2) return;
-      const minX = Math.min(...points.map((item) => item.x)); const minY = Math.min(...points.map((item) => item.y));
+      const sourcePoints = points.length > 2 ? points.map((item, index) => index === 0 || index === points.length - 1 ? item : { x: Math.round((points[index - 1].x + item.x * 2 + points[index + 1].x) / 4), y: Math.round((points[index - 1].y + item.y * 2 + points[index + 1].y) / 4) }) : points;
+      const minX = Math.min(...sourcePoints.map((item) => item.x)); const minY = Math.min(...sourcePoints.map((item) => item.y));
       const nodeId = `path-${crypto.randomUUID()}`;
-      const node: EngineNode = { id: nodeId, name: "Pen path", type: "path", transform: { x: minX, y: minY }, points: points.map((item) => ({ x: item.x - minX, y: item.y - minY })), style: { width: Math.max(...points.map((item) => item.x)) - minX || 1, minHeight: Math.max(...points.map((item) => item.y)) - minY || 1, color: "$ink", borderWidth: 3 } } as EngineNode;
+      const node: EngineNode = { id: nodeId, name: "Pen stroke", type: "path", transform: { x: minX, y: minY }, points: sourcePoints.map((item) => ({ x: item.x - minX, y: item.y - minY })), style: { width: Math.max(...sourcePoints.map((item) => item.x)) - minX || 1, minHeight: Math.max(...sourcePoints.map((item) => item.y)) - minY || 1, color: "$ink", borderWidth: 3 } } as EngineNode;
       if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node })) selectNode(nodeId);
     };
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); penPointsRef.current = []; };
