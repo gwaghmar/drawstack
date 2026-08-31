@@ -45,7 +45,10 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointe
       data-layout={layout.mode}
       data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
+      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } }}
       onPointerDown={(event) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } }}
+      tabIndex={0}
+      aria-label={node.name}
       style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined }}
       className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
@@ -64,7 +67,10 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
     "data-node-id": node.id,
     "data-node-type": node.type,
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
+    onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } },
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } },
+    tabIndex: 0,
+    "aria-label": node.name,
     style: { ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
     className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };

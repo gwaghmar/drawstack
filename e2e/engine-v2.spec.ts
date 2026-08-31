@@ -373,6 +373,15 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await expect(page.getByText("More settings", { exact: true })).toBeVisible();
 });
 
+test("engine v3 allows keyboard selection of canvas objects", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const status = page.locator('[data-node-id="status"]');
+  await status.focus();
+  await page.keyboard.press("Enter");
+  await page.getByText("More settings", { exact: true }).click();
+  await expect(page.getByLabel("V3 node name")).toHaveValue("Status");
+});
+
 test("engine v3 draws editable pen paths and connector styles", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.getByRole("button", { name: "Draw with pen" }).click();
