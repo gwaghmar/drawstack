@@ -128,3 +128,22 @@ export async function ensureUserAndWorkspace(email: string) {
     resolveRole: resolveRoleForNewUser,
   });
 }
+
+export async function getUserAndWorkspaceById(userId: string) {
+  if (isMockAuthEnabled() && userId === "dev-user-id") {
+    return getMockUserAndWorkspace("dev@example.com");
+  }
+
+  const { eq } = await import("drizzle-orm");
+  const { db } = await import("./db");
+  const { users: usersTable, workspaces: workspacesTable } = await import("./db/schema");
+  const [user] = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+  if (!user) return null;
+  const [workspace] = await db
+    .select()
+    .from(workspacesTable)
+    .where(eq(workspacesTable.ownerId, user.id))
+    .limit(1);
+  if (!workspace) return null;
+  return { user, workspace, isNewUser: false };
+}

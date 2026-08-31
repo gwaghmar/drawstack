@@ -23,7 +23,7 @@
     "@ai-sdk/react": "^3.0.196",
     "@dagrejs/dagre": "^3.1.1",
     "@flowchart/core": "workspace:*",
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/sdk": "1.30.0",
     "@simplewebauthn/browser": "^13.3.0",
     "@simplewebauthn/server": "^13.3.0",
     "@supabase/ssr": "^0.10.3",
@@ -40,9 +40,9 @@
     "jszip": "^3.10.1",
     "konva": "^10.3.0",
     "lucide-react": "^1.17.0",
-    "nanoid": "^5.1.11",
-    "next": "16.2.7",
-    "next-auth": "5.0.0-beta.25",
+    "nanoid": "5.1.16",
+    "next": "16.3.3",
+    "next-auth": "5.0.0-beta.32",
     "pdfkit": "^0.18.0",
     "perfect-freehand": "^1.2.3",
     "postgres": "^3.4.9",
@@ -54,7 +54,7 @@
     "react-resizable-panels": "^4.12.2",
     "recharts": "^3.10.1",
     "roughjs": "^4.6.6",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.4",
     "simple-icons": "^16.25.0",
     "stripe": "^22.2.0",
     "svg-to-pdfkit": "^0.1.8",
@@ -76,15 +76,9 @@
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "eslint": "^9.17.0",
-    "eslint-config-next": "16.2.7",
-    "postcss": "^8.5.15",
+    "eslint-config-next": "16.3.3",
+    "postcss": "8.5.26",
     "tailwindcss": "^4.3.0",
     "typescript": "^6.0.3"
-  },
-  "pnpm": {
-    "overrides": {
-      "@types/react": "19.2.16",
-      "@types/react-dom": "19.2.3"
-    }
   }
 }

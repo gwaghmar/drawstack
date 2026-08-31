@@ -29,7 +29,7 @@ import { CanvasOpSchema, type CanvasOp } from "@/lib/diagrams/freeform-ops";
 import { applyOpsToSource } from "@/lib/agent-tools";
 
 // Tools are stateless — each request creates a fresh server instance
-function buildMcpServer(): Server {
+function buildMcpServer(forwardHeaders: Record<string, string>): Server {
   const server = new Server(
     { name: "flowchart-studio", version: "1.0.0" },
     { capabilities: { tools: {} } },
@@ -150,7 +150,7 @@ function buildMcpServer(): Server {
       try {
         res = await fetch(`${baseUrl}/api/ai/generate`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", ...forwardHeaders },
           body: JSON.stringify({ prompt, diagramType, compact: false }),
         });
       } catch {
@@ -191,7 +191,12 @@ function buildMcpServer(): Server {
 
 async function handleRequest(req: NextRequest): Promise<Response> {
   const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-  const server = buildMcpServer();
+  const forwardHeaders: Record<string, string> = {};
+  const authorization = req.headers.get("authorization");
+  const cookie = req.headers.get("cookie");
+  if (authorization) forwardHeaders.Authorization = authorization;
+  if (cookie) forwardHeaders.Cookie = cookie;
+  const server = buildMcpServer(forwardHeaders);
   await server.connect(transport);
   return transport.handleRequest(req);
 }

@@ -7,7 +7,8 @@ import type { ApiError } from "@flowchart/core";
 import { auth } from "@/auth";
 import { db } from "@/lib/db";
 import { users } from "@/lib/db/schema";
-import { ensureUserAndWorkspace } from "@/lib/user-sync";
+import { ensureUserAndWorkspace, getUserAndWorkspaceById } from "@/lib/user-sync";
+import { getPrincipalFromRequest } from "@/lib/api-auth";
 import { decryptAiApiKey, isAiKeyEncryptionConfigured } from "@/lib/ai-key-crypto";
 import { buildLanguageModel, getProviderMeta, type AiProvider } from "@/lib/ai-providers";
 import { rateLimit } from "@/lib/rate-limit";
@@ -152,12 +153,18 @@ export async function POST(req: Request) {
   const requestStart = Date.now();
   const session = await auth();
   const email = session?.user?.email;
-  if (!email) {
+  const principal = email ? null : await getPrincipalFromRequest(req);
+  const context = email
+    ? await ensureUserAndWorkspace(email)
+    : principal?.type === "user"
+      ? await getUserAndWorkspaceById(principal.userId)
+      : null;
+  if (!context) {
     const body: ApiError = { error: "Sign in required", code: "UNAUTHORIZED" };
     return NextResponse.json(body, { status: 401 });
   }
 
-  const { user, workspace } = await ensureUserAndWorkspace(email);
+  const { user, workspace } = context;
 
   // Workspace brand kit (optional) — when present, give the AI a palette to
   // honor for color-sensitive diagram types (echarts, mermaid theme overrides,
