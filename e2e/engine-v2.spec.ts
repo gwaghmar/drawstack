@@ -489,6 +489,8 @@ test("engine v3 draws editable pen paths and connector styles", async ({ page })
   const pointCount = await page.locator('[aria-label^="Edit pen point"]').count();
   await page.getByRole("button", { name: "Add path point" }).click();
   await expect(page.locator('[aria-label^="Edit pen point"]')).toHaveCount(pointCount + 1);
+  await page.getByRole("button", { name: "Remove path point" }).click();
+  await expect(page.locator('[aria-label^="Edit pen point"]')).toHaveCount(pointCount);
   await page.getByLabel("Connector line style").selectOption("curve");
   await expect(page.getByLabel("Connector line style")).toHaveValue("curve");
   await page.getByLabel("Path stroke style").selectOption("dashed");
