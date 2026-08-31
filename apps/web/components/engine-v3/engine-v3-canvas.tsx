@@ -362,8 +362,11 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     return typeof token?.value === "string" && /^#[0-9a-f]{6}$/i.test(token.value) ? token.value : fallback;
   };
   const patchSelectedStyle = (changes: Record<string, unknown>) => {
-    if (!selectedNode) return;
-    patchSelected({ style: { ...selectedNode.style, ...changes } });
+    if (!activePage || !selectedNode) return;
+    const targets = [...selectedNodeIds].map((id) => findEngineV3Node(document, activePage.id, id)?.node).filter((node): node is EngineNode => Boolean(node && node.id !== activePage.root.id));
+    if (targets.length > 1) {
+      runCommand({ kind: "batch", commands: targets.map((node) => ({ kind: "node" as const, action: "patch" as const, pageId: activePage.id, nodeId: node.id, changes: { style: { ...node.style, ...changes } } })) });
+    } else patchSelected({ style: { ...selectedNode.style, ...changes } });
   };
   const makeComponent = () => {
     if (!selectedNode || selectedNode.componentRef || !activePage) return;
