@@ -13,6 +13,7 @@ export type EngineStyle = {
   color?: string;
   borderColor?: string;
   borderWidth?: number;
+  borderStyle?: CSSProperties["borderStyle"];
   borderRadius?: number;
   boxShadow?: string;
   objectFit?: CSSProperties["objectFit"];
@@ -162,7 +163,7 @@ export function nodeStyle(style: EngineStyle | undefined, tokens: EngineTokens):
     color: resolveToken(style.color, tokens),
     borderColor: resolveToken(style.borderColor, tokens),
     borderWidth: style.borderWidth,
-    borderStyle: style.borderWidth ? "solid" : undefined,
+    borderStyle: style.borderWidth ? style.borderStyle ?? "solid" : undefined,
     borderRadius: style.borderRadius,
     boxShadow: style.boxShadow,
     objectFit: style.objectFit,

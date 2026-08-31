@@ -464,6 +464,8 @@ test("engine v3 draws editable pen paths and connector styles", async ({ page })
   await expect(page.getByRole("region", { name: "Connector settings" })).toBeVisible();
   await page.getByLabel("Connector line style").selectOption("curve");
   await expect(page.getByLabel("Connector line style")).toHaveValue("curve");
+  await page.getByLabel("Path stroke style").selectOption("dashed");
+  await expect(page.getByLabel("Path stroke style")).toHaveValue("dashed");
   await page.getByLabel("Connector arrow end").check();
   await expect(page.getByLabel("Connector arrow end")).toBeChecked();
   await page.getByRole("button", { name: "Zoom in" }).click();
