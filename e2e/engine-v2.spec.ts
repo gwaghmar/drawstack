@@ -385,6 +385,14 @@ test("engine v3 exposes quick actions beside a selected object", async ({ page }
   await expect(page.getByLabel("Precision width")).toBeVisible();
 });
 
+test("engine v3 accepts precision sizes below the legacy 24px floor", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  const width = page.getByLabel("Precision width");
+  await width.fill("4");
+  await expect(width).toHaveValue("4");
+});
+
 test("engine v3 adds editable filled vector shapes", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const before = await page.locator('[data-node-type="path"]').count();
