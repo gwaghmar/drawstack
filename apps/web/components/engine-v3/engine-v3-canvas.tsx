@@ -68,6 +68,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const assetInputRef = useRef<HTMLInputElement>(null);
   const collaborationActorRef = useRef(`engine-v3-${crypto.randomUUID()}`);
   const canvasRef = useRef<HTMLDivElement>(null);
+  const canvasViewportRef = useRef<HTMLElement>(null);
   const [gestureGuides, setGestureGuides] = useState<SnapGuide[]>([]);
   const [collaborationConflicts, setCollaborationConflicts] = useState<ReconciliationConflict[]>([]);
   const [selectedBounds, setSelectedBounds] = useState<{ left: number; top: number; width: number; height: number } | null>(null);
@@ -208,6 +209,14 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       }
       if (!modifier && activePage && selectedNodeIds.size === 1 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
         const nodeId = [...selectedNodeIds][0];
+        if (nodeId === activePage.root.id) {
+          event.preventDefault();
+          const step = event.shiftKey ? 80 : 20;
+          const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+          const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+          canvasViewportRef.current?.scrollBy({ left: dx, top: dy, behavior: "smooth" });
+          return;
+        }
         if (nodeId !== activePage.root.id) {
           event.preventDefault();
           const location = findEngineV3Node(document, activePage.id, nodeId);
@@ -675,7 +684,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <div className="mb-3 flex items-center justify-between"><span className="text-xs font-semibold">{drawer === "pages" ? "Pages" : "Layers"}</span><button type="button" aria-label={`Close ${drawer}`} className="rounded p-1 hover:bg-[#DDE1D9]" onClick={() => setDrawer(null)}><X size={14} /></button></div>
           {drawer === "pages" ? <><div className="space-y-2" role="tablist" aria-label="Document pages">{document.pages.map((page) => <button key={page.id} type="button" role="tab" aria-selected={page.id === activePage.id} onClick={() => { setActivePageId(page.id); selectNode(page.root.id); }} className={`w-full rounded-lg border p-2 text-left ${page.id === activePage.id ? "border-[#3157F6] bg-white shadow-sm" : "border-[#D7DBD2] bg-[#F7F8F4] hover:border-[#3157F6]"}`}><div className="mb-2 flex aspect-[4/3] items-center justify-center rounded border border-[#D7DBD2] bg-white text-[10px] text-[#667067]">{page.name.slice(0, 1).toUpperCase()}</div><span className="block truncate text-xs font-medium">{page.name}</span></button>)}</div><div className="mt-3 grid grid-cols-3 gap-1"><button type="button" onClick={addPage} className="rounded-md border border-[#C8CEC4] bg-white p-2" aria-label="Add page"><Plus size={13} /></button><button type="button" onClick={duplicatePage} className="rounded-md border border-[#C8CEC4] bg-white p-2" aria-label="Duplicate page"><Copy size={13} /></button><button type="button" onClick={deletePage} disabled={document.pages.length <= 1} className="rounded-md border border-[#C8CEC4] bg-white p-2 text-[#B93815] disabled:opacity-35" aria-label="Delete page"><Trash2 size={13} /></button></div></> : <LayerTree nodes={[activePage.root]} selectedId={selectedNode?.id ?? ""} selectedIds={selectedNodeIds} onSelect={selectNode} onToggle={(id, checked) => setSelectedNodeIds((current) => { const next = new Set(current); if (checked) next.add(id); else next.delete(id); return next; })} />}
         </aside> : null}
-        <section className="relative min-w-0 flex-1 overflow-auto bg-[#E9EBE6] p-4 sm:p-8" aria-label="Editable canvas">
+        <section ref={canvasViewportRef} className="relative min-w-0 flex-1 overflow-auto bg-[#E9EBE6] p-4 sm:p-8" aria-label="Editable canvas">
           <div className="sticky top-0 z-40 mx-auto mb-3 flex w-fit items-center gap-1 rounded-full border border-[#D7DBD2] bg-white/95 p-1 shadow-sm backdrop-blur" aria-label="Canvas zoom">
             <button type="button" onClick={() => setZoom((value) => Math.max(0.5, Math.round((value - 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom out" title="Zoom out"><Minus size={13} /></button>
             <button type="button" onClick={() => setZoom(1)} className="min-w-12 rounded-full px-2 py-1 font-mono text-[10px] font-semibold text-[#566057] hover:bg-[#EEF0EA]" aria-label="Reset zoom">{Math.round(zoom * 100)}%</button>

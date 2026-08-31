@@ -50,3 +50,14 @@ test("engine v3 stays usable on a phone viewport", async ({ page }) => {
   await expect.poll(async () => (await surface.boundingBox())?.width ?? 0).toBeGreaterThan(300);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
+
+test("engine v3 pans the phone artboard with arrow keys", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "Deselect", exact: true }).click();
+  const viewport = page.getByLabel("Editable canvas");
+  await viewport.focus();
+  const before = await viewport.evaluate((element) => element.scrollLeft);
+  await page.keyboard.press("ArrowRight");
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(before);
+});
