@@ -416,7 +416,7 @@ test("engine v3 provides a visible clear-selection control", async ({ page }) =>
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
   await expect(page.getByLabel("V3 node name")).toHaveValue("Report title");
-  await page.getByRole("button", { name: "Clear selection", exact: true }).click();
+  await page.getByRole("button", { name: "Deselect", exact: true }).click();
   await expect(page.getByLabel("V3 node name")).toHaveValue("Report");
 });
 
