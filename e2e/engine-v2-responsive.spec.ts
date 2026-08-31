@@ -46,5 +46,7 @@ test("engine v3 stays usable on a phone viewport", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Draw with pen" })).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Open inspector" }).click();
   await expect(page.getByRole("complementary", { name: "Inspector" })).toBeVisible();
+  const surface = page.locator('[data-node-id="title"]');
+  await expect.poll(async () => (await surface.boundingBox())?.width ?? 0).toBeGreaterThan(300);
   await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 });
