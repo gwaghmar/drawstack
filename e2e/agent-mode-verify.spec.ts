@@ -41,12 +41,17 @@ test.describe("Agent Mode Polish — runtime verification", () => {
     const prompt = page.getByPlaceholder("How should I change the diagram?");
     await expect(prompt).toBeVisible({ timeout: 30_000 });
 
-    // Seed a known mermaid source so apply_patch has deterministic text to hit.
-    const sourceToggle = page.locator('button[id^="source-toggle-"]').first();
+    // Seed a known freeform document so apply_ops has a deterministic target.
+    const sourceToggle = page.getByRole("button", { name: /Source/ }).first();
     if (await sourceToggle.count()) await sourceToggle.click();
-    const sourceArea = page.getByPlaceholder(/flowchart LR/i);
+    const sourceArea = page.locator("pre.hl-pre + textarea");
     if (await sourceArea.isVisible().catch(() => false)) {
-      await sourceArea.fill("flowchart LR\n  A[Start] --> B[Middle]\n  B --> C[End]");
+      await sourceArea.fill(JSON.stringify({
+        version: 1,
+        shapes: [
+          { id: "s_start", name: "start", type: "rectangle", x: 100, y: 100, width: 180, height: 80, text: { content: "Start" } },
+        ],
+      }));
     }
     await shot("01-editor-seeded");
 
@@ -77,17 +82,17 @@ test.describe("Agent Mode Polish — runtime verification", () => {
     await renamed.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
     await shot("03-after-rename-prompt");
 
-    // --- Agent prompt 2: force apply_patch not-found (the headline bug fix UI) ---
-    await sendAgent('Use apply_patch to replace the exact text "ZqNotPresentXyz" with "Done"');
-    const notFound = page.getByText(/Couldn't find that text/i);
-    await notFound.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
-    await shot("04-apply-patch-not-found");
+    // --- Agent prompt 2: targeted freeform edit through the current scene-graph tool ---
+    await sendAgent('Use apply_ops to change the text of the shape named "start" to "Done"');
+    const appliedOp = page.getByText(/Applied 1 op/i);
+    await appliedOp.waitFor({ state: "visible", timeout: 20_000 }).catch(() => {});
+    await shot("04-apply-ops-update");
 
     // Report observations (printed to the Playwright stdout).
     console.log("[verify] agent resp1 status:", resp1?.status() ?? "no-response");
     console.log("[verify] tool cards seen:", await anyToolCard.count());
     console.log("[verify] 'Renamed to' visible:", await renamed.isVisible().catch(() => false));
-    console.log("[verify] 'Couldn't find that text' visible:", await notFound.isVisible().catch(() => false));
+    console.log("[verify] 'Applied 1 op' visible:", await appliedOp.isVisible().catch(() => false));
     console.log("[verify] console errors:", consoleErrors.length, consoleErrors.slice(0, 5));
   });
 });

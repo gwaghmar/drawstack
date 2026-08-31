@@ -14,7 +14,7 @@ import { THEME_IDS, MODE_PERSONAS, MODE_STRATEGY_HINTS, ANTI_GENERIC_DIRECTIVE }
 import { buildBrandDirective } from "@/lib/brand-directive";
 import { recordAiEvent } from "@/lib/ai-events";
 import { validateAndRepairOutput } from "@/lib/diagrams/validate-output";
-import { applyPatch, applyOpsToSource } from "@/lib/agent-tools";
+import { applyOpsToSource } from "@/lib/agent-tools";
 import { parseFreeformSource } from "@/lib/diagrams/freeform-canvas";
 import { serializeForModel, MODEL_VIEW_GUIDE } from "@/lib/diagrams/freeform-model-view";
 import type { CanvasOp } from "@/lib/diagrams/freeform-ops";
@@ -266,8 +266,6 @@ ${currentSource || "No source provided"}
 
 TOOLS:
 - update_diagram: full rewrite of diagram source
-- apply_patch: surgical find-and-replace on existing source${diagramType === "freeform" ? " — NEVER use on freeform canvas, string patching corrupts the scene JSON" : ""}
-- update_node: React Flow only — update a node's label/style by ID
 ${diagramType === "freeform" ? "- apply_ops: freeform canvas only — targeted scene-graph ops (add/update/delete/connect/place/layout/reorder), targeting shapes by id or unique name\n- check_layout: freeform canvas only — deterministic check for overlapping shapes, dangling arrow references, and shapes outside their parent frame\n" : ""}- fetch_external_data: fetch JSON from a URL or generate contextual sample data by keyword
 - set_title: rename the diagram
 - set_theme: change the visual theme (only the listed theme ids)
@@ -276,14 +274,14 @@ ${diagramType === "freeform" ? "- apply_ops: freeform canvas only — targeted s
 - set_use_case: set the diagram's intended use-case
 
 STRATEGY:
-1. For small changes (color, text, 1-2 nodes), prefer 'apply_patch' or 'update_node'.
+1. For small changes (color, text, 1-2 shapes), prefer 'apply_ops'.
 2. For large changes or new diagrams, use 'update_diagram' with the full code.
 3. For chart/data diagrams, call 'fetch_external_data' first, then build the diagram from the returned rows.
 4. To restyle, prefer 'set_theme'/'set_palette'/'apply_brand_kit' over editing colors by hand.
 5. Do not call 'apply_brand_kit' unless a brand kit is configured (see CURRENT STATE).
 6. update_diagram validates your output. If it returns an error, read the error and call update_diagram again with corrected output.
 7. Always briefly explain what you are doing before calling a tool.
-${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targeted edits — target shapes by id or unique name, and use 'place'/'layout' for relative positioning instead of guessing raw x/y coordinates. Reach for 'update_diagram' only for a full rebuild of the canvas. Never use 'apply_patch' here.\n9. Freeform canvas: after finishing your layout edits, call 'check_layout' once before ending your turn. If it reports issues, fix them with 'apply_ops' or 'update_diagram' (if you still have step budget), then finish — don't loop on it.\n10. " : "8. "}${MODE_STRATEGY_HINTS[editorMode] ?? ""}`,
+${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targeted edits — target shapes by id or unique name, and use 'place'/'layout' for relative positioning instead of guessing raw x/y coordinates. Reach for 'update_diagram' only for a full rebuild of the canvas.\n9. Freeform canvas: after finishing your layout edits, call 'check_layout' once before ending your turn. If it reports issues, fix them with 'apply_ops' or 'update_diagram' (if you still have step budget), then finish — don't loop on it.\n10. " : "8. "}${MODE_STRATEGY_HINTS[editorMode] ?? ""}`,
       tools: {
         ...(diagramType === "freeform" ? {
           apply_ops: tool({
@@ -329,39 +327,6 @@ ${diagramType === "freeform" ? "8. Freeform canvas: prefer 'apply_ops' for targe
             }
             workingSource = validation.source;
             return { success: true, explanation, sourceCode: validation.source };
-          },
-        }),
-        apply_patch: tool({
-          description: "Apply a targeted text replacement to the diagram source (Surgical edit). Do not use on the freeform canvas — string patching corrupts its scene JSON; use apply_ops there instead.",
-          inputSchema: z.object({
-            find: z.string().describe("The exact text or line to find"),
-            replace: z.string().describe("The replacement text"),
-            explanation: z.string().describe("Why this change is being made"),
-          }),
-          execute: async ({ find, replace, explanation }) => {
-            toolCallCount++;
-            const { source: patched, replaced } = applyPatch(workingSource, find, replace);
-            if (replaced === 0) {
-              return { success: false, explanation, error: `Could not find the text to replace. Re-read the current source and try update_diagram instead.` };
-            }
-            const validation = await validateAndRepairOutput(diagramType, patched);
-            if (!validation.ok) {
-              return { success: false, explanation, error: `Patch would corrupt the diagram: ${validation.reason}. Fix it and call update_diagram with the full corrected source.` };
-            }
-            workingSource = validation.source;
-            return { success: true, explanation, find, replace, sourceCode: validation.source };
-          },
-        }),
-        update_node: tool({
-          description: "Specifically for React Flow: Update a node's properties.",
-          inputSchema: z.object({
-            id: z.string().describe("Node ID"),
-            data: z.any().optional().describe("New data (label, etc)"),
-            style: z.any().optional().describe("New styles (color, border, etc)"),
-          }),
-          execute: async (args) => {
-            toolCallCount++;
-            return { success: true, ...args };
           },
         }),
         fetch_external_data: tool({
