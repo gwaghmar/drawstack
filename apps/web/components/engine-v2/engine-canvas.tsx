@@ -32,7 +32,7 @@ import { useEngineV2Collaboration } from "@/lib/hooks/use-engine-v2-collaboratio
 
 const EMPTY_SELECTION = new Set<string>();
 
-function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void }) {
+function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void }) {
   const layout = node.layout;
   const layoutStyle = layout.mode === "grid"
     ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify }
@@ -45,24 +45,26 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node
       data-layout={layout.mode}
       data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
+      onPointerDown={(event) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } }}
       style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined }}
       className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
-        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} />
+        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} />
       ))}
     </div>
   );
 }
 
-function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void }) {
-  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} />;
+function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void }) {
+  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} />;
 
   const selected = selectedIds.has(node.id);
   const shared = {
     "data-node-id": node.id,
     "data-node-type": node.type,
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
+    onPointerDown: (event: React.PointerEvent<HTMLElement>) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } },
     style: { ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
     className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
@@ -251,10 +253,10 @@ function Tree({ nodes, selectedId, selectedIds = EMPTY_SELECTION, draggedId, dro
   );
 }
 
-export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {} }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void }) {
+export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {}, onPointerDown }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void }) {
   return (
     <div className={className} data-engine-document="v2" style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}>
-      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} />)}
+      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} />)}
     </div>
   );
 }

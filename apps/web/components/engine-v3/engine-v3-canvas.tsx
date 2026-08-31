@@ -17,6 +17,8 @@ import { createEngineV3PageView } from "@/lib/engine-v3/view-adapter";
 import { EngineV3HistoryController } from "@/lib/engine-v3/history";
 import type { EngineV3Command } from "@/lib/engine-v3/commands";
 import type { StoredAsset } from "@/lib/engine-v3/asset-storage";
+import { dragEngineV3Node } from "@/lib/engine-v3/canvas-gestures";
+import type { SnapGuide } from "@/lib/engine-v3/snapping";
 
 export type EngineV3CanvasProps = {
   initialDocument: EngineDocumentV3;
@@ -56,6 +58,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [assetState, setAssetState] = useState<"loading" | "ready" | "uploading" | "unavailable" | "error">("loading");
   const [assetError, setAssetError] = useState<string | null>(null);
   const assetInputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const [gestureGuides, setGestureGuides] = useState<SnapGuide[]>([]);
   const activePage = document.pages.find((page) => page.id === activePageId) ?? document.pages[0];
   const selectedNode = useMemo(() => activePage ? findEngineV3Node(document, activePage.id, selectedNodeId)?.node ?? activePage.root : null, [activePage, document, selectedNodeId]);
   const tokenEntries = useMemo(() => Object.entries(document.tokens.colors), [document.tokens.colors]);
@@ -102,6 +106,35 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const patchSelected = (changes: Partial<EngineNode>) => {
     if (!activePage || !selectedNode) return;
     runCommand({ kind: "node", action: "patch", pageId: activePage.id, nodeId: selectedNode.id, changes: changes as Record<string, unknown> });
+  };
+  const beginNodeDrag = (nodeId: string, event: React.PointerEvent<HTMLElement>) => {
+    if (event.button !== 0 || !activePage) return;
+    const location = findEngineV3Node(document, activePage.id, nodeId);
+    if (!location || location.node.locked) return;
+    setSelectedNodeId(nodeId);
+    const startX = event.clientX; const startY = event.clientY;
+    const originalX = location.node.transform?.x ?? 0; const originalY = location.node.transform?.y ?? 0;
+    const pageId = activePage.id; const baseDocument = historyRef.current!.snapshot().document;
+    let finalX = originalX; let finalY = originalY; let moved = false;
+    const move = (pointer: PointerEvent) => {
+      const bounds = canvasRef.current?.getBoundingClientRect();
+      const scale = bounds?.width ? activePage.width / bounds.width : 1;
+      finalX = originalX + (pointer.clientX - startX) * scale; finalY = originalY + (pointer.clientY - startY) * scale;
+      if (Math.abs(pointer.clientX - startX) + Math.abs(pointer.clientY - startY) < 3) return;
+      moved = true;
+      try { const preview = dragEngineV3Node(baseDocument, pageId, nodeId, finalX, finalY); finalX = findEngineV3Node(preview.document, pageId, nodeId)?.node.transform?.x ?? finalX; finalY = findEngineV3Node(preview.document, pageId, nodeId)?.node.transform?.y ?? finalY; setDocument(preview.document); setGestureGuides(preview.guides); } catch { /* The committed command reports the actionable error. */ }
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
+      setGestureGuides([]);
+      if (moved) {
+        runCommand({ kind: "node", action: "patch", pageId, nodeId, changes: { transform: { ...(location.node.transform ?? {}), x: finalX, y: finalY } } });
+        window.setTimeout(() => setSelectedNodeId(nodeId), 0);
+      }
+      else setDocument(historyRef.current!.snapshot().document);
+    };
+    const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setGestureGuides([]); setDocument(historyRef.current!.snapshot().document); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
   };
   const placeAsset = (asset: StoredAsset) => {
     if (!activePage) return;
@@ -257,7 +290,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <div className="mt-3 grid grid-cols-4 gap-1"><button type="button" onClick={addPage} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6]" aria-label="Add page"><Plus size={13} /></button><button type="button" onClick={duplicatePage} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6]" aria-label="Duplicate page"><Copy size={13} /></button><button type="button" onClick={deletePage} disabled={document.pages.length <= 1} className="rounded-md border border-[#C8CEC4] bg-white p-2 text-[#B93815] hover:border-[#B93815] disabled:opacity-35" aria-label="Delete page"><Trash2 size={13} /></button><button type="button" onClick={() => setDrawer("inspector")} className="rounded-md border border-[#C8CEC4] bg-white p-2 hover:border-[#3157F6] lg:hidden" aria-label="Open inspector">i</button></div>
           <div className="mt-5 border-t border-[#D7DBD2] pt-3"><div className="mb-2 font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Layers</div><LayerTree nodes={[activePage.root]} selectedId={selectedNode?.id ?? ""} onSelect={setSelectedNodeId} /></div>
         </aside>
-        <section className="min-w-0 flex-1 overflow-auto p-4 sm:p-8" aria-label="Editable canvas"><div className="mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}><EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={(id) => setSelectedNodeId(id)} /></div></section>
+        <section className="min-w-0 flex-1 overflow-auto p-4 sm:p-8" aria-label="Editable canvas"><div ref={canvasRef} className="relative mx-auto w-full max-w-[1080px] overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm" style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}><EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={(id) => setSelectedNodeId(id)} onPointerDown={beginNodeDrag} />{gestureGuides.map((guide, index) => guide.axis === "x" ? <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[#3157F6]" style={{ left: `${guide.position / activePage.width * 100}%` }} /> : activePage.height === "auto" ? null : <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[#3157F6]" style={{ top: `${guide.position / activePage.height * 100}%` }} />)}</div></section>
         <aside className={`w-[272px] shrink-0 overflow-y-auto border-l border-[#D7DBD2] bg-[#EEF0EA] p-4 max-xl:fixed max-xl:inset-y-14 max-xl:right-0 max-xl:z-30 max-xl:shadow-xl ${drawer === "inspector" ? "max-xl:block" : "max-xl:hidden"}`} aria-label="Inspector">
           <div className="mb-4 flex items-center justify-between"><span className="font-mono text-[9px] font-semibold uppercase tracking-[0.14em] text-[#667067]">Page inspector</span><button type="button" aria-label="Close inspector" className="rounded p-1 hover:bg-[#DDE1D9] xl:hidden" onClick={() => setDrawer(null)}><X size={14} /></button></div>
           <label className="mb-4 block"><span className="mb-2 block text-xs text-[#667067]">Page name</span><input aria-label="Page name" value={activePage.name} onChange={(event) => renamePage(event.target.value)} className="w-full rounded-lg border border-[#C8CEC4] bg-white p-2.5 text-sm outline-none focus:border-[#3157F6]" /></label>

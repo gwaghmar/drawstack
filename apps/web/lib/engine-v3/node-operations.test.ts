@@ -29,6 +29,12 @@ describe("engine v3 node operations", () => {
     const restored = insertEngineV3Node(removed.document, pageId, removed.removed.parentId, removed.removed.node, removed.removed.index);
     assert.deepEqual(restored, patched);
   });
+  it("updates nodes directly under the page root", () => {
+    const document = migrateV2ToV3(structuredClone(ENGINE_V2_SAMPLE)).document;
+    const pageId = document.pages[0].id;
+    const patched = patchEngineV3Node(document, pageId, "header", { transform: { x: 24, y: 12 } });
+    assert.deepEqual(findEngineV3Node(patched, pageId, "header")?.node.transform, { x: 24, y: 12 });
+  });
 
   it("groups and ungroups siblings without losing their order", () => {
     const document = base();

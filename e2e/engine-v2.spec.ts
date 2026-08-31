@@ -374,3 +374,18 @@ test("engine v3 uploads and places a persistent image asset", async ({ page }) =
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(image).toHaveCount(0);
 });
+
+test("engine v3 drags a canvas node as one undoable gesture", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  const bounds = await title.boundingBox();
+  if (!bounds) throw new Error("Title bounds are unavailable");
+  await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(bounds.x + bounds.width / 2 + 48, bounds.y + bounds.height / 2 + 32, { steps: 4 });
+  await page.mouse.up();
+  await expect(page.getByLabel("V3 node X")).not.toHaveValue("0");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.getByLabel("V3 node X")).toHaveValue("0");
+  await expect(page.getByLabel("V3 node Y")).toHaveValue("0");
+});

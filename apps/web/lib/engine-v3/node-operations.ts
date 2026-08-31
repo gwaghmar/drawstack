@@ -30,7 +30,7 @@ function documentHasNodeId(document: EngineDocumentV3, nodeId: string): boolean 
 }
 
 function updateChildren(page: Page, parentId: string | null, update: (children: EngineNode[]) => EngineNode[]): Page {
-  if (parentId === null) return { ...page, root: { ...page.root, children: update(page.root.children) } };
+  if (parentId === null || parentId === page.root.id) return { ...page, root: { ...page.root, children: update(page.root.children) } };
   const visit = (nodes: EngineNode[]): EngineNode[] => nodes.map((node) => node.id === parentId && node.type === "frame" ? { ...node, children: update(node.children) } : node.type === "frame" ? { ...node, children: visit(node.children) } : node);
   return { ...page, root: { ...page.root, children: visit(page.root.children) } };
 }
