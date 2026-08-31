@@ -516,6 +516,16 @@ test("engine v3 supports keyboard zoom shortcuts", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Reset zoom", exact: true })).toHaveText("100%");
 });
 
+test("engine v3 can focus the canvas by hiding editor panels", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await expect(page.getByLabel("Create tools")).toBeVisible();
+  await page.getByRole("button", { name: "Focus canvas" }).click();
+  await expect(page.getByLabel("Create tools")).toHaveCount(0);
+  await expect(page.locator('aside[aria-label="Inspector"]')).toHaveCount(0);
+  await page.getByRole("button", { name: "Show editor panels" }).click();
+  await expect(page.getByLabel("Create tools")).toBeVisible();
+});
+
 test("engine v3 resizes a selected object with modifier arrows", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
