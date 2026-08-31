@@ -369,6 +369,30 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await expect(title).toHaveText("Direct canvas edit");
 });
 
+test("engine v3 draws editable pen paths and connector styles", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "Draw with pen" }).click();
+  const canvas = page.locator("[data-engine-document='v2']");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Canvas bounds are unavailable");
+  const startX = bounds.x + bounds.width * 0.72;
+  const startY = bounds.y + Math.min(bounds.height - 50, 420);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 80, startY + 36, { steps: 5 });
+  await page.mouse.up();
+  const path = page.locator('[data-node-type="path"]');
+  await expect(path).toBeVisible();
+  await path.click();
+  await expect(page.getByRole("region", { name: "Connector settings" })).toBeVisible();
+  await page.getByLabel("Connector line style").selectOption("curve");
+  await expect(page.getByLabel("Connector line style")).toHaveValue("curve");
+  await page.getByLabel("Connector arrow end").check();
+  await expect(page.getByLabel("Connector arrow end")).toBeChecked();
+  await page.getByRole("button", { name: "Zoom in" }).click();
+  await expect(page.getByRole("button", { name: "Reset zoom" })).toHaveText("110%");
+});
+
 test("engine v3 previews, rejects, applies, and undoes an AI proposal", async ({ page }) => {
   await page.route("**/api/ai/engine-v3", async (route) => {
     const request = route.request().postDataJSON() as { document: Record<string, unknown>; revision: number };

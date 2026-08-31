@@ -212,6 +212,10 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   };
   const beginNodeDrag = (nodeId: string, event: React.PointerEvent<HTMLElement>) => {
     if (event.button !== 0 || !activePage) return;
+    if (penMode) {
+      beginPen(event as unknown as React.PointerEvent<HTMLDivElement>);
+      return;
+    }
     const location = findEngineV3Node(document, activePage.id, nodeId);
     if (!location || location.node.locked) return;
     selectNode(nodeId);
