@@ -109,6 +109,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [editingTextValue, setEditingTextValue] = useState("");
   const [zoom, setZoom] = useState(1);
   const [penMode, setPenMode] = useState(false);
+  const [penSize, setPenSize] = useState(3);
   const spacePressedRef = useRef(false);
   const penPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const activePage = document.pages.find((page) => page.id === activePageId) ?? document.pages[0];
@@ -695,7 +696,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       const sourcePoints = points.length > 2 ? points.map((item, index) => index === 0 || index === points.length - 1 ? item : { x: Math.round((points[index - 1].x + item.x * 2 + points[index + 1].x) / 4), y: Math.round((points[index - 1].y + item.y * 2 + points[index + 1].y) / 4) }) : points;
       const minX = Math.min(...sourcePoints.map((item) => item.x)); const minY = Math.min(...sourcePoints.map((item) => item.y));
       const nodeId = `path-${crypto.randomUUID()}`;
-      const node: EngineNode = { id: nodeId, name: "Pen stroke", type: "path", transform: { x: minX, y: minY }, points: sourcePoints.map((item) => ({ x: item.x - minX, y: item.y - minY })), style: { width: Math.max(...sourcePoints.map((item) => item.x)) - minX || 1, minHeight: Math.max(...sourcePoints.map((item) => item.y)) - minY || 1, color: "$ink", borderWidth: 3 } } as EngineNode;
+      const node: EngineNode = { id: nodeId, name: "Pen stroke", type: "path", transform: { x: minX, y: minY }, points: sourcePoints.map((item) => ({ x: item.x - minX, y: item.y - minY })), style: { width: Math.max(...sourcePoints.map((item) => item.x)) - minX || 1, minHeight: Math.max(...sourcePoints.map((item) => item.y)) - minY || 1, color: "$ink", borderWidth: penSize } } as EngineNode;
       if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node })) selectNode(nodeId);
     };
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); penPointsRef.current = []; };
@@ -929,6 +930,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <button type="button" className="mb-2 flex h-10 w-10 items-center justify-center rounded-xl bg-[#15171A] text-white" aria-label="Select tool" title="Select"><MousePointer2 size={17} /></button>
           <button type="button" onClick={() => activePage && selectNode(activePage.root.id)} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Deselect" title="Deselect"><X size={15} /><span>Deselect</span></button>
           <button type="button" onClick={() => setPenMode((value) => !value)} className={`flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] ${penMode ? "bg-[#B7FF4A] text-[#15171A]" : "text-[#4F5850] hover:bg-[#EEF0EA]"}`} aria-label="Draw with pen" aria-pressed={penMode}><Pen size={17} /><span>Pen</span></button>
+          <label className="flex w-12 flex-col items-center gap-1 rounded-xl py-1 text-[9px] text-[#4F5850]" title="Pen stroke size"><span>Size {penSize}</span><input aria-label="Pen size" type="range" min="1" max="32" value={penSize} onChange={(event) => setPenSize(Number(event.target.value))} className="h-2 w-12 accent-[#3157F6]" /></label>
           <button type="button" onClick={() => addCanvasNode("text")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add text"><Type size={17} /><span>Text</span></button>
           <button type="button" onClick={() => addCanvasNode("card")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add card"><Square size={17} /><span>Card</span></button>
           <button type="button" onClick={() => addCanvasNode("frame")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add frame"><Frame size={17} /><span>Frame</span></button>

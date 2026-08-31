@@ -476,6 +476,23 @@ test("engine v3 draws editable pen paths and connector styles", async ({ page })
   await expect((await pdfDownload).suggestedFilename()).toMatch(/\.pdf$/);
 });
 
+test("engine v3 uses the selected pen stroke size", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByLabel("Pen size").fill("12");
+  await page.getByRole("button", { name: "Draw with pen" }).click();
+  const canvas = page.locator("[data-engine-document='v2']");
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Canvas bounds are unavailable");
+  const startX = bounds.x + bounds.width * 0.72;
+  const startY = bounds.y + Math.min(bounds.height - 50, 420);
+  await page.mouse.move(startX, startY);
+  await page.mouse.down();
+  await page.mouse.move(startX + 80, startY + 36, { steps: 5 });
+  await page.mouse.up();
+  await expect(page.locator('[data-node-type="path"]')).toBeVisible();
+  await expect(page.getByLabel("Pen size")).toHaveValue("12");
+});
+
 test("engine v3 provides a visible clear-selection control", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.locator('[data-node-id="title"]').click();
