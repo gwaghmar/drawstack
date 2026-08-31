@@ -51,6 +51,17 @@ function mockConditionMatches(condition: unknown, row: Record<string, unknown>):
   return row[key ?? column.name!] === param.value;
 }
 
+function mockResolveUpdate(value: unknown, current: unknown): unknown {
+  if (!value || typeof value !== "object" || !Array.isArray((value as { queryChunks?: unknown[] }).queryChunks) || typeof current !== "number") return value;
+  const chunks = (value as { queryChunks: unknown[] }).queryChunks;
+  const text = chunks.map((chunk) => chunk && typeof chunk === "object" && "value" in chunk ? String((chunk as { value: string[] }).value.join("")) : "").join("");
+  const param = chunks.find((chunk) => chunk && typeof chunk === "object" && "value" in chunk && "encoder" in chunk) as { value?: unknown } | undefined;
+  if (typeof param?.value !== "number") return value;
+  if (text.includes(" - ")) return current - param.value;
+  if (text.includes(" + ")) return current + param.value;
+  return value;
+}
+
 function mockRowsQuery(rows: unknown[] = []) {
   const query = Promise.resolve(rows);
   return Object.assign(query, {
@@ -102,7 +113,7 @@ const mockDb = {
   }),
   update: (table: object) => ({
     set: (changes: Record<string, unknown>) => ({
-      where: (condition: unknown) => { const rows = mockTableRows(table).filter((row) => mockConditionMatches(condition, row)); rows.forEach((row) => Object.assign(row, changes)); return mockRowsQuery(rows); },
+      where: (condition: unknown) => { const rows = mockTableRows(table).filter((row) => mockConditionMatches(condition, row)); rows.forEach((row) => Object.entries(changes).forEach(([key, value]) => { row[key] = mockResolveUpdate(value, row[key]); })); return mockRowsQuery(rows); },
     }),
   }),
   delete: (table: object) => ({
