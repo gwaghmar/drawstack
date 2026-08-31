@@ -723,6 +723,32 @@ test("engine v3 exposes independent corner resize handles", async ({ page }) => 
   await expect.poll(async () => (await title.boundingBox())?.width).toBeCloseTo(before.width, 0);
 });
 
+test("engine v3 resizes a multi-selection from shared bounds", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  const revenue = page.locator('[data-node-id="mrr"]');
+  await title.click();
+  await page.getByRole("button", { name: "Show layers", exact: true }).click();
+  await page.getByLabel("Include Monthly revenue in group selection").check();
+  await page.getByRole("button", { name: "Close layers", exact: true }).click();
+  const titleBefore = await title.boundingBox();
+  const revenueBefore = await revenue.boundingBox();
+  const handle = page.getByRole("button", { name: "Resize selected group se", exact: true });
+  const handleBounds = await handle.boundingBox();
+  if (!titleBefore || !revenueBefore || !handleBounds) throw new Error("Group resize geometry is unavailable");
+  await page.mouse.move(handleBounds.x + 4, handleBounds.y + 4);
+  await page.mouse.down();
+  await page.mouse.move(handleBounds.x + 56, handleBounds.y + 36, { steps: 4 });
+  await page.mouse.up();
+  const titleAfter = await title.boundingBox();
+  const revenueAfter = await revenue.boundingBox();
+  expect(titleAfter?.width ?? 0).toBeGreaterThan(titleBefore.width);
+  expect(revenueAfter?.width ?? 0).toBeGreaterThan(revenueBefore.width);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect.poll(async () => (await title.boundingBox())?.width).toBeCloseTo(titleBefore.width, 0);
+  await expect.poll(async () => (await revenue.boundingBox())?.width).toBeCloseTo(revenueBefore.width, 0);
+});
+
 test("engine v3 rotates a selected node with the canvas handle", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');

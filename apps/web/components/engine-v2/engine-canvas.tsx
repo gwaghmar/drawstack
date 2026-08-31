@@ -50,7 +50,7 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointe
       onDoubleClick={(event) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } }}
       tabIndex={0}
       aria-label={node.name}
-      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined }}
+      style={{ ...layoutStyle, ...nodeStyle(node.style, tokens), maxWidth: typeof node.style?.width === "number" ? "none" : "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined }}
       className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
@@ -73,7 +73,7 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
     onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } },
     tabIndex: 0,
     "aria-label": node.name,
-    style: { ...nodeStyle(node.style, tokens), maxWidth: "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
+    style: { ...nodeStyle(node.style, tokens), maxWidth: typeof node.style?.width === "number" ? "none" : "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
     className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
 

@@ -459,11 +459,11 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     event.preventDefault(); event.stopPropagation();
     const visual = visualNodeTransform(selectedNode.id);
     const scale = visual?.scale ?? 1;
-    const startWidth = selectedBounds.width * scale; const startHeight = selectedBounds.height * scale;
+    const startWidth = selectedBounds.width; const startHeight = selectedBounds.height;
     const startX = visual?.x ?? selectedNode.transform?.x ?? 0; const startY = visual?.y ?? selectedNode.transform?.y ?? 0;
     const pageId = activePage.id; const nodeId = selectedNode.id; const base = historyRef.current!.snapshot().document; const parentOffset = engineV3NodeParentOffset(base, pageId, nodeId); let width = startWidth; let height = startHeight; let x = startX; let y = startY; let changed = false;
     const move = (pointer: PointerEvent) => {
-      const dx = (pointer.clientX - event.clientX) * scale; const dy = (pointer.clientY - event.clientY) * scale;
+      const dx = pointer.clientX - event.clientX; const dy = pointer.clientY - event.clientY;
       if (handle.includes("e")) width = Math.max(24, startWidth + dx);
       if (handle.includes("w")) { width = Math.max(24, startWidth - dx); x = startX + startWidth - width; }
       if (handle.includes("s")) height = Math.max(24, startHeight + dy);
@@ -474,6 +474,70 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       try { setDocument(patchEngineV3Node(base, pageId, nodeId, changes)); } catch { /* commit below reports failures */ }
     };
     const finish = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); if (changed) { const changes: Record<string, unknown> = { style: { ...selectedNode.style, width: Math.round(width), minHeight: Math.round(height) } }; if (handle.includes("w") || handle.includes("n")) changes.transform = { ...selectedNode.transform, x: Math.round(x - parentOffset.x), y: Math.round(y - parentOffset.y) }; runCommand({ kind: "node", action: "patch", pageId, nodeId, changes }); } };
+    const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
+    window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
+  };
+  const beginGroupResize = (event: React.PointerEvent<HTMLButtonElement>, handle: "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w") => {
+    if (!activePage || !selectedGroupBounds || selectedNodeIds.size < 2 || !canvasRef.current) return;
+    event.preventDefault(); event.stopPropagation();
+    const canvasBounds = canvasRef.current.getBoundingClientRect();
+    const scale = activePage.width / Math.max(canvasBounds.width, 1);
+    const startLeft = selectedGroupBounds.left * scale;
+    const startTop = selectedGroupBounds.top * scale;
+    const startWidth = selectedGroupBounds.width;
+    const startHeight = selectedGroupBounds.height;
+    const base = historyRef.current!.snapshot().document;
+    const pageId = activePage.id;
+    const sessions = [...selectedNodeIds].map((id) => {
+      const location = findEngineV3Node(base, pageId, id);
+      const element = canvasRef.current?.querySelector<HTMLElement>(`[data-node-id="${id}"]`);
+      if (!location || !element || id === activePage.root.id || location.node.locked) return null;
+      const rect = element.getBoundingClientRect();
+      const globalX = (rect.left - canvasBounds.left) * scale;
+      const globalY = (rect.top - canvasBounds.top) * scale;
+      return { id, node: location.node, parent: engineV3NodeParentOffset(base, pageId, id), globalX, globalY, width: rect.width, height: rect.height };
+    }).filter((session): session is NonNullable<typeof session> => Boolean(session));
+    if (sessions.length < 2) return;
+    let nextLeft = startLeft; let nextTop = startTop; let nextWidth = startWidth; let nextHeight = startHeight; let changed = false;
+    const move = (pointer: PointerEvent) => {
+      const dx = pointer.clientX - event.clientX;
+      const dy = pointer.clientY - event.clientY;
+      nextWidth = startWidth; nextHeight = startHeight; nextLeft = startLeft; nextTop = startTop;
+      if (handle.includes("e")) nextWidth = Math.max(48, startWidth + dx);
+      if (handle.includes("w")) { nextWidth = Math.max(48, startWidth - dx); nextLeft = startLeft + startWidth - nextWidth; }
+      if (handle.includes("s")) nextHeight = Math.max(48, startHeight + dy);
+      if (handle.includes("n")) { nextHeight = Math.max(48, startHeight - dy); nextTop = startTop + startHeight - nextHeight; }
+      changed = true;
+      const sx = nextWidth / Math.max(startWidth, 1); const sy = nextHeight / Math.max(startHeight, 1);
+      let preview = base;
+      try {
+        for (const session of sessions) {
+          const width = Math.max(24, Math.round(session.width * sx));
+          const height = Math.max(24, Math.round(session.height * sy));
+          const globalX = nextLeft + (session.globalX - startLeft) * sx;
+          const globalY = nextTop + (session.globalY - startTop) * sy;
+          preview = patchEngineV3Node(preview, pageId, session.id, {
+            transform: { ...(session.node.transform ?? {}), x: Math.round(globalX - session.parent.x), y: Math.round(globalY - session.parent.y) },
+            style: { ...session.node.style, width, minHeight: height },
+          });
+        }
+        setDocument(preview);
+      } catch { /* The committed command reports the actionable error. */ }
+    };
+    const finish = () => {
+      window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel);
+      if (!changed) return;
+      const sx = nextWidth / Math.max(startWidth, 1); const sy = nextHeight / Math.max(startHeight, 1);
+      const commands: EngineV3Command[] = sessions.map((session) => ({
+        kind: "node", action: "patch", pageId, nodeId: session.id,
+        changes: {
+          transform: { ...(session.node.transform ?? {}), x: Math.round(nextLeft + (session.globalX - startLeft) * sx - session.parent.x), y: Math.round(nextTop + (session.globalY - startTop) * sy - session.parent.y) },
+          style: { ...session.node.style, width: Math.max(24, Math.round(session.width * sx)), minHeight: Math.max(24, Math.round(session.height * sy)) },
+        },
+      }));
+      runCommand({ kind: "batch", commands });
+      window.setTimeout(() => setSelectedNodeIds(new Set(sessions.map((session) => session.id))), 0);
+    };
     const cancel = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", cancel); setDocument(historyRef.current!.snapshot().document); };
     window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", cancel);
   };
@@ -889,6 +953,16 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             ["sw", selectedBounds.left - 6, selectedBounds.top + selectedBounds.height - 6, "nesw-resize"],
             ["w", selectedBounds.left - 5, selectedBounds.top + selectedBounds.height / 2 - 10, "ew-resize"],
           ] as const).map(([handle, left, top, cursor]) => <button key={handle} type="button" aria-label={`Resize selected node ${handle}`} onPointerDown={(event) => beginNodeResize(event, handle)} className={`absolute z-30 border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6] ${handle.length === 1 ? handle === "n" || handle === "s" ? "h-3 w-5 rounded-full" : "h-5 w-3 rounded-full" : "h-3 w-3 rounded-sm"}`} style={{ left, top, cursor }} />) : null}
+          {selectedGroupBounds ? ([
+            ["nw", selectedGroupBounds.left - 6, selectedGroupBounds.top - 6, "nwse-resize"],
+            ["n", selectedGroupBounds.left + selectedGroupBounds.width / 2 - 10, selectedGroupBounds.top - 5, "ns-resize"],
+            ["ne", selectedGroupBounds.left + selectedGroupBounds.width - 6, selectedGroupBounds.top - 6, "nesw-resize"],
+            ["e", selectedGroupBounds.left + selectedGroupBounds.width - 5, selectedGroupBounds.top + selectedGroupBounds.height / 2 - 10, "ew-resize"],
+            ["se", selectedGroupBounds.left + selectedGroupBounds.width - 6, selectedGroupBounds.top + selectedGroupBounds.height - 6, "nwse-resize"],
+            ["s", selectedGroupBounds.left + selectedGroupBounds.width / 2 - 10, selectedGroupBounds.top + selectedGroupBounds.height - 5, "ns-resize"],
+            ["sw", selectedGroupBounds.left - 6, selectedGroupBounds.top + selectedGroupBounds.height - 6, "nesw-resize"],
+            ["w", selectedGroupBounds.left - 5, selectedGroupBounds.top + selectedGroupBounds.height / 2 - 10, "ew-resize"],
+          ] as const).map(([handle, left, top, cursor]) => <button key={`group-${handle}`} type="button" aria-label={`Resize selected group ${handle}`} onPointerDown={(event) => beginGroupResize(event, handle)} className={`absolute z-30 border-2 border-white bg-[#3157F6] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#3157F6] ${handle.length === 1 ? handle === "n" || handle === "s" ? "h-3 w-5 rounded-full" : "h-5 w-3 rounded-full" : "h-3 w-3 rounded-sm"}`} style={{ left, top, cursor }} />) : null}
           {editingTextId === selectedNode?.id && selectedBounds ? <textarea aria-label="Inline text editor" autoFocus value={editingTextValue} onChange={(event) => setEditingTextValue(event.target.value)} onBlur={finishTextEdit} onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); setEditingTextId(null); } if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) { event.preventDefault(); finishTextEdit(); } }} className="absolute z-40 resize-none overflow-hidden rounded border-2 border-[#3157F6] bg-white/95 p-2 text-inherit outline-none shadow-lg" style={{ left: selectedBounds.left, top: selectedBounds.top, width: Math.max(selectedBounds.width, 120), minHeight: Math.max(selectedBounds.height, 48) }} /> : null}
           {selectedBounds && selectedNode?.type === "path" ? selectedNode.points.map((point, index) => { const maxX = Math.max(...selectedNode.points.map((item) => item.x), 1); const maxY = Math.max(...selectedNode.points.map((item) => item.y), 1); return <button key={`point-${index}`} type="button" aria-label={`Edit pen point ${index + 1}`} onPointerDown={(event) => beginPathPointDrag(event, index)} className="absolute z-40 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#FF5D2E] shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FF5D2E]" style={{ left: selectedBounds.left + point.x / maxX * selectedBounds.width, top: selectedBounds.top + point.y / maxY * selectedBounds.height, cursor: "move" }} />; }) : null}
           {gestureGuides.map((guide, index) => guide.axis === "x" ? <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-y-0 z-20 w-px bg-[#3157F6]" style={{ left: `${guide.position / activePage.width * 100}%` }} /> : activePage.height === "auto" ? null : <div key={`${guide.axis}-${guide.position}-${index}`} aria-hidden="true" className="pointer-events-none absolute inset-x-0 z-20 h-px bg-[#3157F6]" style={{ top: `${guide.position / activePage.height * 100}%` }} />)}
