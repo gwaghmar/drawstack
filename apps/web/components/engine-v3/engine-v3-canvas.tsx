@@ -196,6 +196,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
       if (event.key === " " && !target?.closest("button, a, select")) { event.preventDefault(); spacePressedRef.current = true; return; }
+      if (!event.metaKey && !event.ctrlKey && !event.altKey && event.key === "Enter" && selectedNode?.type === "text" && selectedNode.id !== activePage?.root.id && !target?.closest("button, a, select")) { event.preventDefault(); beginTextEdit(selectedNode.id); return; }
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       if (!modifier && !event.altKey && event.key === "Tab" && activePage && selectedNode && selectedNodeIds.size === 1) {
@@ -838,7 +839,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
             <button type="button" onClick={() => setZoom((value) => Math.min(2, Math.round((value + 0.1) * 10) / 10))} className="rounded-full p-1.5 text-[#566057] hover:bg-[#EEF0EA]" aria-label="Zoom in" title="Zoom in"><Plus size={13} /></button>
           </div>
           <div className="mx-auto max-sm:min-w-[720px]" style={{ width: `${zoom * 100}%`, maxWidth: zoom === 1 ? 1080 : "none" }}><div ref={canvasRef} onPointerDown={handleCanvasPointerDown} className={`relative w-full overflow-hidden rounded-xl border border-[#D7DBD2] bg-white shadow-sm ${penMode ? "cursor-crosshair" : ""}`} style={{ aspectRatio: activePage.height === "auto" ? undefined : `${activePage.width} / ${activePage.height}` }}>
-          <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} onDoubleClick={beginTextEdit} />
+          <EngineDocumentView document={activePageView} selectedIds={selectedNodeIds} onSelect={selectNode} onPointerDown={beginNodeDrag} onDoubleClick={beginTextEdit} onEditText={beginTextEdit} />
           {selectedGroupBounds ? <div data-selection-group aria-label="Group selection bounds" className="pointer-events-none absolute z-20 border border-dashed border-[#3157F6]" style={{ left: selectedGroupBounds.left - 6, top: selectedGroupBounds.top - 6, width: selectedGroupBounds.width + 12, height: selectedGroupBounds.height + 12 }} /> : null}
           {selectedBounds && selectedNode && selectedNode.id !== activePage.root.id ? <div aria-hidden="true" className="pointer-events-none absolute z-20 border-2 border-[#3157F6]" style={{ left: selectedBounds.left, top: selectedBounds.top, width: selectedBounds.width, height: selectedBounds.height }} /> : null}
           {marquee ? <div aria-label="Marquee selection" className="pointer-events-none absolute z-40 border border-[#3157F6] bg-[#3157F6]/10" style={{ left: marquee.left, top: marquee.top, width: marquee.width, height: marquee.height }} /> : null}

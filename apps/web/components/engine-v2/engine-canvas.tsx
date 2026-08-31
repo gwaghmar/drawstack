@@ -32,7 +32,7 @@ import { useEngineV2Collaboration } from "@/lib/hooks/use-engine-v2-collaboratio
 
 const EMPTY_SELECTION = new Set<string>();
 
-function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown, onDoubleClick }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void }) {
+function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown, onDoubleClick, onEditText }: { node: EngineFrameNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void; onEditText?: (id: string) => void }) {
   const layout = node.layout;
   const layoutStyle = layout.mode === "grid"
     ? { display: "grid", gridTemplateColumns: `repeat(${layout.columns ?? 1}, minmax(0, 1fr))`, gap: layout.gap, padding: layout.padding, alignItems: layout.align, justifyContent: layout.justify }
@@ -45,6 +45,7 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointe
       data-layout={layout.mode}
       data-direction={layout.direction}
       onClick={(event) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); }}
+      onFocus={(event) => { if (event.currentTarget === event.target) onSelect(node.id, false); }}
       onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } }}
       onPointerDown={(event) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } }}
       onDoubleClick={(event) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } }}
@@ -54,21 +55,22 @@ function Frame({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointe
       className={`relative box-border ${selectedIds.has(node.id) ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`}
     >
       {node.children.map((child) => (
-        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />
+        <Node key={child.id} node={child} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} onEditText={onEditText} />
       ))}
     </div>
   );
 }
 
-function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown, onDoubleClick }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void }) {
-  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />;
+function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointerDown, onDoubleClick, onEditText }: { node: EngineNode; tokens: EngineTokens; selectedIds?: ReadonlySet<string>; onSelect: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void; onEditText?: (id: string) => void }) {
+  if (node.type === "frame") return <Frame node={node} tokens={tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} onEditText={onEditText} />;
 
   const selected = selectedIds.has(node.id);
   const shared = {
     "data-node-id": node.id,
     "data-node-type": node.type,
     onClick: (event: React.MouseEvent) => { event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); },
-    onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); } },
+    onFocus: (event: React.FocusEvent<Element>) => { if (event.currentTarget === event.target) onSelect(node.id, false); },
+    onKeyDown: (event: React.KeyboardEvent) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onSelect(node.id, event.shiftKey || event.metaKey || event.ctrlKey); if (event.key === "Enter" && node.type === "text") onEditText?.(node.id); } },
     onPointerDown: (event: React.PointerEvent<HTMLElement>) => { if (onPointerDown) { event.stopPropagation(); onPointerDown(node.id, event); } },
     onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } },
     tabIndex: 0,
@@ -271,10 +273,10 @@ function Tree({ nodes, selectedId, selectedIds = EMPTY_SELECTION, draggedId, dro
   );
 }
 
-export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {}, onPointerDown, onDoubleClick }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void }) {
+export function EngineDocumentView({ document, className = "", selectedIds = EMPTY_SELECTION, onSelect = () => {}, onPointerDown, onDoubleClick, onEditText }: { document: EngineDocument; className?: string; selectedIds?: ReadonlySet<string>; onSelect?: (id: string, additive: boolean) => void; onPointerDown?: (id: string, event: React.PointerEvent<HTMLElement>) => void; onDoubleClick?: (id: string, event: React.MouseEvent<Element>) => void; onEditText?: (id: string) => void }) {
   return (
     <div className={className} data-engine-document="v2" style={{ width: "100%", maxWidth: document.artboard.width, minHeight: document.artboard.minHeight, background: resolveToken(document.artboard.background, document.tokens) }}>
-      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} />)}
+      {document.children.map((node) => <Node key={node.id} node={node} tokens={document.tokens} selectedIds={selectedIds} onSelect={onSelect} onPointerDown={onPointerDown} onDoubleClick={onDoubleClick} onEditText={onEditText} />)}
     </div>
   );
 }

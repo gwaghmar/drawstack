@@ -479,6 +479,14 @@ test("engine v3 edits text inline on double click", async ({ page }) => {
   await expect(page.locator('[data-node-id="title"]')).toContainText("Edited directly on canvas");
 });
 
+test("engine v3 starts inline text editing from the keyboard", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  const title = page.locator('[data-node-id="title"]');
+  await title.focus();
+  await page.keyboard.press("Enter");
+  await expect(page.getByLabel("Inline text editor")).toBeVisible();
+});
+
 test("engine v3 cycles sibling selection with Tab", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const title = page.locator('[data-node-id="title"]');
