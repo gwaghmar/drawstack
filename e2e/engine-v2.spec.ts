@@ -382,6 +382,15 @@ test("engine v3 allows keyboard selection of canvas objects", async ({ page }) =
   await expect(page.getByLabel("V3 node name")).toHaveValue("Status");
 });
 
+test("engine v3 selects all editable objects with Control+A", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.locator('[data-node-id="title"]').click();
+  const allObjects = await page.locator('[data-node-id]').count();
+  await page.keyboard.press("Control+a");
+  await expect(page.getByLabel("Group selection bounds")).toBeVisible();
+  await expect(page.locator('[data-node-id].outline')).toHaveCount(allObjects - 1);
+});
+
 test("engine v3 draws editable pen paths and connector styles", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   await page.getByRole("button", { name: "Draw with pen" }).click();

@@ -58,6 +58,12 @@ function cloneForClipboard(node: EngineNode): EngineNode {
   return remap(node);
 }
 
+function collectEditableNodeIds(node: EngineNode, rootId: string, ids: string[] = []): string[] {
+  if (node.id !== rootId && !node.locked) ids.push(node.id);
+  if (node.type === "frame") node.children.forEach((child) => collectEditableNodeIds(child, rootId, ids));
+  return ids;
+}
+
 export function EngineV3Canvas({ initialDocument, initialProjectId = null, initialUpdatedAt = null, onDocumentChange }: EngineV3CanvasProps) {
   const router = useRouter();
   const historyRef = useRef<EngineV3HistoryController | null>(null);
@@ -245,11 +251,8 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       }
       if (modifier && key === "a" && activePage && selectedNode) {
         event.preventDefault();
-        const location = findEngineV3Node(document, activePage.id, selectedNode.id);
-        const siblings = location?.parentId
-          ? findEngineV3Node(document, activePage.id, location.parentId)?.node
-          : activePage.root;
-        if (siblings?.type === "frame") setSelectedNodeIds(new Set(siblings.children.map((node) => node.id)));
+        const ids = collectEditableNodeIds(activePage.root, activePage.root.id);
+        if (ids.length) { setSelectedNodeIds(new Set(ids)); setSelectedNodeId(ids[0]); }
         return;
       }
       if (modifier && key === "d" && activePage && selectedNodeIds.size === 1) {
