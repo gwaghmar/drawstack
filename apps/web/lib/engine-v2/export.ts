@@ -119,6 +119,8 @@ function styleCss(style: EngineStyle | undefined, tokens: EngineTokens): string 
   if (Number.isFinite(style.borderWidth)) declarations.push(`border-width:${number(style.borderWidth!)}px`, "border-style:solid");
   if (Number.isFinite(style.borderRadius)) declarations.push(`border-radius:${number(style.borderRadius!)}px`);
   if (style.boxShadow) declarations.push(`box-shadow:${cssValue(style.boxShadow)}`);
+  if (style.objectFit) declarations.push(`object-fit:${cssValue(style.objectFit)}`);
+  if (style.objectPosition) declarations.push(`object-position:${cssValue(style.objectPosition)}`);
   if (Number.isFinite(style.minHeight)) declarations.push(`min-height:${number(style.minHeight!)}px`);
   if (typeof style.width === "number" && Number.isFinite(style.width)) declarations.push(`width:${number(style.width)}px`);
   if (typeof style.width === "string" && /^(?:100|[1-9]?\d)%$/.test(style.width)) declarations.push(`width:${style.width}`);
@@ -630,6 +632,8 @@ function reactStyle(style: EngineStyle | undefined, tokens: EngineTokens): Recor
   }
   if (Number.isFinite(style.borderRadius)) output.borderRadius = style.borderRadius!;
   if (style.boxShadow) output.boxShadow = cssValue(style.boxShadow);
+  if (style.objectFit) output.objectFit = cssValue(style.objectFit);
+  if (style.objectPosition) output.objectPosition = cssValue(style.objectPosition);
   if (Number.isFinite(style.minHeight)) output.minHeight = style.minHeight!;
   if (typeof style.width === "number" && Number.isFinite(style.width)) output.width = style.width;
   if (typeof style.width === "string" && /^(?:100|[1-9]?\d)%$/.test(style.width)) output.width = style.width;
