@@ -458,6 +458,15 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       });
     if (commands.length) runCommand({ kind: "batch", commands });
   };
+  const connectSelected = () => {
+    if (!activePage || selectedNodeIds.size !== 2) return;
+    const selected = [...selectedNodeIds].map((id) => findEngineV3Node(document, activePage.id, id)?.node).filter((node): node is EngineNode => Boolean(node && node.id !== activePage.root.id && node.type !== "path"));
+    if (selected.length !== 2) return;
+    const center = (node: EngineNode) => ({ x: (node.transform?.x ?? 0) + (typeof node.style?.width === "number" ? node.style.width : 120) / 2, y: (node.transform?.y ?? 0) + (node.style?.minHeight ?? 60) / 2 });
+    const start = center(selected[0]); const end = center(selected[1]); const id = `connector-${crypto.randomUUID()}`;
+    const node: EngineNode = { id, name: "Connector", type: "path", points: [{ x: 0, y: 0 }, { x: end.x - start.x, y: end.y - start.y }], lineStyle: "straight", arrowEnd: true, startNodeId: selected[0].id, endNodeId: selected[1].id, transform: { x: start.x, y: start.y }, style: { width: Math.max(Math.abs(end.x - start.x), 1), minHeight: Math.max(Math.abs(end.y - start.y), 24), color: "$cobalt", borderWidth: 3 } } as EngineNode;
+    if (runCommand({ kind: "node", action: "add", pageId: activePage.id, parentId: activePage.root.id, node })) selectNode(id);
+  };
   const saveDocument = async () => {
     setSaveState("saving");
     try {
@@ -551,6 +560,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
           <button type="button" onClick={() => addCanvasNode("arrow")} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add arrow"><ArrowUpRight size={17} /><span>Arrow</span></button>
           <button type="button" onClick={() => assetInputRef.current?.click()} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA]" aria-label="Add image"><ImageIcon size={17} /><span>Image</span></button>
           <div className="my-2 h-px w-8 bg-[#D7DBD2]" />
+          <button type="button" onClick={connectSelected} disabled={selectedNodeIds.size !== 2} className="flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] text-[#4F5850] hover:bg-[#EEF0EA] disabled:opacity-35" aria-label="Connect selected objects" title="Connect selected objects"><ArrowUpRight size={16} /><span>Connect</span></button>
           <button type="button" onClick={() => setDrawer(drawer === "pages" ? null : "pages")} className={`flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] ${drawer === "pages" ? "bg-[#DCE3FF] text-[#2448D8]" : "text-[#4F5850] hover:bg-[#EEF0EA]"}`} aria-label="Show pages"><Copy size={16} /><span>Pages</span></button>
           <button type="button" onClick={() => setDrawer(drawer === "layers" ? null : "layers")} className={`flex h-11 w-11 flex-col items-center justify-center rounded-xl text-[9px] ${drawer === "layers" ? "bg-[#DCE3FF] text-[#2448D8]" : "text-[#4F5850] hover:bg-[#EEF0EA]"}`} aria-label="Show layers"><Layers3 size={16} /><span>Layers</span></button>
         </aside>
