@@ -400,6 +400,22 @@ test("engine v3 exposes arrange controls for a multi-selection", async ({ page }
   await expect(page.getByLabel("Quick alignment")).toBeVisible();
 });
 
+test("engine v3 edits artboard dimensions and background", async ({ page }) => {
+  await page.goto("/app/engine-v2?mode=v3");
+  await page.getByText("More settings", { exact: true }).click();
+  const width = page.getByLabel("Artboard width");
+  await width.fill("1200");
+  await expect(width).toHaveValue("1200");
+  const height = page.getByLabel("Artboard height");
+  await height.fill("800");
+  await expect(height).toHaveValue("800");
+  const background = page.getByLabel("Artboard background");
+  await background.fill("#112233");
+  await expect(background).toHaveValue("#112233");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(background).toHaveValue("$paper");
+});
+
 test("engine v3 allows keyboard selection of canvas objects", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
   const status = page.locator('[data-node-id="status"]');

@@ -6,7 +6,7 @@ export type CommandOrigin = "local" | "ai" | "import" | "undo" | "redo";
 export type CommandPrecondition = { exists?: boolean; type?: EngineNode["type"]; revision?: number };
 export type EngineV3Command =
   | { kind: "batch"; commands: EngineV3Command[] }
-  | { kind: "page"; action: "add" | "remove" | "rename"; page: Page | { id: string; name?: string }; index?: number; precondition?: CommandPrecondition }
+  | { kind: "page"; action: "add" | "remove" | "rename" | "patch"; page: Page | { id: string; name?: string; width?: number; height?: number | "auto"; background?: string }; index?: number; precondition?: CommandPrecondition }
   | { kind: "tokens"; tokens: TokenSet; precondition?: CommandPrecondition }
   | { kind: "asset"; action: "define" | "remove"; asset: AssetRef | { sha256: string }; precondition?: CommandPrecondition }
   | { kind: "component"; action: "define" | "remove"; component: ComponentDefinition | { id: string }; precondition?: CommandPrecondition }
@@ -90,7 +90,8 @@ export function applyEngineV3Command(document: EngineDocumentV3, revision: numbe
       if (failure) return failure;
       if (command.action === "add") { if (index >= 0 || !("width" in command.page)) throw new Error("Invalid page"); next.pages.splice(command.index === undefined ? next.pages.length : Math.max(0, Math.min(command.index, next.pages.length)), 0, copy(command.page as Page)); inverse = { kind: "page", action: "remove", page: { id } }; }
       else if (command.action === "remove") { if (index < 0) throw new Error("Missing page"); const removed = next.pages.splice(index, 1)[0]; inverse = { kind: "page", action: "add", page: removed, index }; }
-      else { if (index < 0 || !command.page.name) throw new Error("Missing page"); const old = next.pages[index].name; next.pages[index] = { ...next.pages[index], name: command.page.name }; inverse = { kind: "page", action: "rename", page: { id, name: old } }; }
+      else if (command.action === "rename") { if (index < 0 || !command.page.name) throw new Error("Missing page"); const old = next.pages[index].name; next.pages[index] = { ...next.pages[index], name: command.page.name }; inverse = { kind: "page", action: "rename", page: { id, name: old } }; }
+      else { if (index < 0) throw new Error("Missing page"); const old = next.pages[index]; const patch = command.page; if (patch.width !== undefined && (!Number.isFinite(patch.width) || patch.width < 240 || patch.width > 5000)) throw new Error("Page width must be between 240 and 5000"); if (patch.height !== undefined && patch.height !== "auto" && (!Number.isFinite(patch.height) || patch.height < 240 || patch.height > 5000)) throw new Error("Page height must be between 240 and 5000"); next.pages[index] = { ...old, ...(patch.width === undefined ? {} : { width: patch.width }), ...(patch.height === undefined ? {} : { height: patch.height }), ...(patch.background === undefined ? {} : { background: patch.background }) }; inverse = { kind: "page", action: "patch", page: { id, ...(patch.width === undefined ? {} : { width: old.width }), ...(patch.height === undefined ? {} : { height: old.height }), ...(patch.background === undefined ? {} : { background: old.background }) } }; }
       affectedIds.push(id);
     } else if (command.kind === "tokens") {
       const old = next.tokens; next.tokens = copy(command.tokens); inverse = { kind: "tokens", tokens: old }; affectedIds.push("tokens");
