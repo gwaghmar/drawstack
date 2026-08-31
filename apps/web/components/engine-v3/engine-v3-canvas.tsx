@@ -78,6 +78,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
   const [editingTextValue, setEditingTextValue] = useState("");
   const [zoom, setZoom] = useState(1);
   const [penMode, setPenMode] = useState(false);
+  const spacePressedRef = useRef(false);
   const penPointsRef = useRef<Array<{ x: number; y: number }>>([]);
   const activePage = document.pages.find((page) => page.id === activePageId) ?? document.pages[0];
   const selectedNode = useMemo(() => activePage ? findEngineV3Node(document, activePage.id, selectedNodeId)?.node ?? activePage.root : null, [activePage, document, selectedNodeId]);
@@ -194,6 +195,7 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       if (target?.matches("input, textarea, [contenteditable=true]")) return;
+      if (event.key === " ") { spacePressedRef.current = true; return; }
       const modifier = event.metaKey || event.ctrlKey;
       const key = event.key.toLowerCase();
       if (!modifier && !event.altKey && event.key === "Tab" && activePage && selectedNode && selectedNodeIds.size === 1) {
@@ -293,7 +295,9 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       if (event.shiftKey) redo(); else undo();
     };
     window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    const onKeyUp = (event: KeyboardEvent) => { if (event.key === " ") spacePressedRef.current = false; };
+    window.addEventListener("keyup", onKeyUp);
+    return () => { window.removeEventListener("keydown", onKeyDown); window.removeEventListener("keyup", onKeyUp); };
   });
   const patchSelected = (changes: Partial<EngineNode>) => {
     if (!activePage || !selectedNode) return;
@@ -600,6 +604,14 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
       const target = event.target as Element | null;
       if (!target?.closest("[data-node-id]") && canvasRef.current) {
         event.preventDefault();
+        if (spacePressedRef.current && canvasViewportRef.current) {
+          const viewport = canvasViewportRef.current;
+          const start = { x: event.clientX, y: event.clientY, left: viewport.scrollLeft, top: viewport.scrollTop };
+          const move = (pointer: PointerEvent) => { viewport.scrollLeft = start.left - (pointer.clientX - start.x); viewport.scrollTop = start.top - (pointer.clientY - start.y); };
+          const finish = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", finish); window.removeEventListener("pointercancel", finish); };
+          window.addEventListener("pointermove", move); window.addEventListener("pointerup", finish); window.addEventListener("pointercancel", finish);
+          return;
+        }
         const bounds = canvasRef.current.getBoundingClientRect();
         const start = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
         let current = start;

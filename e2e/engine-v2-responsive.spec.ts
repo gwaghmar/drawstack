@@ -61,3 +61,21 @@ test("engine v3 pans the phone artboard with arrow keys", async ({ page }) => {
   await page.keyboard.press("ArrowRight");
   await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(before);
 });
+
+test("engine v3 pans the canvas with Space-drag", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app/engine-v2?mode=v3");
+  const viewport = page.getByLabel("Editable canvas");
+  const canvas = page.locator('[data-engine-document="v2"]');
+  const bounds = await canvas.boundingBox();
+  if (!bounds) throw new Error("Canvas geometry is unavailable");
+  const before = await viewport.evaluate((element) => element.scrollLeft);
+  await page.keyboard.down("Space");
+  await canvas.evaluate((element, points) => {
+    element.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0, clientX: points.start.x, clientY: points.start.y }));
+    window.dispatchEvent(new PointerEvent("pointermove", { bubbles: true, button: 0, clientX: points.end.x, clientY: points.end.y }));
+    window.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, button: 0, clientX: points.end.x, clientY: points.end.y }));
+  }, { start: { x: bounds.x + 204, y: bounds.y + 4 }, end: { x: bounds.x + 4, y: bounds.y + 4 } });
+  await page.keyboard.up("Space");
+  await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(before);
+});
