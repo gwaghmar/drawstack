@@ -379,6 +379,7 @@ test("engine v3 exposes quick actions beside a selected object", async ({ page }
   await page.locator('[data-node-id="title"]').click();
   await expect(page.getByRole("toolbar", { name: "Quick object actions" })).toBeVisible();
   await expect(page.getByLabel("Quick fill color")).toBeVisible();
+  await expect(page.getByLabel("Quick opacity")).toBeVisible();
   await expect(page.getByRole("button", { name: "Quick duplicate selected" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Quick delete selected" })).toBeVisible();
 });
