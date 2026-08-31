@@ -367,6 +367,10 @@ test("engine v3 selects canvas elements and undoes document commands", async ({ 
   await expect(title).not.toHaveText("Direct canvas edit");
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect(title).toHaveText("Direct canvas edit");
+  await page.keyboard.press("Shift+ArrowRight");
+  await expect(page.getByLabel("V3 node X")).toHaveValue("10");
+  await page.keyboard.press("Escape");
+  await expect(page.getByText("More settings", { exact: true })).toBeVisible();
 });
 
 test("engine v3 draws editable pen paths and connector styles", async ({ page }) => {

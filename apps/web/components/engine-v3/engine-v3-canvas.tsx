@@ -174,6 +174,25 @@ export function EngineV3Canvas({ initialDocument, initialProjectId = null, initi
         if (nodeId !== activePage.root.id) runCommand({ kind: "node", action: "duplicate", pageId: activePage.id, nodeId, precondition: { exists: true } });
         return;
       }
+      if (event.key === "Escape" && activePage) {
+        event.preventDefault();
+        selectNode(activePage.root.id);
+        return;
+      }
+      if (!modifier && activePage && selectedNodeIds.size === 1 && ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+        const nodeId = [...selectedNodeIds][0];
+        if (nodeId !== activePage.root.id) {
+          event.preventDefault();
+          const location = findEngineV3Node(document, activePage.id, nodeId);
+          if (location && !location.node.locked) {
+            const step = event.shiftKey ? 10 : 1;
+            const dx = event.key === "ArrowLeft" ? -step : event.key === "ArrowRight" ? step : 0;
+            const dy = event.key === "ArrowUp" ? -step : event.key === "ArrowDown" ? step : 0;
+            runCommand({ kind: "batch", commands: [{ kind: "node", action: "patch", pageId: activePage.id, nodeId, changes: { transform: { ...(location.node.transform ?? {}), x: (location.node.transform?.x ?? 0) + dx, y: (location.node.transform?.y ?? 0) + dy } } }, ...connectorPatchesForMove(activePage.id, nodeId, dx, dy)] });
+          }
+          return;
+        }
+      }
       if (!modifier && (event.key === "Delete" || event.key === "Backspace") && activePage) {
         const removable = [...selectedNodeIds].filter((id) => id !== activePage.root.id);
         if (removable.length) {
