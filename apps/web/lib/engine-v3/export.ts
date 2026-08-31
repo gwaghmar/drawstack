@@ -44,11 +44,12 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
   const planned = plan.pages.find((candidate) => candidate.id === page.id)!;
   const view = createEngineV3PageView(document, page.id);
   const records = planned.records;
-  const dimensions = (record: typeof records[number]) => ({
-    width: typeof record.style?.width === "number" ? record.style.width : record.type === "text" ? 280 : 320,
+  const dimensions = (record: typeof records[number], availableWidth = 320) => ({
+    width: typeof record.style?.width === "number" ? record.style.width : typeof record.style?.width === "string" && /^\d+(?:\.\d+)?%$/.test(record.style.width) ? availableWidth * Number.parseFloat(record.style.width) / 100 : record.type === "text" ? 280 : 320,
     height: typeof record.style?.minHeight === "number" ? record.style.minHeight : record.type === "text" ? 64 : record.type === "metric" ? 129 : record.type === "chart" ? 330 : record.type === "graph" ? 280 : 180,
   });
   const positions = new Map<string, { x: number; y: number }>();
+  const sizes = new Map<string, { width: number; height: number }>();
   const recordById = new Map(records.map((record) => [record.id, record]));
   const layoutChildren = (parent: typeof records[number], parentX: number, parentY: number) => {
     const layout = (parent.node as Extract<EngineNode, { type: "frame" }>).layout;
@@ -59,7 +60,8 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
     childrenOf(parent.id).forEach((child, index) => {
       const childTransform = child.node.transform;
       const explicit = childTransform?.x !== undefined || childTransform?.y !== undefined;
-      const size = dimensions(child);
+      const size = dimensions(child, dimensions(parent).width - padding * 2);
+      sizes.set(child.id, size);
       const x = explicit ? child.transform.x : layout.mode === "grid" ? cursorX + (index % columns) * (size.width + layout.gap) : cursorX;
       const y = explicit ? child.transform.y : layout.mode === "grid" ? cursorY + Math.floor(index / columns) * (size.height + layout.gap) : cursorY;
       positions.set(child.id, { x, y });
@@ -74,7 +76,7 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
   };
   const childrenOf = (parentId: string) => records.filter((record) => record.parentId === parentId);
   const root = recordById.get(page.root.id);
-  if (root) { positions.set(root.id, { x: 0, y: 0 }); layoutChildren(root, 0, 0); }
+  if (root) { positions.set(root.id, { x: 0, y: 0 }); sizes.set(root.id, { width: planned.width, height: planned.height === "auto" ? 720 : planned.height }); layoutChildren(root, 0, 0); }
   const color = (value: unknown, fallback: string) => typeof value === "string" && (value.startsWith("#") || value.startsWith("rgb") || value.startsWith("hsl")) ? value : fallback;
   const fill = (record: typeof records[number]) => color(record.style?.background, "transparent");
   const stroke = (record: typeof records[number]) => color(record.style?.borderColor, "#D7DBD2");
@@ -82,7 +84,7 @@ function standaloneSvg(document: EngineDocumentV3, page: Page): string {
   const text = (value: string, x: number, y: number, size: number, colorValue: string, weight = 400) => `<text x="${x}" y="${y}" font-family="Inter,ui-sans-serif,system-ui,sans-serif" font-size="${size}" font-weight="${weight}" fill="${colorValue}">${value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</text>`;
   const markup = records.filter((record) => record.id !== page.root.id && record.visible).map((record) => {
     const source = record.node as unknown as Record<string, unknown>;
-    const { width, height } = dimensions(record);
+    const { width, height } = sizes.get(record.id) ?? dimensions(record, record.parentId ? dimensions(recordById.get(record.parentId)!).width : planned.width);
     const position = positions.get(record.id) ?? { x: record.transform.x, y: record.transform.y };
     const x = position.x; const y = position.y;
     const transform = `translate(${x} ${y}) rotate(${record.transform.rotation} ${width / 2} ${height / 2}) scale(${record.transform.scaleX} ${record.transform.scaleY})`;
