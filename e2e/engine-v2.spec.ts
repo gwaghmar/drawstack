@@ -307,6 +307,8 @@ test("engine v2 rejects chart families that do not match existing data", async (
 
 test("engine v3 upgrade preview manages pages and committed color tokens", async ({ page }) => {
   await page.goto("/app/engine-v2?mode=v3");
+  await page.getByRole("button", { name: "Deselect", exact: true }).click();
+  await expect(page.getByText("Select an object on the canvas or in Layers to edit its text, color, size, and position.")).toBeVisible();
   await expect(page.getByText("Engine v3", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Show pages", exact: true }).click();
   await expect(page.getByRole("tab", { name: "Revenue operating brief" })).toBeVisible();
