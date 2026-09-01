@@ -840,6 +840,8 @@ test("engine v3 drags a canvas node as one undoable gesture", async ({ page }) =
   const title = page.locator('[data-node-id="title"]');
   const bounds = await title.boundingBox();
   if (!bounds) throw new Error("Title bounds are unavailable");
+  await title.click();
+  await expect(title).toHaveAttribute("aria-selected", "true");
   await expect(title).toHaveCSS("cursor", "move");
   await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
   await page.mouse.down();

@@ -73,6 +73,7 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
     onDoubleClick: (event: React.MouseEvent<HTMLElement>) => { if (onDoubleClick) { event.stopPropagation(); onDoubleClick(node.id, event); } },
     tabIndex: 0,
     "aria-label": node.name,
+    "aria-selected": selected,
     style: { ...nodeStyle(node.style, tokens), maxWidth: typeof node.style?.width === "number" ? "none" : "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
     className: `box-border touch-none select-none ${node.locked ? "cursor-not-allowed" : "cursor-move"} ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
