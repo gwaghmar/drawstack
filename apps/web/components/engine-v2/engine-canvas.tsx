@@ -74,7 +74,7 @@ function Node({ node, tokens, selectedIds = EMPTY_SELECTION, onSelect, onPointer
     tabIndex: 0,
     "aria-label": node.name,
     style: { ...nodeStyle(node.style, tokens), maxWidth: typeof node.style?.width === "number" ? "none" : "100%", transform: node.rotation ? `rotate(${node.rotation}deg)` : undefined, visibility: node.visible === false ? ("hidden" as const) : undefined, pointerEvents: node.locked ? ("none" as const) : undefined },
-    className: `box-border ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
+    className: `box-border touch-none select-none ${selected ? "outline outline-2 outline-offset-2 outline-[#3157F6]" : ""}`,
   };
 
   if (node.type === "text") {
